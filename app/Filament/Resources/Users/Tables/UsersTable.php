@@ -108,12 +108,30 @@ class UsersTable
             ->recordActions([
                 ViewAction::make(),
                 EditAction::make(),
-                DeleteAction::make(),
+                DeleteAction::make()
+                    ->hidden(fn ($record): bool =>
+                        $record->id === auth()->id()
+                        || $record->hasRole('super_admin')
+                    ),
             ])
 
             ->toolbarActions([
                 BulkActionGroup::make([
-                    DeleteBulkAction::make(),
+                    DeleteBulkAction::make()
+                        ->action(function (DeleteBulkAction $action, \Illuminate\Support\Collection $records): void {
+                            $records
+                                ->reject(fn ($record) =>
+                                    $record->id === auth()->id()
+                                    || $record->hasRole('super_admin')
+                                )
+                                ->each->delete();
+
+                            \Filament\Notifications\Notification::make()
+                                ->title('Deleted')
+                                ->body('Selected users have been deleted. Super admin accounts were skipped.')
+                                ->success()
+                                ->send();
+                        }),
                     ExportBulkAction::make(),
                 ]),
             ])

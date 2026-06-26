@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Policies\ProfilePolicy;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 use Spatie\Permission\Models\Permission;
@@ -14,6 +15,17 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->registerSuperAdminGate();
         $this->registerPermissionObserver();
+        $this->registerPolicies();
+    }
+
+    private function registerPolicies(): void
+    {
+        Gate::policy(\App\Models\User::class, ProfilePolicy::class);
+
+        // Explicit profile abilities (no model binding needed)
+        Gate::define('profile.view',     [ProfilePolicy::class, 'view']);
+        Gate::define('profile.update',   [ProfilePolicy::class, 'update']);
+        Gate::define('password.change',  [ProfilePolicy::class, 'changePassword']);
     }
 
     /**

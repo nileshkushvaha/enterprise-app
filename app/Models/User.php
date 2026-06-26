@@ -9,9 +9,11 @@ use Filament\Models\Contracts\FilamentUser;
 use Filament\Panel;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Str;
 use Spatie\Activitylog\Models\Concerns\LogsActivity;
 use Spatie\Activitylog\Support\LogOptions;
 use Spatie\Permission\Traits\HasRoles;
@@ -27,11 +29,14 @@ class User extends Authenticatable implements FilamentUser, MustVerifyEmail
     public const STATUS_BLOCKED     = 'blocked';
     public const STATUS_SUSPENDED   = 'suspended';
 
-    public const MAX_FAILED_ATTEMPTS = 5;
+    public const MAX_FAILED_ATTEMPTS   = 5;
     public const LOCK_DURATION_MINUTES = 30;
+    public const UNLOCK_TOKEN_MINUTES  = 60;
 
-    // ── Default role for self-registered frontend users ──────────────
     public const DEFAULT_ROLE = 'student';
+
+    // ── Recovery codes count ────────────────────────────────────────
+    public const RECOVERY_CODES_COUNT = 8;
 
     // ────────────────────────────────────────────────────────────────
 
@@ -46,25 +51,39 @@ class User extends Authenticatable implements FilamentUser, MustVerifyEmail
         'email_verified_at',
         'failed_login_count',
         'locked_until',
+        'unlock_token',
+        'unlock_token_expires_at',
         'last_login_at',
         'last_login_ip',
         'last_login_user_agent',
         'password_changed_at',
+        'two_factor_secret',
+        'two_factor_recovery_codes',
+        'two_factor_confirmed_at',
+        'login_alerts_enabled',
+        'new_device_alerts_enabled',
     ];
 
     protected $hidden = [
         'password',
         'remember_token',
+        'two_factor_secret',
+        'two_factor_recovery_codes',
+        'unlock_token',
     ];
 
     protected function casts(): array
     {
         return [
-            'email_verified_at'  => 'datetime',
-            'locked_until'       => 'datetime',
-            'last_login_at'      => 'datetime',
-            'password_changed_at'=> 'datetime',
-            'password'           => 'hashed',
+            'email_verified_at'        => 'datetime',
+            'locked_until'             => 'datetime',
+            'unlock_token_expires_at'  => 'datetime',
+            'last_login_at'            => 'datetime',
+            'password_changed_at'      => 'datetime',
+            'two_factor_confirmed_at'  => 'datetime',
+            'login_alerts_enabled'     => 'boolean',
+            'new_device_alerts_enabled'=> 'boolean',
+            'password'                 => 'hashed',
         ];
     }
 
@@ -73,6 +92,11 @@ class User extends Authenticatable implements FilamentUser, MustVerifyEmail
     public function profile(): HasOne
     {
         return $this->hasOne(UserProfile::class);
+    }
+
+    public function loginHistories(): HasMany
+    {
+        return $this->hasMany(LoginHistory::class)->latest('logged_in_at');
     }
 
     // ── Accessors ────────────────────────────────────────────────────
@@ -112,6 +136,8 @@ class User extends Authenticatable implements FilamentUser, MustVerifyEmail
         $this->updateQuietly([
             'failed_login_count'    => 0,
             'locked_until'          => null,
+            'unlock_token'          => null,
+            'unlock_token_expires_at' => null,
             'last_login_at'         => now(),
             'last_login_ip'         => $ip,
             'last_login_user_agent' => $userAgent,
@@ -121,14 +147,84 @@ class User extends Authenticatable implements FilamentUser, MustVerifyEmail
     public function recordFailedLogin(): void
     {
         $newCount = $this->failed_login_count + 1;
-
-        $data = ['failed_login_count' => $newCount];
+        $data     = ['failed_login_count' => $newCount];
 
         if ($newCount >= self::MAX_FAILED_ATTEMPTS) {
-            $data['locked_until'] = now()->addMinutes(self::LOCK_DURATION_MINUTES);
+            $token = Str::random(64);
+            $data['locked_until']            = now()->addMinutes(self::LOCK_DURATION_MINUTES);
+            $data['unlock_token']            = hash('sha256', $token);
+            $data['unlock_token_expires_at'] = now()->addMinutes(self::UNLOCK_TOKEN_MINUTES);
+            $this->updateQuietly($data);
+            // Fire unlock notification after saving token
+            $this->notify(new \App\Notifications\Auth\AccountLockedNotification($token));
+            return;
         }
 
         $this->updateQuietly($data);
+    }
+
+    // ── Account unlock (self-service) ────────────────────────────────
+
+    public function generateUnlockToken(): string
+    {
+        $plain = Str::random(64);
+        $this->updateQuietly([
+            'unlock_token'            => hash('sha256', $plain),
+            'unlock_token_expires_at' => now()->addMinutes(self::UNLOCK_TOKEN_MINUTES),
+        ]);
+        return $plain;
+    }
+
+    public function unlock(): void
+    {
+        $this->updateQuietly([
+            'failed_login_count'      => 0,
+            'locked_until'            => null,
+            'unlock_token'            => null,
+            'unlock_token_expires_at' => null,
+        ]);
+    }
+
+    // ── Two-Factor Authentication ────────────────────────────────────
+
+    public function hasTwoFactorEnabled(): bool
+    {
+        return $this->two_factor_secret !== null
+            && $this->two_factor_confirmed_at !== null;
+    }
+
+    public function twoFactorPending(): bool
+    {
+        return $this->two_factor_secret !== null
+            && $this->two_factor_confirmed_at === null;
+    }
+
+    /** Return decoded recovery codes array. */
+    public function twoFactorRecoveryCodes(): array
+    {
+        if (! $this->two_factor_recovery_codes) {
+            return [];
+        }
+        return json_decode(decrypt($this->two_factor_recovery_codes), true) ?? [];
+    }
+
+    /** Replace a used recovery code, return whether one was consumed. */
+    public function consumeRecoveryCode(string $code): bool
+    {
+        $codes = $this->twoFactorRecoveryCodes();
+        $key   = array_search(trim($code), $codes, true);
+
+        if ($key === false) {
+            return false;
+        }
+
+        // Replace with a fresh code
+        $codes[$key] = Str::random(10) . '-' . Str::random(10);
+        $this->updateQuietly([
+            'two_factor_recovery_codes' => encrypt(json_encode(array_values($codes))),
+        ]);
+
+        return true;
     }
 
     // ── Email Verification notification override ─────────────────────
@@ -142,7 +238,10 @@ class User extends Authenticatable implements FilamentUser, MustVerifyEmail
 
     public function canAccessPanel(Panel $panel): bool
     {
-        // Only admin-panel users (roles 1+ can be configured here)
+        if ($this->hasRole('super_admin') || $this->id === 1) {
+            return $this->isActive();
+        }
+
         return $this->isActive() && $this->hasVerifiedEmail();
     }
 
@@ -153,7 +252,7 @@ class User extends Authenticatable implements FilamentUser, MustVerifyEmail
         return LogOptions::defaults()
             ->logOnly(['name', 'first_name', 'last_name', 'email', 'status'])
             ->logOnlyDirty()
-            ->dontSubmitEmptyLogs()
+            ->dontLogEmptyChanges()
             ->useLogName('user');
     }
 }

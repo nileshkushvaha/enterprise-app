@@ -15,7 +15,11 @@ class EditUser extends EditRecord
     {
         return [
             ViewAction::make(),
-            DeleteAction::make(),
+            DeleteAction::make()
+                ->hidden(fn (): bool =>
+                    $this->record->id === auth()->id()
+                    || $this->record->hasRole('super_admin')
+                ),
         ];
     }
 
