@@ -1,0 +1,129 @@
+<?php
+
+namespace App\Filament\Resources\Users\Tables;
+
+use Filament\Actions\BulkActionGroup;
+use Filament\Actions\DeleteAction;
+use Filament\Actions\DeleteBulkAction;
+use Filament\Actions\EditAction;
+use Filament\Actions\ExportBulkAction;
+use Filament\Actions\ViewAction;
+use Filament\Support\Icons\Heroicon;
+use Filament\Tables\Columns\ImageColumn;
+use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\Filter;
+use Filament\Tables\Filters\SelectFilter;
+use Filament\Tables\Filters\TernaryFilter;
+use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
+
+class UsersTable
+{
+    public static function configure(Table $table): Table
+    {
+        return $table
+            ->columns([
+                ImageColumn::make('avatar')
+                    ->label('')
+                    ->circular()
+                    ->defaultImageUrl(fn ($record) => 'https://ui-avatars.com/api/?name=' . urlencode($record->name) . '&color=ffffff&background=6366f1')
+                    ->size(40),
+
+                TextColumn::make('name')
+                    ->label('Name')
+                    ->searchable()
+                    ->sortable()
+                    ->weight(\Filament\Support\Enums\FontWeight::Medium),
+
+                TextColumn::make('email')
+                    ->label('Email')
+                    ->searchable()
+                    ->sortable()
+                    ->copyable()
+                    ->copyMessage('Email copied'),
+
+                TextColumn::make('roles.name')
+                    ->label('Roles')
+                    ->badge()
+                    ->color('primary')
+                    ->searchable()
+                    ->separator(','),
+
+                TextColumn::make('status')
+                    ->label('Status')
+                    ->badge()
+                    ->color(fn (string $state): string => match ($state) {
+                        'active'   => 'success',
+                        'inactive' => 'danger',
+                        default    => 'gray',
+                    })
+                    ->sortable(),
+
+                TextColumn::make('email_verified_at')
+                    ->label('Verified')
+                    ->badge()
+                    ->formatStateUsing(fn ($state): string => $state ? 'Verified' : 'Unverified')
+                    ->color(fn ($state): string => $state ? 'success' : 'warning')
+                    ->sortable(),
+
+                TextColumn::make('created_at')
+                    ->label('Joined')
+                    ->dateTime('M j, Y')
+                    ->sortable()
+                    ->toggleable(),
+
+                TextColumn::make('updated_at')
+                    ->label('Updated')
+                    ->since()
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
+            ])
+
+            ->filters([
+                SelectFilter::make('roles')
+                    ->label('Role')
+                    ->relationship('roles', 'name')
+                    ->searchable()
+                    ->preload(),
+
+                SelectFilter::make('status')
+                    ->label('Status')
+                    ->options([
+                        'active'   => 'Active',
+                        'inactive' => 'Inactive',
+                    ]),
+
+                TernaryFilter::make('email_verified_at')
+                    ->label('Email Verified')
+                    ->nullable()
+                    ->trueLabel('Verified')
+                    ->falseLabel('Unverified')
+                    ->queries(
+                        true: fn (Builder $query) => $query->whereNotNull('email_verified_at'),
+                        false: fn (Builder $query) => $query->whereNull('email_verified_at'),
+                        blank: fn (Builder $query) => $query,
+                    ),
+            ])
+
+            ->recordActions([
+                ViewAction::make(),
+                EditAction::make(),
+                DeleteAction::make(),
+            ])
+
+            ->toolbarActions([
+                BulkActionGroup::make([
+                    DeleteBulkAction::make(),
+                    ExportBulkAction::make(),
+                ]),
+            ])
+
+            ->defaultSort('created_at', 'desc')
+
+            ->emptyStateIcon(Heroicon::OutlinedUsers)
+            ->emptyStateHeading('No users yet')
+            ->emptyStateDescription('Create your first user to get started.')
+
+            ->striped();
+    }
+}

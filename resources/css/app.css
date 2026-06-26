@@ -1,0 +1,262 @@
+@import 'tailwindcss';
+
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../storage/framework/views/*.php';
+
+@theme {
+    --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
+        'Segoe UI Symbol', 'Noto Color Emoji';
+}
+
+/* ============================================================
+   KEYFRAMES
+   ============================================================ */
+@keyframes float-updown {
+    0%, 100% { transform: translateY(0px); }
+    50%       { transform: translateY(-18px); }
+}
+@keyframes float-updown-slow {
+    0%, 100% { transform: translateY(0px) rotate(0deg); }
+    50%       { transform: translateY(-10px) rotate(3deg); }
+}
+@keyframes orb-glow {
+    0%, 100% { opacity: .15; transform: scale(1); }
+    50%       { opacity: .25; transform: scale(1.08); }
+}
+@keyframes gradient-x {
+    0%, 100% { background-position: 0% 50%; }
+    50%       { background-position: 100% 50%; }
+}
+@keyframes shimmer {
+    from { background-position: -200% center; }
+    to   { background-position:  200% center; }
+}
+@keyframes spin-slow {
+    to { transform: rotate(360deg); }
+}
+@keyframes pulse-ring {
+    0%   { transform: scale(1);   opacity: .6; }
+    100% { transform: scale(1.6); opacity: 0;  }
+}
+@keyframes slide-up {
+    from { opacity: 0; transform: translateY(24px); }
+    to   { opacity: 1; transform: translateY(0);    }
+}
+@keyframes bounce-in {
+    0%   { opacity: 0; transform: scale(.7); }
+    70%  { transform: scale(1.05); }
+    100% { opacity: 1; transform: scale(1); }
+}
+
+/* ============================================================
+   HERO MESH GRADIENT
+   ============================================================ */
+.hero-mesh {
+    background:
+        radial-gradient(ellipse 55% 70% at 85% 5%,  rgba(99,102,241,.28) 0%, transparent 55%),
+        radial-gradient(ellipse 45% 55% at 5%  90%,  rgba(139,92,246,.22) 0%, transparent 50%),
+        radial-gradient(ellipse 35% 40% at 50% 55%,  rgba(59,130,246,.12) 0%, transparent 45%),
+        linear-gradient(150deg, #040816 0%, #0C0F2E 30%, #11052C 60%, #080D24 100%);
+    position: relative;
+    overflow: hidden;
+}
+.hero-mesh::after {
+    content: '';
+    position: absolute; inset: 0; pointer-events: none;
+    background-image: radial-gradient(circle, rgba(99,102,241,.06) 1px, transparent 1px);
+    background-size: 40px 40px;
+}
+
+/* ============================================================
+   GLASS MORPHISM
+   ============================================================ */
+.glass {
+    background: rgba(255,255,255,.06);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255,255,255,.10);
+}
+.glass-md {
+    background: rgba(255,255,255,.10);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255,255,255,.16);
+}
+.glass-light {
+    background: rgba(255,255,255,.92);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255,255,255,.75);
+    box-shadow: 0 8px 32px rgba(31,38,135,.06), 0 2px 8px rgba(0,0,0,.04);
+}
+.glass-dark {
+    background: rgba(10,14,35,.65);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid rgba(255,255,255,.07);
+}
+
+/* ============================================================
+   NAVBAR
+   ============================================================ */
+.navbar {
+    background: rgba(4,8,22,.75);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border-bottom: 1px solid rgba(255,255,255,.06);
+    transition: background .3s ease, box-shadow .3s ease;
+}
+.navbar.scrolled {
+    background: rgba(4,8,22,.96);
+    box-shadow: 0 4px 24px rgba(0,0,0,.35);
+}
+
+/* ============================================================
+   GRADIENT TEXT
+   ============================================================ */
+.text-grad {
+    background: linear-gradient(135deg, #818CF8 0%, #A78BFA 45%, #EC4899 100%);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+.text-grad-amber {
+    background: linear-gradient(135deg, #FCD34D 0%, #F97316 100%);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+.text-grad-blue {
+    background: linear-gradient(135deg, #60A5FA 0%, #818CF8 50%, #C084FC 100%);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+/* ============================================================
+   BUTTONS
+   ============================================================ */
+.btn-amber {
+    background: linear-gradient(135deg, #F59E0B 0%, #EF4444 100%);
+    box-shadow: 0 4px 20px rgba(245,158,11,.35);
+    transition: transform .25s ease, box-shadow .25s ease;
+}
+.btn-amber:hover  { transform: translateY(-2px); box-shadow: 0 10px 30px rgba(245,158,11,.50); }
+.btn-amber:active { transform: translateY(0); }
+
+.btn-indigo {
+    background: linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%);
+    box-shadow: 0 4px 20px rgba(99,102,241,.35);
+    transition: transform .25s ease, box-shadow .25s ease;
+}
+.btn-indigo:hover  { transform: translateY(-2px); box-shadow: 0 10px 30px rgba(99,102,241,.50); }
+.btn-indigo:active { transform: translateY(0); }
+
+/* ============================================================
+   SECTION ACCENT
+   ============================================================ */
+.section-accent {
+    width: 48px; height: 4px;
+    background: linear-gradient(90deg, #6366F1, #8B5CF6, #EC4899);
+    border-radius: 4px; margin: 12px auto 0;
+}
+
+/* ============================================================
+   CARDS & HOVER
+   ============================================================ */
+.card-lift {
+    transition: transform .35s cubic-bezier(.175,.885,.32,1.275), box-shadow .35s ease;
+}
+.card-lift:hover {
+    transform: translateY(-8px);
+    box-shadow: 0 24px 48px rgba(99,102,241,.13);
+}
+.thumb-zoom { transition: transform .4s ease; }
+.card-lift:hover .thumb-zoom { transform: scale(1.06); }
+
+/* ============================================================
+   FLOATING / ANIMATION
+   ============================================================ */
+.float-y      { animation: float-updown      6s ease-in-out infinite; }
+.float-y-slow { animation: float-updown-slow 8s ease-in-out infinite; }
+
+.bg-orb {
+    position: absolute; border-radius: 50%;
+    filter: blur(90px); pointer-events: none;
+    animation: orb-glow 10s ease-in-out infinite;
+}
+
+/* ============================================================
+   STATS COUNTER
+   ============================================================ */
+.counter-wrap { animation: slide-up .6s ease forwards; }
+
+/* ============================================================
+   HOW-IT-WORKS TIMELINE
+   ============================================================ */
+.timeline-connector {
+    position: absolute; top: 24px; left: 50%;
+    transform: translateX(-50%);
+    width: 2px; height: calc(100% - 24px);
+    background: linear-gradient(to bottom, #6366F1 0%, rgba(99,102,241,0) 100%);
+}
+
+/* ============================================================
+   TESTIMONIALS QUOTE
+   ============================================================ */
+.quote-card::before {
+    content: '\201C';
+    position: absolute; top: -8px; left: 20px;
+    font-size: 5rem; line-height: 1;
+    background: linear-gradient(135deg, #6366F1, #8B5CF6);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+    opacity: .35;
+}
+
+/* ============================================================
+   FAQ ACCORDION
+   ============================================================ */
+.faq-answer-wrap {
+    max-height: 0; overflow: hidden;
+    transition: max-height .4s cubic-bezier(.4,0,.2,1), opacity .3s ease;
+    opacity: 0;
+}
+.faq-answer-wrap.open { max-height: 300px; opacity: 1; }
+
+/* ============================================================
+   FOOTER LINKS
+   ============================================================ */
+.foot-link {
+    transition: color .2s ease, transform .2s ease;
+    display: inline-block;
+}
+.foot-link:hover { color: #A78BFA; transform: translateX(4px); }
+
+/* ============================================================
+   SCROLLBAR
+   ============================================================ */
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: #060B1A; }
+::-webkit-scrollbar-thumb {
+    background: linear-gradient(to bottom, #6366F1, #8B5CF6);
+    border-radius: 10px;
+}
+
+/* ============================================================
+   MISC
+   ============================================================ */
+html { scroll-behavior: smooth; }
+.badge-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #10B981;
+    position: relative;
+}
+.badge-dot::after {
+    content: ''; position: absolute; inset: -2px;
+    border-radius: 50%; background: #10B981;
+    animation: pulse-ring 1.8s ease-out infinite;
+}
+.shimmer-line {
+    background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,.15) 50%, transparent 100%);
+    background-size: 200% 100%;
+    animation: shimmer 2s infinite;
+}
+
