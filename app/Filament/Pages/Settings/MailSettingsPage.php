@@ -31,8 +31,8 @@ class MailSettingsPage extends Page
 
     protected static string|BackedEnum|null $navigationIcon  = Heroicon::OutlinedEnvelope;
     protected static ?string $navigationLabel                = 'Mail';
-    protected static string|\UnitEnum|null $navigationGroup                = 'Settings';
-    protected static ?int    $navigationSort                 = 11;
+    protected static string|\UnitEnum|null $navigationGroup                = 'Configuration';
+    protected static ?int    $navigationSort                 = 3;
     protected static ?string $slug                           = 'settings/mail';
 
     /** @var array<string, mixed>|null */

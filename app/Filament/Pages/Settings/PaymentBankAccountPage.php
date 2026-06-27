@@ -19,7 +19,7 @@ class PaymentBankAccountPage extends PaymentSettingsPage
 {
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedBuildingLibrary;
     protected static ?string $navigationLabel = 'Bank Account';
-    protected static string|\UnitEnum|null $navigationGroup = 'Payment Settings';
+    protected static string|\UnitEnum|null $navigationGroup = 'Payment';
     protected static ?int $navigationSort = 1;
     protected static ?string $slug = 'payment-settings/bank-account';
 

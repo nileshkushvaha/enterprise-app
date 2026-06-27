@@ -23,15 +23,15 @@ class PageBlockResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
 
-    protected static ?string $navigationLabel = 'Blocks';
+    protected static ?string $navigationLabel = 'Content Blocks';
 
-    protected static ?string $modelLabel = 'Page Block';
+    protected static ?string $modelLabel = 'Content Block';
 
-    protected static ?string $pluralModelLabel = 'Page Blocks';
+    protected static ?string $pluralModelLabel = 'Content Blocks';
 
     protected static string|\UnitEnum|null $navigationGroup = 'CMS';
 
-    protected static ?int $navigationSort = 2;
+    protected static ?int $navigationSort = 5;
 
     public static function form(Schema $schema): Schema
     {

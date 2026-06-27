@@ -19,7 +19,7 @@ class PaymentAdvancedPage extends PaymentSettingsPage
 {
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedWrenchScrewdriver;
     protected static ?string $navigationLabel = 'Advanced';
-    protected static string|\UnitEnum|null $navigationGroup = 'Payment Settings';
+    protected static string|\UnitEnum|null $navigationGroup = 'Payment';
     protected static ?int $navigationSort = 4;
     protected static ?string $slug = 'payment-settings/advanced';
 

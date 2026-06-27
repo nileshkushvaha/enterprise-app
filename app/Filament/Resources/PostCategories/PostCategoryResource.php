@@ -20,17 +20,17 @@ class PostCategoryResource extends Resource
 {
     protected static ?string $model = PostCategory::class;
 
-    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedTag;
+    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedFolderOpen;
 
-    protected static ?string $navigationLabel = 'Post Categories';
+    protected static ?string $navigationLabel = 'Categories';
 
-    protected static ?string $modelLabel = 'Post Category';
+    protected static ?string $modelLabel = 'Category';
 
-    protected static ?string $pluralModelLabel = 'Post Categories';
+    protected static ?string $pluralModelLabel = 'Categories';
 
     protected static string|\UnitEnum|null $navigationGroup = 'CMS';
 
-    protected static ?int $navigationSort = 4;
+    protected static ?int $navigationSort = 3;
 
     public static function form(Schema $schema): Schema
     {

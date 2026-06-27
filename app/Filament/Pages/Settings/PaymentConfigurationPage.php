@@ -19,7 +19,7 @@ class PaymentConfigurationPage extends PaymentSettingsPage
 {
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedCog8Tooth;
     protected static ?string $navigationLabel = 'Payment Configuration';
-    protected static string|\UnitEnum|null $navigationGroup = 'Payment Settings';
+    protected static string|\UnitEnum|null $navigationGroup = 'Payment';
     protected static ?int $navigationSort = 3;
     protected static ?string $slug = 'payment-settings/configuration';
 

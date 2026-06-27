@@ -51,7 +51,7 @@ class AdminPanelProvider extends PanelProvider
                 Action::make('change_password')
                     ->label('Change Password')
                     ->icon(Heroicon::OutlinedLockClosed)
-                    ->url(fn () => AdminChangePassword::getUrl())
+                    ->url(fn() => AdminChangePassword::getUrl())
                     ->sort(1),
             ])
 
@@ -59,11 +59,12 @@ class AdminPanelProvider extends PanelProvider
             ->discoverClusters(in: app_path('Filament/Clusters'), for: 'App\Filament\Clusters')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\Filament\Pages')
             ->navigationGroups([
+                'Administration',
                 'CMS',
-                'Settings',
-                'Payment Settings',
-                'Master Data',
-                'Access Control',
+                'Masters',
+                'Configuration',
+                'Payment',
+                // System group reserved for: Activity Logs, Queue Monitor, Scheduler, Cache Manager
             ])
             ->pages([
                 Dashboard::class,

@@ -29,8 +29,8 @@ class SeoSettingsPage extends Page
 
     protected static string|BackedEnum|null $navigationIcon  = Heroicon::OutlinedMagnifyingGlass;
     protected static ?string $navigationLabel                = 'SEO';
-    protected static string|\UnitEnum|null $navigationGroup                = 'Settings';
-    protected static ?int    $navigationSort                 = 12;
+    protected static string|\UnitEnum|null $navigationGroup                = 'Configuration';
+    protected static ?int    $navigationSort                 = 2;
     protected static ?string $slug                           = 'settings/seo';
 
     /** @var array<string, mixed>|null */

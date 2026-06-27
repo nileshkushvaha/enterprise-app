@@ -21,7 +21,7 @@ class PaymentGatewayPage extends PaymentSettingsPage
 {
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedWallet;
     protected static ?string $navigationLabel = 'Payment Gateways';
-    protected static string|\UnitEnum|null $navigationGroup = 'Payment Settings';
+    protected static string|\UnitEnum|null $navigationGroup = 'Payment';
     protected static ?int $navigationSort = 2;
     protected static ?string $slug = 'payment-settings/gateways';
 
