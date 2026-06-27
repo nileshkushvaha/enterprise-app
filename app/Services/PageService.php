@@ -1,0 +1,130 @@
+<?php
+
+namespace App\Services;
+
+use App\Models\Page;
+use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Pagination\Paginator;
+
+class PageService
+{
+    /**
+     * Get all pages with optional filters
+     */
+    public function getPages(
+        string $status = null,
+        string $visibility = null,
+        string $template = null,
+        string $search = null,
+        int $perPage = 15
+    ): Paginator {
+        $query = Page::query();
+
+        if ($status) {
+            $query->where('status', $status);
+        }
+
+        if ($visibility) {
+            $query->where('visibility', $visibility);
+        }
+
+        if ($template) {
+            $query->where('template', $template);
+        }
+
+        if ($search) {
+            $query->search($search);
+        }
+
+        return $query->orderByDesc('created_at')->paginate($perPage);
+    }
+
+    /**
+     * Get published pages
+     */
+    public function getPublishedPages(int $perPage = 15): Paginator
+    {
+        return Page::published()
+            ->orderByDesc('published_at')
+            ->paginate($perPage);
+    }
+
+    /**
+     * Get featured pages (for dashboard, etc.)
+     */
+    public function getFeaturedPages(int $limit = 5): Collection
+    {
+        return Page::published()
+            ->orderByDesc('published_at')
+            ->limit($limit)
+            ->get();
+    }
+
+    /**
+     * Duplicate a page
+     */
+    public function duplicatePage(Page $page): Page
+    {
+        $newPage = $page->replicate();
+        $newPage->slug = $this->generateUniqueSlug($page->slug . '-copy');
+        $newPage->title = $page->title . ' (Copy)';
+        $newPage->status = 'draft';
+        $newPage->visibility = 'private';
+        $newPage->published_at = null;
+        $newPage->save();
+
+        // Duplicate blocks
+        foreach ($page->blocks as $block) {
+            $newBlock = $block->replicate();
+            $newBlock->page_id = $newPage->id;
+            $newBlock->save();
+        }
+
+        // Duplicate media
+        $page->getMedia('featured-image')->each(function ($media) use ($newPage) {
+            $media->copy($newPage, 'featured-image');
+        });
+
+        return $newPage;
+    }
+
+    /**
+     * Publish a page
+     */
+    public function publishPage(Page $page): bool
+    {
+        return $page->publish();
+    }
+
+    /**
+     * Unpublish a page
+     */
+    public function unpublishPage(Page $page): bool
+    {
+        return $page->unpublish();
+    }
+
+    /**
+     * Archive a page
+     */
+    public function archivePage(Page $page): bool
+    {
+        return $page->archive();
+    }
+
+    /**
+     * Generate unique slug
+     */
+    private function generateUniqueSlug(string $slug): string
+    {
+        $baseSlug = $slug;
+        $counter = 1;
+
+        while (Page::where('slug', $slug)->exists()) {
+            $slug = "{$baseSlug}-{$counter}";
+            $counter++;
+        }
+
+        return $slug;
+    }
+}
