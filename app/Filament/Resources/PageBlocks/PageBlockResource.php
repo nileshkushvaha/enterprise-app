@@ -7,7 +7,8 @@ use App\Filament\Resources\PageBlocks\Pages\EditPageBlock;
 use App\Filament\Resources\PageBlocks\Pages\ListPageBlocks;
 use App\Filament\Resources\PageBlocks\Schemas\PageBlockForm;
 use App\Filament\Resources\PageBlocks\Tables\PageBlocksTable;
-use App\Models\PageBlock;
+use App\Content\Models\ContentBlock;
+use App\Models\Page;
 use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
@@ -18,7 +19,7 @@ use Illuminate\Database\Eloquent\SoftDeletingScope;
 
 class PageBlockResource extends Resource
 {
-    protected static ?string $model = PageBlock::class;
+    protected static ?string $model = ContentBlock::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
 
@@ -27,6 +28,8 @@ class PageBlockResource extends Resource
     protected static ?string $modelLabel = 'Page Block';
 
     protected static ?string $pluralModelLabel = 'Page Blocks';
+
+    protected static string|\UnitEnum|null $navigationGroup = 'CMS';
 
     protected static ?int $navigationSort = 2;
 
@@ -56,9 +59,16 @@ class PageBlockResource extends Resource
         ];
     }
 
+    public static function getEloquentQuery(): Builder
+    {
+        return parent::getEloquentQuery()
+            ->where('blockable_type', (new Page)->getMorphClass());
+    }
+
     public static function getRecordRouteBindingEloquentQuery(): Builder
     {
         return parent::getRecordRouteBindingEloquentQuery()
+            ->where('blockable_type', (new Page)->getMorphClass())
             ->withoutGlobalScopes([
                 SoftDeletingScope::class,
             ]);
@@ -66,12 +76,12 @@ class PageBlockResource extends Resource
 
     public static function canViewAny(): bool
     {
-        return auth()->user()?->can('viewAny', PageBlock::class) ?? false;
+        return auth()->user()?->can('viewAny', ContentBlock::class) ?? false;
     }
 
     public static function canCreate(): bool
     {
-        return auth()->user()?->can('create', PageBlock::class) ?? false;
+        return auth()->user()?->can('create', ContentBlock::class) ?? false;
     }
 
     public static function canEdit(\Illuminate\Database\Eloquent\Model $record): bool

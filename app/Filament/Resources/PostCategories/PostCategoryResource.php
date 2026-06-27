@@ -28,6 +28,8 @@ class PostCategoryResource extends Resource
 
     protected static ?string $pluralModelLabel = 'Post Categories';
 
+    protected static string|\UnitEnum|null $navigationGroup = 'CMS';
+
     protected static ?int $navigationSort = 4;
 
     public static function form(Schema $schema): Schema

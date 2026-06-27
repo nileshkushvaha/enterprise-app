@@ -2,6 +2,14 @@
 
 namespace App\Providers;
 
+use App\Models\Page;
+use App\Models\Post;
+use App\Models\PostCategory;
+use App\Models\Tag;
+use App\Observers\PageObserver;
+use App\Observers\PostCategoryObserver;
+use App\Observers\PostObserver;
+use App\Observers\TagObserver;
 use App\Policies\ProfilePolicy;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
@@ -9,7 +17,10 @@ use Spatie\Permission\Models\Permission;
 
 class AppServiceProvider extends ServiceProvider
 {
-    public function register(): void {}
+    public function register(): void
+    {
+        //
+    }
 
     public function boot(): void
     {
@@ -21,22 +32,19 @@ class AppServiceProvider extends ServiceProvider
 
     private function registerObservers(): void
     {
-        \App\Models\Page::observe(\App\Observers\PageObserver::class);
-        \App\Models\PageBlock::observe(\App\Observers\PageBlockObserver::class);
-        \App\Models\Post::observe(\App\Observers\PostObserver::class);
-        \App\Models\PostBlock::observe(\App\Observers\PostBlockObserver::class);
-        \App\Models\PostCategory::observe(\App\Observers\PostCategoryObserver::class);
-        \App\Models\Tag::observe(\App\Observers\TagObserver::class);
+        Page::observe(PageObserver::class);
+        Post::observe(PostObserver::class);
+        PostCategory::observe(PostCategoryObserver::class);
+        Tag::observe(TagObserver::class);
     }
 
     private function registerPolicies(): void
     {
         Gate::policy(\App\Models\User::class, ProfilePolicy::class);
 
-        // Explicit profile abilities (no model binding needed)
-        Gate::define('profile.view',     [ProfilePolicy::class, 'view']);
-        Gate::define('profile.update',   [ProfilePolicy::class, 'update']);
-        Gate::define('password.change',  [ProfilePolicy::class, 'changePassword']);
+        Gate::define('profile.view',    [ProfilePolicy::class, 'view']);
+        Gate::define('profile.update',  [ProfilePolicy::class, 'update']);
+        Gate::define('password.change', [ProfilePolicy::class, 'changePassword']);
     }
 
     /**
@@ -47,18 +55,16 @@ class AppServiceProvider extends ServiceProvider
     {
         Gate::before(function ($user, string $ability): ?bool {
             if (method_exists($user, 'hasRole')) {
-                // Bypass by role name (primary check)
                 if ($user->hasRole('super_admin')) {
                     return true;
                 }
 
-                // Bypass by role ID 1 (fallback — covers renamed super_admin)
                 if ($user->roles()->where('id', 1)->exists()) {
                     return true;
                 }
             }
 
-            return null; // Defer to next Gate check
+            return null;
         });
     }
 

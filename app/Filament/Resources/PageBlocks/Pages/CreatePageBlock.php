@@ -2,9 +2,10 @@
 
 namespace App\Filament\Resources\PageBlocks\Pages;
 
-use App\Enums\BlockType;
 use App\Actions\ValidateBlockContentAction;
+use App\Enums\BlockType;
 use App\Filament\Resources\PageBlocks\PageBlockResource;
+use App\Models\Page;
 use App\Services\BlockContentConverter;
 use Filament\Resources\Pages\CreateRecord;
 use Illuminate\Validation\ValidationException;
@@ -16,20 +17,24 @@ class CreatePageBlock extends CreateRecord
     protected function mutateFormDataBeforeSave(array $data): array
     {
         // Support create URLs like /admin/page-blocks/create?page_id=<uuid>
-        $data['page_id'] = $data['page_id'] ?? request()->query('page_id');
+        $pageId = $data['page_id'] ?? request()->query('page_id');
 
-        if (blank($data['page_id'])) {
+        if (blank($pageId)) {
             throw ValidationException::withMessages([
                 'page_id' => 'Please select a page before creating a block.',
             ]);
         }
 
-        // Convert form data to JSON
+        // Map virtual page_id → polymorphic pair
+        $data['blockable_type'] = (new Page)->getMorphClass();
+        $data['blockable_id']   = $pageId;
+        unset($data['page_id']);
+
         if (isset($data['block_type'])) {
             $blockTypeValue = $data['block_type'] instanceof BlockType ? $data['block_type']->value : $data['block_type'];
-            $blockType = BlockType::tryFrom($blockTypeValue);
+            $blockType = BlockType::tryFrom((string) $blockTypeValue);
             if ($blockType) {
-                $data['content'] = BlockContentConverter::convert($blockType, $data);
+                $data['content']  = BlockContentConverter::convert($blockType, $data);
                 $data['settings'] = $data['settings'] ?? [];
 
                 $errors = app(ValidateBlockContentAction::class)->execute($blockType, $data['content']);
@@ -41,10 +46,9 @@ class CreatePageBlock extends CreateRecord
             }
         }
 
-        // Clean up form fields that aren't database columns
         $databaseColumns = [
-            'page_id', 'block_type', 'content', 'settings', 'sort_order', 
-            'is_active', 'created_at', 'updated_at'
+            'blockable_type', 'blockable_id', 'block_type', 'content',
+            'settings', 'sort_order', 'is_active', 'created_at', 'updated_at',
         ];
 
         return array_intersect_key($data, array_flip($databaseColumns));

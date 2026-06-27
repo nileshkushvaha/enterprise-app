@@ -23,6 +23,11 @@ class PaymentSettingsNavigationPage extends Page
     protected static ?string $slug = 'payment-settings';
     protected static bool $shouldRegisterNavigation = false;
 
+    public static function shouldRegisterNavigation(): bool
+    {
+        return false;
+    }
+
     public static function getLabel(): string
     {
         return 'Payment Settings';

@@ -7,7 +7,8 @@ use App\Filament\Resources\PostBlocks\Pages\EditPostBlock;
 use App\Filament\Resources\PostBlocks\Pages\ListPostBlocks;
 use App\Filament\Resources\PostBlocks\Schemas\PostBlockForm;
 use App\Filament\Resources\PostBlocks\Tables\PostBlocksTable;
-use App\Models\PostBlock;
+use App\Content\Models\ContentBlock;
+use App\Models\Post;
 use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
@@ -18,7 +19,7 @@ use Illuminate\Database\Eloquent\SoftDeletingScope;
 
 class PostBlockResource extends Resource
 {
-    protected static ?string $model = PostBlock::class;
+    protected static ?string $model = ContentBlock::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
 
@@ -27,6 +28,8 @@ class PostBlockResource extends Resource
     protected static ?string $modelLabel = 'Post Block';
 
     protected static ?string $pluralModelLabel = 'Post Blocks';
+
+    protected static string|\UnitEnum|null $navigationGroup = 'CMS';
 
     protected static ?int $navigationSort = 4;
 
@@ -54,19 +57,26 @@ class PostBlockResource extends Resource
         ];
     }
 
+    public static function getEloquentQuery(): Builder
+    {
+        return parent::getEloquentQuery()
+            ->where('blockable_type', (new Post)->getMorphClass());
+    }
+
     public static function getRecordRouteBindingEloquentQuery(): Builder
     {
         return parent::getRecordRouteBindingEloquentQuery()
+            ->where('blockable_type', (new Post)->getMorphClass())
             ->withoutGlobalScopes([SoftDeletingScope::class]);
     }
 
     public static function canViewAny(): bool
     {
-        return auth()->user()?->can('viewAny', PostBlock::class) ?? false;
+        return auth()->user()?->can('viewAny', ContentBlock::class) ?? false;
     }
 
     public static function canCreate(): bool
     {
-        return auth()->user()?->can('create', PostBlock::class) ?? false;
+        return auth()->user()?->can('create', ContentBlock::class) ?? false;
     }
 }

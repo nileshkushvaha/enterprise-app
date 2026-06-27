@@ -86,8 +86,8 @@ class PageService
             $newPage->save();
 
             foreach ($page->blocks as $block) {
-                $newBlock = $block->replicate();
-                $newBlock->page_id = $newPage->id;
+                $newBlock               = $block->replicate(['id']);
+                $newBlock->blockable_id = $newPage->id;
                 $newBlock->save();
             }
 

@@ -28,7 +28,7 @@ class AuthorResource extends Resource
 
     protected static ?string $pluralModelLabel = 'Authors';
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Blog';
+    protected static string|\UnitEnum|null $navigationGroup = 'CMS';
 
     protected static ?int $navigationSort = 1;
 

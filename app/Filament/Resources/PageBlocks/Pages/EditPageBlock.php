@@ -2,9 +2,10 @@
 
 namespace App\Filament\Resources\PageBlocks\Pages;
 
-use App\Enums\BlockType;
 use App\Actions\ValidateBlockContentAction;
+use App\Enums\BlockType;
 use App\Filament\Resources\PageBlocks\PageBlockResource;
+use App\Models\Page;
 use App\Services\BlockContentConverter;
 use App\Services\BlockContentHydrator;
 use Filament\Actions\DeleteAction;
@@ -21,17 +22,18 @@ class EditPageBlock extends EditRecord
     {
         parent::fillForm();
 
-        // Convert stored JSON back to form data
         if ($this->record && $this->record->block_type) {
             $blockType = $this->record->block_type instanceof BlockType
                 ? $this->record->block_type
                 : BlockType::tryFrom($this->record->block_type);
+
             if ($blockType) {
                 $hydratedData = BlockContentHydrator::hydrate($blockType, $this->record->content ?? []);
-                
-                // Populate form with hydrated data
+
                 $this->form->fill([
                     ...$this->record->toArray(),
+                    // Expose blockable_id as page_id for the form Select field
+                    'page_id' => $this->record->blockable_id,
                     ...$hydratedData,
                 ]);
             }
@@ -40,13 +42,20 @@ class EditPageBlock extends EditRecord
 
     protected function mutateFormDataBeforeSave(array $data): array
     {
-        // Convert form data back to JSON
+        // Map virtual page_id → polymorphic pair (preserved across the edit form)
+        if (isset($data['page_id'])) {
+            $data['blockable_type'] = (new Page)->getMorphClass();
+            $data['blockable_id']   = $data['page_id'];
+            unset($data['page_id']);
+        }
+
         if (isset($data['block_type'])) {
             $blockType = $data['block_type'] instanceof BlockType
                 ? $data['block_type']
                 : BlockType::tryFrom($data['block_type']);
+
             if ($blockType) {
-                $data['content'] = BlockContentConverter::convert($blockType, $data);
+                $data['content']  = BlockContentConverter::convert($blockType, $data);
                 $data['settings'] = $data['settings'] ?? [];
 
                 $errors = app(ValidateBlockContentAction::class)->execute($blockType, $data['content']);
@@ -58,10 +67,9 @@ class EditPageBlock extends EditRecord
             }
         }
 
-        // Clean up form fields that aren't database columns
         $databaseColumns = [
-            'id', 'page_id', 'block_type', 'content', 'settings', 'sort_order', 
-            'is_active', 'created_at', 'updated_at', 'deleted_at'
+            'id', 'blockable_type', 'blockable_id', 'block_type', 'content',
+            'settings', 'sort_order', 'is_active', 'created_at', 'updated_at', 'deleted_at',
         ];
 
         return array_intersect_key($data, array_flip($databaseColumns));

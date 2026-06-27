@@ -2,9 +2,9 @@
 
 namespace Tests\Unit\Services;
 
+use App\Content\Models\ContentBlock;
 use App\Enums\BlockType;
 use App\Models\Page;
-use App\Models\PageBlock;
 use App\Services\BlockRenderer;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -307,17 +307,18 @@ class BlockRendererTest extends TestCase
         $this->assertEquals('contact-form', $this->renderer->getComponentName(BlockType::ContactForm));
     }
 
-    private function createBlock(BlockType $type, array $content): PageBlock
+    private function createBlock(BlockType $type, array $content): ContentBlock
     {
         $page = Page::factory()->create();
 
-        return PageBlock::create([
-            'page_id' => $page->id,
-            'block_type' => $type,
-            'content' => json_encode($content),
-            'settings' => json_encode([]),
-            'sort_order' => 1,
-            'is_active' => true,
+        return ContentBlock::create([
+            'blockable_type' => 'page',
+            'blockable_id'   => $page->id,
+            'block_type'     => $type,
+            'content'        => json_encode($content),
+            'settings'       => json_encode([]),
+            'sort_order'     => 1,
+            'is_active'      => true,
         ]);
     }
 }

@@ -3,7 +3,6 @@
 namespace App\Services;
 
 use App\Models\Post;
-use App\Models\PostBlock;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
@@ -90,8 +89,8 @@ class PostService
             $newPost->save();
 
             foreach ($post->blocks as $block) {
-                $newBlock = $block->replicate();
-                $newBlock->post_id = $newPost->id;
+                $newBlock               = $block->replicate(['id']);
+                $newBlock->blockable_id = $newPost->id;
                 $newBlock->save();
             }
 
@@ -155,7 +154,7 @@ class PostService
 
         $words = 0;
         foreach ($post->blocks as $block) {
-            if (! $block instanceof PostBlock || ! $block->is_active) {
+            if (! $block->is_active) {
                 continue;
             }
 

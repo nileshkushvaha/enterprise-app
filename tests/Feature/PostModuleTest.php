@@ -2,11 +2,11 @@
 
 namespace Tests\Feature;
 
+use App\Content\Models\ContentBlock;
 use App\Enums\BlockType;
 use App\Enums\PageStatus;
 use App\Enums\PageVisibility;
 use App\Models\Post;
-use App\Models\PostBlock;
 use App\Services\PostService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -19,13 +19,14 @@ class PostModuleTest extends TestCase
     {
         $post = Post::factory()->published()->create();
 
-        PostBlock::query()->create([
-            'post_id' => $post->id,
-            'block_type' => BlockType::Hero,
-            'content' => ['title' => 'Published Post Hero'],
-            'settings' => [],
-            'sort_order' => 1,
-            'is_active' => true,
+        ContentBlock::create([
+            'blockable_type' => 'post',
+            'blockable_id'   => $post->id,
+            'block_type'     => BlockType::Hero,
+            'content'        => ['title' => 'Published Post Hero'],
+            'settings'       => [],
+            'sort_order'     => 1,
+            'is_active'      => true,
         ]);
 
         $response = $this->get(route('blog.show', $post->slug));
@@ -64,13 +65,14 @@ class PostModuleTest extends TestCase
         $post = Post::factory()->published()->create(['reading_time' => 1]);
         $longText = implode(' ', array_fill(0, 450, 'word'));
 
-        PostBlock::query()->create([
-            'post_id' => $post->id,
-            'block_type' => BlockType::RichText,
-            'content' => ['text' => $longText],
-            'settings' => [],
-            'sort_order' => 1,
-            'is_active' => true,
+        ContentBlock::create([
+            'blockable_type' => 'post',
+            'blockable_id'   => $post->id,
+            'block_type'     => BlockType::RichText,
+            'content'        => ['text' => $longText],
+            'settings'       => [],
+            'sort_order'     => 1,
+            'is_active'      => true,
         ]);
 
         $this->assertGreaterThanOrEqual(2, $post->fresh()->reading_time);

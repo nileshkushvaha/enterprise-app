@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Content\Contracts\HasContentBlocks;
+use App\Content\Models\ContentBlock;
 use App\Enums\PageStatus;
 use App\Enums\PageVisibility;
 use Illuminate\Database\Eloquent\Builder;
@@ -9,14 +11,14 @@ use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Spatie\Activitylog\Models\Concerns\LogsActivity;
 use Spatie\Activitylog\Support\LogOptions;
 use Spatie\MediaLibrary\HasMedia;
 use Spatie\MediaLibrary\InteractsWithMedia;
 
-class Page extends Model implements HasMedia
+class Page extends Model implements HasMedia, HasContentBlocks
 {
     /** @use HasFactory<\Database\Factories\PageFactory> */
     use HasFactory, HasUuids, SoftDeletes, LogsActivity, InteractsWithMedia;
@@ -104,20 +106,16 @@ class Page extends Model implements HasMedia
         return $this->belongsTo(User::class, 'updated_by');
     }
 
-    /**
-     * Get the page blocks
-     */
-    public function blocks(): HasMany
+    public function blocks(): MorphMany
     {
-        return $this->hasMany(PageBlock::class)->orderBy('sort_order');
+        return $this->morphMany(ContentBlock::class, 'blockable')->orderBy('sort_order');
     }
 
-    /**
-     * Get active blocks
-     */
-    public function activeBlocks(): HasMany
+    public function activeBlocks(): MorphMany
     {
-        return $this->blocks()->where('is_active', true);
+        return $this->morphMany(ContentBlock::class, 'blockable')
+            ->where('is_active', true)
+            ->orderBy('sort_order');
     }
 
     /**

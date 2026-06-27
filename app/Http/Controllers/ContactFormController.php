@@ -2,8 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Content\Models\ContentBlock;
 use App\Enums\BlockType;
-use App\Models\PageBlock;
 use App\Notifications\Cms\ContactFormSubmissionNotification;
 use App\Settings\GeneralSettings;
 use App\Settings\MailSettings;
@@ -21,12 +21,12 @@ class ContactFormController extends Controller
     public function submit(Request $request): RedirectResponse
     {
         $request->validate([
-            'block_id' => ['required', 'uuid', 'exists:page_blocks,id'],
+            'block_id' => ['required', 'uuid', 'exists:content_blocks,id'],
             'website' => ['nullable', 'max:0'], // Honeypot
         ]);
 
-        /** @var PageBlock $block */
-        $block = PageBlock::query()->findOrFail($request->string('block_id')->toString());
+        /** @var ContentBlock $block */
+        $block = ContentBlock::query()->findOrFail($request->string('block_id')->toString());
 
         if ($block->block_type !== BlockType::ContactForm) {
             throw ValidationException::withMessages([
@@ -69,7 +69,7 @@ class ContactFormController extends Controller
 
         $payload = [
             'block_id' => $block->id,
-            'page_id' => $block->page_id,
+            'page_id' => $block->blockable_id,
             'page_slug' => $block->page?->slug,
             'page_title' => $block->page?->title,
             'submitted_at' => now()->toIso8601String(),
@@ -104,7 +104,7 @@ class ContactFormController extends Controller
             ->performedOn($block)
             ->event('contact_form_submitted')
             ->withProperties([
-                'page_id' => $block->page_id,
+                'page_id' => $block->blockable_id,
                 'ip' => $request->ip(),
             ])
             ->log('Contact form submitted');

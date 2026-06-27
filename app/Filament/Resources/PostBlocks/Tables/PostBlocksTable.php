@@ -2,8 +2,8 @@
 
 namespace App\Filament\Resources\PostBlocks\Tables;
 
+use App\Content\Models\ContentBlock;
 use App\Enums\BlockType;
-use App\Models\PostBlock;
 use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteAction;
@@ -47,7 +47,7 @@ class PostBlocksTable
                 SelectFilter::make('block_type')
                     ->options(BlockType::class)
                     ->multiple(),
-                SelectFilter::make('post_id')
+                SelectFilter::make('blockable_id')
                     ->label('Post')
                     ->relationship('post', 'title')
                     ->searchable()
@@ -59,9 +59,10 @@ class PostBlocksTable
                 Action::make('duplicate')
                     ->label('Duplicate')
                     ->icon('heroicon-o-document-duplicate')
-                    ->action(function (PostBlock $record): void {
-                        $duplicate = $record->replicate();
-                        $duplicate->sort_order = ((int) $record->post->blocks()->max('sort_order')) + 1;
+                    ->action(function (ContentBlock $record): void {
+                        $owner     = $record->blockable;
+                        $duplicate = $record->replicate(['id']);
+                        $duplicate->sort_order = ($owner ? ((int) $owner->blocks()->max('sort_order')) : $record->sort_order) + 1;
                         $duplicate->save();
 
                         Notification::make()

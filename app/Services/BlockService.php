@@ -2,275 +2,82 @@
 
 namespace App\Services;
 
+use App\Content\Models\ContentBlock;
+use App\Content\Services\ContentBlockService;
 use App\Enums\BlockType;
 use App\Models\Page;
-use App\Models\PageBlock;
 use Illuminate\Support\Collection;
 
+/**
+ * Backward-compatible facade delegating to ContentBlockService.
+ *
+ * Retained so that existing Filament resource code, tests, and any
+ * external callsites continue to resolve `app(BlockService::class)`
+ * without changes. All logic lives in ContentBlockService.
+ */
 class BlockService
 {
-    /**
-     * Create a block for a page
-     */
-    public function createBlock(Page $page, string $blockType, array $content, array $settings = [], ?int $sortOrder = null): PageBlock
-    {
-        // Get next sort order if not provided
-        if ($sortOrder === null) {
-            $sortOrder = $page->blocks()->max('sort_order') + 1 ?? 0;
-        }
+    public function __construct(
+        private readonly ContentBlockService $inner,
+    ) {}
 
-        return $page->blocks()->create([
-            'block_type' => $blockType,
-            'content' => $content,
-            'settings' => $settings,
-            'sort_order' => $sortOrder,
-            'is_active' => true,
-        ]);
+    public function createBlock(Page $page, string|BlockType $blockType, array $content, array $settings = [], ?int $sortOrder = null): ContentBlock
+    {
+        return $this->inner->createBlock($page, $blockType, $content, $settings, $sortOrder);
     }
 
-    /**
-     * Update a block
-     */
-    public function updateBlock(PageBlock $block, array $content, array $settings = []): bool
+    public function updateBlock(ContentBlock $block, array $content, array $settings = []): bool
     {
-        return $block->update([
-            'content' => $content,
-            'settings' => $settings,
-        ]);
+        return $this->inner->updateBlock($block, $content, $settings);
     }
 
-    /**
-     * Reorder blocks
-     */
     public function reorderBlocks(array $blockIds): void
     {
-        foreach ($blockIds as $index => $blockId) {
-            PageBlock::where('id', $blockId)->update([
-                'sort_order' => $index,
-            ]);
-        }
+        $this->inner->reorderBlocks($blockIds);
     }
 
-    /**
-     * Move block to new position
-     */
-    public function moveBlock(PageBlock $block, int $newPosition): bool
+    public function moveBlock(ContentBlock $block, int $newPosition): bool
     {
-        $page = $block->page;
-        $totalBlocks = $page->blocks()->count();
-
-        if ($newPosition < 0 || $newPosition >= $totalBlocks) {
-            return false;
-        }
-
-        // Get current position
-        $currentPosition = $block->sort_order;
-
-        if ($currentPosition === $newPosition) {
-            return true;
-        }
-
-        // Reorder blocks
-        $blocks = $page->blocks()
-            ->orderBy('sort_order')
-            ->get()
-            ->filter(fn ($b) => $b->id !== $block->id)
-            ->values();
-
-        $blocks->splice($newPosition, 0, [$block]);
-
-        foreach ($blocks as $index => $b) {
-            $b->update(['sort_order' => $index]);
-        }
-
-        return true;
+        return $this->inner->moveBlock($block, $newPosition);
     }
 
-    /**
-     * Duplicate a block
-     */
-    public function duplicateBlock(PageBlock $block, ?int $sortOrder = null): PageBlock
+    public function duplicateBlock(ContentBlock $block, ?int $sortOrder = null): ContentBlock
     {
-        if ($sortOrder === null) {
-            $sortOrder = $block->page->blocks()->max('sort_order') + 1 ?? 0;
-        }
-
-        return $block->page->blocks()->create([
-            'block_type' => $block->block_type,
-            'content' => $block->content,
-            'settings' => $block->settings,
-            'sort_order' => $sortOrder,
-            'is_active' => true,
-        ]);
+        return $this->inner->duplicateBlock($block, $sortOrder);
     }
 
-    /**
-     * Delete a block
-     */
-    public function deleteBlock(PageBlock $block): bool
+    public function deleteBlock(ContentBlock $block): bool
     {
-        return (bool) $block->delete();
+        return $this->inner->deleteBlock($block);
     }
 
-    /**
-     * Force delete a block
-     */
-    public function forceDeleteBlock(PageBlock $block): bool
+    public function forceDeleteBlock(ContentBlock $block): bool
     {
-        return (bool) $block->forceDelete();
+        return $this->inner->forceDeleteBlock($block);
     }
 
-    /**
-     * Restore a block
-     */
-    public function restoreBlock(PageBlock $block): bool
+    public function restoreBlock(ContentBlock $block): bool
     {
-        return (bool) $block->restore();
+        return $this->inner->restoreBlock($block);
     }
 
-    /**
-     * Toggle block active status
-     */
-    public function toggleBlockActive(PageBlock $block): bool
+    public function toggleBlockActive(ContentBlock $block): bool
     {
-        return $block->update([
-            'is_active' => !$block->is_active,
-        ]);
+        return $this->inner->toggleBlockActive($block);
     }
 
-    /**
-     * Get all blocks for a page ordered
-     */
     public function getPageBlocks(Page $page, bool $activeOnly = false): Collection
     {
-        $query = $page->blocks();
-
-        if ($activeOnly) {
-            $query->where('is_active', true);
-        }
-
-        return $query->orderBy('sort_order')->get();
+        return $this->inner->getBlocks($page, $activeOnly);
     }
 
-    /**
-     * Get default content for a block type
-     */
     public function getDefaultContent(BlockType $type): array
     {
-        return match ($type) {
-            BlockType::Hero => [
-                'title' => 'Enter your title here',
-                'subtitle' => 'Enter your subtitle here',
-                'image' => null,
-                'button_text' => 'Get Started',
-                'button_link' => '#',
-                'button_style' => 'primary',
-            ],
-            BlockType::RichText => [
-                'text' => '<p>Enter your rich text content here</p>',
-            ],
-            BlockType::Image => [
-                'image' => null,
-                'caption' => '',
-                'alt_text' => '',
-            ],
-            BlockType::Gallery => [
-                'images' => [],
-                'columns' => 3,
-                'gap' => 'md',
-            ],
-            BlockType::Video => [
-                'video_url' => '',
-                'caption' => '',
-                'thumbnail' => null,
-            ],
-            BlockType::CTA => [
-                'title' => 'Call To Action',
-                'description' => 'Enter your CTA description',
-                'button_text' => 'Learn More',
-                'button_link' => '#',
-                'button_style' => 'primary',
-                'image' => null,
-            ],
-            BlockType::FAQ => [
-                'items' => [
-                    ['question' => 'Sample question?', 'answer' => 'Sample answer.'],
-                ],
-            ],
-            BlockType::Accordion => [
-                'items' => [
-                    ['title' => 'Section 1', 'content' => 'Content for section 1'],
-                ],
-            ],
-            BlockType::Tabs => [
-                'items' => [
-                    ['title' => 'Tab 1', 'content' => 'Content for tab 1'],
-                ],
-            ],
-            BlockType::Team => [
-                'members' => [],
-                'columns' => 3,
-            ],
-            BlockType::Testimonials => [
-                'testimonials' => [],
-                'style' => 'card',
-            ],
-            BlockType::Statistics => [
-                'stats' => [],
-                'columns' => 3,
-            ],
-            BlockType::Timeline => [
-                'items' => [],
-                'direction' => 'vertical',
-            ],
-            BlockType::Button => [
-                'text' => 'Click Me',
-                'link' => '#',
-                'style' => 'primary',
-                'size' => 'medium',
-            ],
-            BlockType::Divider => [
-                'style' => 'solid',
-                'color' => '#000000',
-                'height' => 1,
-            ],
-            BlockType::Spacer => [
-                'height' => 40,
-            ],
-            BlockType::Map => [
-                'latitude' => '0',
-                'longitude' => '0',
-                'zoom' => 13,
-                'address' => '',
-                'title' => 'Location',
-            ],
-            BlockType::ContactForm => [
-                'fields' => [
-                    ['name' => 'name', 'label' => 'Name', 'type' => 'text', 'required' => true, 'placeholder' => '', 'options' => ''],
-                    ['name' => 'email', 'label' => 'Email', 'type' => 'email', 'required' => true, 'placeholder' => '', 'options' => ''],
-                    ['name' => 'message', 'label' => 'Message', 'type' => 'textarea', 'required' => true, 'placeholder' => '', 'options' => ''],
-                ],
-                'button_text' => 'Send Message',
-                'success_message' => 'Thank you for your message!',
-            ],
-        };
+        return $this->inner->getDefaultContent($type);
     }
 
-    /**
-     * Get default settings for a block type
-     */
     public function getDefaultSettings(BlockType $type): array
     {
-        return [
-            'background_color' => null,
-            'text_color' => null,
-            'padding' => 'medium',
-            'margin' => 'medium',
-            'text_alignment' => 'left',
-            'animation' => 'none',
-            'animation_delay' => 0,
-            'container_width' => 'full',
-            'custom_class' => '',
-        ];
+        return $this->inner->getDefaultSettings($type);
     }
 }

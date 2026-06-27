@@ -5,6 +5,7 @@ namespace App\Filament\Resources\PostBlocks\Pages;
 use App\Actions\ValidateBlockContentAction;
 use App\Enums\BlockType;
 use App\Filament\Resources\PostBlocks\PostBlockResource;
+use App\Models\Post;
 use App\Services\BlockContentConverter;
 use App\Services\BlockContentHydrator;
 use Filament\Actions\DeleteAction;
@@ -30,6 +31,8 @@ class EditPostBlock extends EditRecord
                 $hydratedData = BlockContentHydrator::hydrate($blockType, $this->record->content ?? []);
                 $this->form->fill([
                     ...$this->record->toArray(),
+                    // Expose blockable_id as post_id for the form Select field
+                    'post_id' => $this->record->blockable_id,
                     ...$hydratedData,
                 ]);
             }
@@ -38,13 +41,19 @@ class EditPostBlock extends EditRecord
 
     protected function mutateFormDataBeforeSave(array $data): array
     {
+        if (isset($data['post_id'])) {
+            $data['blockable_type'] = (new Post)->getMorphClass();
+            $data['blockable_id']   = $data['post_id'];
+            unset($data['post_id']);
+        }
+
         if (isset($data['block_type'])) {
             $blockType = $data['block_type'] instanceof BlockType
                 ? $data['block_type']
                 : BlockType::tryFrom((string) $data['block_type']);
 
             if ($blockType) {
-                $data['content'] = BlockContentConverter::convert($blockType, $data);
+                $data['content']  = BlockContentConverter::convert($blockType, $data);
                 $data['settings'] = $data['settings'] ?? [];
 
                 $errors = app(ValidateBlockContentAction::class)->execute($blockType, $data['content']);
@@ -56,7 +65,10 @@ class EditPostBlock extends EditRecord
             }
         }
 
-        $databaseColumns = ['id', 'post_id', 'block_type', 'content', 'settings', 'sort_order', 'is_active', 'created_at', 'updated_at', 'deleted_at'];
+        $databaseColumns = [
+            'id', 'blockable_type', 'blockable_id', 'block_type', 'content',
+            'settings', 'sort_order', 'is_active', 'created_at', 'updated_at', 'deleted_at',
+        ];
 
         return array_intersect_key($data, array_flip($databaseColumns));
     }
@@ -70,4 +82,3 @@ class EditPostBlock extends EditRecord
         ];
     }
 }
-

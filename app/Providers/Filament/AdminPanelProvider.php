@@ -59,6 +59,7 @@ class AdminPanelProvider extends PanelProvider
             ->discoverClusters(in: app_path('Filament/Clusters'), for: 'App\Filament\Clusters')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\Filament\Pages')
             ->navigationGroups([
+                'CMS',
                 'Settings',
                 'Payment Settings',
                 'Master Data',

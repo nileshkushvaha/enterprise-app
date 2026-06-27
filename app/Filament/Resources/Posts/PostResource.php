@@ -28,6 +28,8 @@ class PostResource extends Resource
 
     protected static ?string $pluralModelLabel = 'Posts';
 
+    protected static string|\UnitEnum|null $navigationGroup = 'CMS';
+
     protected static ?int $navigationSort = 3;
 
     public static function form(Schema $schema): Schema

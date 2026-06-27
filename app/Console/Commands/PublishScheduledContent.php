@@ -51,32 +51,40 @@ class PublishScheduledContent extends Command
             return 0;
         }
 
+        $published = 0;
+
         foreach ($pages as $page) {
             if ($dryRun) {
                 $this->components->twoColumnDetail(
                     "Page: {$page->title}",
                     "scheduled → published (publish_at: {$page->published_at})"
                 );
+                $published++;
                 continue;
             }
 
-            DB::transaction(function () use ($page): void {
-                $page->update([
-                    'status'     => \App\Enums\PageStatus::Published,
-                    'visibility' => \App\Enums\PageVisibility::Public,
-                ]);
+            try {
+                DB::transaction(function () use ($page): void {
+                    $page->update([
+                        'status'     => \App\Enums\PageStatus::Published,
+                        'visibility' => \App\Enums\PageVisibility::Public,
+                    ]);
 
-                activity()
-                    ->performedOn($page)
-                    ->event('auto_published')
-                    ->withProperties(['scheduled_at' => $page->published_at])
-                    ->log("Page auto-published by scheduler: {$page->title}");
-            });
+                    activity()
+                        ->performedOn($page)
+                        ->event('auto_published')
+                        ->withProperties(['scheduled_at' => $page->published_at])
+                        ->log("Page auto-published by scheduler: {$page->title}");
+                });
 
-            $this->components->twoColumnDetail("Page: {$page->title}", 'published ✓');
+                $this->components->twoColumnDetail("Page: {$page->title}", 'published ✓');
+                $published++;
+            } catch (\Throwable $e) {
+                $this->components->error("Failed to publish page [{$page->id}]: {$e->getMessage()}");
+            }
         }
 
-        return $pages->count();
+        return $published;
     }
 
     private function publishPosts(bool $dryRun): int
@@ -88,31 +96,39 @@ class PublishScheduledContent extends Command
             return 0;
         }
 
+        $published = 0;
+
         foreach ($posts as $post) {
             if ($dryRun) {
                 $this->components->twoColumnDetail(
                     "Post: {$post->title}",
                     "scheduled → published (publish_at: {$post->published_at})"
                 );
+                $published++;
                 continue;
             }
 
-            DB::transaction(function () use ($post): void {
-                $post->update([
-                    'status'     => \App\Enums\PageStatus::Published,
-                    'visibility' => \App\Enums\PageVisibility::Public,
-                ]);
+            try {
+                DB::transaction(function () use ($post): void {
+                    $post->update([
+                        'status'     => \App\Enums\PageStatus::Published,
+                        'visibility' => \App\Enums\PageVisibility::Public,
+                    ]);
 
-                activity()
-                    ->performedOn($post)
-                    ->event('auto_published')
-                    ->withProperties(['scheduled_at' => $post->published_at])
-                    ->log("Post auto-published by scheduler: {$post->title}");
-            });
+                    activity()
+                        ->performedOn($post)
+                        ->event('auto_published')
+                        ->withProperties(['scheduled_at' => $post->published_at])
+                        ->log("Post auto-published by scheduler: {$post->title}");
+                });
 
-            $this->components->twoColumnDetail("Post: {$post->title}", 'published ✓');
+                $this->components->twoColumnDetail("Post: {$post->title}", 'published ✓');
+                $published++;
+            } catch (\Throwable $e) {
+                $this->components->error("Failed to publish post [{$post->id}]: {$e->getMessage()}");
+            }
         }
 
-        return $posts->count();
+        return $published;
     }
 }
