@@ -1,4 +1,5 @@
 @extends('layouts.frontend')
+@section('bare', true)
 
 @section('title', 'Unlock Account — ' . config('app.name'))
 

@@ -1,4 +1,5 @@
 @extends('layouts.frontend')
+@section('bare', true)
 
 @section('title', 'Two-Factor Authentication — ' . config('app.name'))
 

@@ -1,4 +1,5 @@
 @extends('layouts.frontend')
+@section('bare', true)
 
 @section('title', 'Reset Password — ' . config('app.name'))
 

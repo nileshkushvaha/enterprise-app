@@ -1,4 +1,5 @@
 @extends('layouts.frontend')
+@section('bare', true)
 
 @section('title', 'Verify Your Email — ' . config('app.name'))
 

@@ -1,18 +1,25 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Providers\Filament;
 
-use Filament\Http\Middleware\Authenticate;
+use App\Filament\Pages\AdminChangePassword;
+use App\Filament\Pages\AdminProfile;
+use App\Filament\Pages\Dashboard;
+use App\Filament\Widgets\RecentLoginsWidget;
+use App\Filament\Widgets\RecentUsersWidget;
+use App\Filament\Widgets\StatsOverviewWidget;
 use BezhanSalleh\FilamentShield\FilamentShieldPlugin;
+use Filament\Actions\Action;
+use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
-use Filament\Pages\Dashboard;
 use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
-use Filament\Widgets\AccountWidget;
-use Filament\Widgets\FilamentInfoWidget;
+use Filament\Support\Icons\Heroicon;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
@@ -28,19 +35,43 @@ class AdminPanelProvider extends PanelProvider
             ->default()
             ->id('admin')
             ->path('admin')
+            ->viteTheme('resources/css/filament/admin/theme.css')
             ->login()
             ->colors([
                 'primary' => Color::Amber,
             ])
+            ->brandName('Sphere Education')
+            ->brandLogo(null)
+
+            // ── Profile page: adds "My Profile" to user menu automatically ──
+            ->profile(AdminProfile::class, isSimple: false)
+
+            // ── Extra user menu items ─────────────────────────────────────────
+            ->userMenuItems([
+                Action::make('change_password')
+                    ->label('Change Password')
+                    ->icon(Heroicon::OutlinedLockClosed)
+                    ->url(fn () => AdminChangePassword::getUrl())
+                    ->sort(1),
+            ])
+
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\Filament\Resources')
+            ->discoverClusters(in: app_path('Filament/Clusters'), for: 'App\Filament\Clusters')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\Filament\Pages')
+            ->navigationGroups([
+                'Settings',
+                'Payment Settings',
+                'Master Data',
+                'Access Control',
+            ])
             ->pages([
                 Dashboard::class,
             ])
             ->discoverWidgets(in: app_path('Filament/Widgets'), for: 'App\Filament\Widgets')
             ->widgets([
-                AccountWidget::class,
-                FilamentInfoWidget::class,
+                StatsOverviewWidget::class,
+                RecentUsersWidget::class,
+                RecentLoginsWidget::class,
             ])
             ->middleware([
                 EncryptCookies::class,

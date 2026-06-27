@@ -1,4 +1,5 @@
 @extends('layouts.frontend')
+@section('bare', true)
 
 @section('title', config('app.name') . ' — Find Your Perfect 1-on-1 Tutor')
 
@@ -77,7 +78,6 @@ $faqs = [
         mobileOpen: false,
         scrolled: false,
         activeCountry: '🇮🇳 India',
-        activeSubject: 'All',
         activeFaq: null,
     }"
     x-init="
@@ -135,10 +135,24 @@ $faqs = [
                 @endforeach
             </div>
 
-            {{-- Auth Buttons --}}
+            {{-- Auth Buttons — dynamic based on auth state --}}
             <div class="hidden md:flex items-center gap-3">
-                <a href="/login" class="text-gray-300 hover:text-white text-sm font-medium transition-colors px-3 py-2">Sign In</a>
-                <a href="/register" class="btn-amber px-5 py-2.5 rounded-xl text-white text-sm font-bold">Get Started →</a>
+                @auth
+                    <a href="{{ route('dashboard') }}" class="text-gray-300 hover:text-white text-sm font-medium transition-colors px-3 py-2 flex items-center gap-1.5">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+                        Dashboard
+                    </a>
+                    <form method="POST" action="{{ route('auth.logout') }}">
+                        @csrf
+                        <button type="submit" class="glass-md px-5 py-2.5 rounded-xl text-gray-300 hover:text-white text-sm font-semibold transition-colors flex items-center gap-1.5">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+                            Sign Out
+                        </button>
+                    </form>
+                @else
+                    <a href="{{ route('auth.login') }}" class="text-gray-300 hover:text-white text-sm font-medium transition-colors px-3 py-2">Sign In</a>
+                    <a href="{{ route('auth.register') }}" class="btn-amber px-5 py-2.5 rounded-xl text-white text-sm font-bold">Get Started →</a>
+                @endauth
             </div>
 
             {{-- Mobile Hamburger --}}
@@ -159,8 +173,19 @@ $faqs = [
                     <a href="{{ $href }}" class="text-gray-300 hover:text-white px-4 py-2.5 rounded-lg hover:bg-white/10 text-sm font-medium transition-colors">{{ $label }}</a>
                 @endforeach
                 <div class="border-t border-white/10 mt-2 pt-3 flex gap-3 px-4">
-                    <a href="/login" class="flex-1 text-center glass py-2.5 rounded-xl text-gray-300 text-sm font-semibold">Sign In</a>
-                    <a href="/register" class="flex-1 text-center btn-amber py-2.5 rounded-xl text-white text-sm font-bold">Get Started</a>
+                    @auth
+                        <a href="{{ route('dashboard') }}" class="flex-1 text-center glass py-2.5 rounded-xl text-gray-300 text-sm font-semibold flex items-center justify-center gap-1.5">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+                            Dashboard
+                        </a>
+                        <form method="POST" action="{{ route('auth.logout') }}" class="flex-1">
+                            @csrf
+                            <button type="submit" class="w-full text-center btn-amber py-2.5 rounded-xl text-white text-sm font-bold">Sign Out</button>
+                        </form>
+                    @else
+                        <a href="{{ route('auth.login') }}" class="flex-1 text-center glass py-2.5 rounded-xl text-gray-300 text-sm font-semibold">Sign In</a>
+                        <a href="{{ route('auth.register') }}" class="flex-1 text-center btn-amber py-2.5 rounded-xl text-white text-sm font-bold">Get Started</a>
+                    @endauth
                 </div>
             </div>
         </div>
@@ -182,20 +207,6 @@ $faqs = [
 
     {{-- Spacer for fixed navbar --}}
     <div class="h-16 flex-shrink-0"></div>
-
-    {{-- Country Tabs --}}
-    <div class="max-w-7xl mx-auto px-4 w-full pt-8 relative z-10">
-        <div class="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
-            <span class="text-gray-500 text-xs font-medium whitespace-nowrap mr-2">Study In:</span>
-            @foreach($countries as $country)
-                <button
-                    @click="activeCountry = '{{ $country }}'"
-                    :class="activeCountry === '{{ $country }}' ? 'bg-indigo-500/25 border-indigo-500/60 text-indigo-300 font-semibold' : 'text-gray-400 hover:text-gray-200'"
-                    class="glass px-4 py-1.5 rounded-full text-xs whitespace-nowrap transition-all duration-200"
-                >{{ $country }}</button>
-            @endforeach
-        </div>
-    </div>
 
     {{-- Main Hero Content --}}
     <div class="max-w-7xl mx-auto px-4 w-full flex-1 flex items-center py-12 relative z-10">
@@ -350,37 +361,48 @@ $faqs = [
         </div>
     </div>
 
-    {{-- Search Bar --}}
+    {{-- Country Selector Banner --}}
     <div class="max-w-4xl mx-auto px-4 w-full pb-16 relative z-10">
-        <div class="glass-md rounded-2xl p-2 shadow-2xl shadow-indigo-500/10">
-            <div class="flex items-center gap-2">
-                <div class="flex-1 flex items-center gap-3 px-4 py-1">
-                    <svg class="w-5 h-5 text-gray-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+        <div class="glass-md rounded-2xl p-5 shadow-2xl shadow-indigo-500/10">
+            <div class="flex items-center gap-3 mb-4">
+                <div class="w-8 h-8 rounded-xl bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center flex-shrink-0">
+                    <svg class="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
                     </svg>
-                    <input type="text" placeholder="Search for courses, tutors, subjects…" class="bg-transparent text-white placeholder-gray-400 w-full outline-none text-sm py-2">
                 </div>
-                <div class="hidden sm:flex items-center gap-1.5 px-4 border-l border-white/15">
-                    <svg class="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12"/>
-                    </svg>
-                    <select class="bg-transparent text-gray-400 text-sm outline-none cursor-pointer">
-                        @foreach($subjects as $sub)<option>{{ $sub }}</option>@endforeach
-                    </select>
+                <div>
+                    <p class="text-white text-sm font-semibold">Select Your Country</p>
+                    <p class="text-gray-400 text-xs">Find tutors and courses tailored to your curriculum</p>
                 </div>
-                <button class="btn-amber px-6 py-3 rounded-xl text-white font-bold text-sm flex-shrink-0">Search</button>
+                <div class="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex-shrink-0">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse inline-block"></span>
+                    <span class="text-emerald-400 text-xs font-medium" x-text="activeCountry || '🇮🇳 India'"></span>
+                </div>
             </div>
-        </div>
 
-        {{-- Subject Pills --}}
-        <div class="flex flex-wrap gap-2 mt-4 justify-center">
-            @foreach($subjects as $sub)
+            <div class="flex flex-wrap gap-2">
+                @foreach($countries as $country)
                 <button
-                    @click="activeSubject = '{{ $sub }}'"
-                    :class="activeSubject === '{{ $sub }}' ? 'bg-indigo-500/25 border-indigo-400/50 text-indigo-300' : 'text-gray-400 hover:text-gray-200'"
-                    class="glass px-4 py-1.5 rounded-full text-xs font-medium transition-all duration-200"
-                >{{ $sub }}</button>
-            @endforeach
+                    @click="activeCountry = '{{ $country }}'"
+                    :class="activeCountry === '{{ $country }}'
+                        ? 'bg-indigo-500/25 border-indigo-500/60 text-indigo-300 shadow-lg shadow-indigo-500/10'
+                        : 'text-gray-400 hover:text-gray-200 hover:border-white/25'"
+                    class="glass px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all duration-200 border border-white/10 flex items-center gap-1.5"
+                >
+                    {{ $country }}
+                    <span x-show="activeCountry === '{{ $country }}'" class="w-1.5 h-1.5 rounded-full bg-indigo-400 inline-block flex-shrink-0"></span>
+                </button>
+                @endforeach
+            </div>
+
+            <div class="mt-4 pt-4 border-t border-white/10 flex items-center justify-between">
+                <p class="text-gray-500 text-xs">
+                    Showing tutors available in <span class="text-white font-medium" x-text="activeCountry || '🇮🇳 India'"></span>
+                </p>
+                <a href="{{ route('auth.register') }}" class="btn-amber px-5 py-2 rounded-xl text-white font-bold text-sm">
+                    Find Tutors →
+                </a>
+            </div>
         </div>
     </div>
 </section>

@@ -29,7 +29,17 @@
 </head>
 <body class="bg-[#05080F] text-slate-200 antialiased">
 
-    @yield('content')
+    @hasSection('bare')
+        {{-- Auth / standalone pages — no shared navbar --}}
+        @yield('content')
+    @else
+        {{-- All other pages get the shared navbar --}}
+        <x-frontend.navbar />
+        @hasSection('breadcrumbs')
+            @yield('breadcrumbs')
+        @endif
+        @yield('content')
+    @endif
 
     @stack('scripts')
 </body>

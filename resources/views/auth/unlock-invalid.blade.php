@@ -1,4 +1,5 @@
 @extends('layouts.frontend')
+@section('bare', true)
 
 @section('title', 'Invalid Unlock Link — ' . config('app.name'))
 
