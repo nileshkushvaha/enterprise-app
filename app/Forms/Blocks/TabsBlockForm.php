@@ -20,13 +20,13 @@ class TabsBlockForm
                     Repeater::make('items')
                         ->label('Tabs')
                         ->schema([
-                            TextInput::make('tab_title')
+                            TextInput::make('title')
                                 ->label('Tab Title')
                                 ->required()
                                 ->maxLength(255)
                                 ->columnSpanFull(),
 
-                            Textarea::make('tab_content')
+                            Textarea::make('content')
                                 ->label('Tab Content')
                                 ->required()
                                 ->rows(4)

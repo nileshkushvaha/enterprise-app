@@ -3,7 +3,6 @@
 namespace App\Services;
 
 use App\Enums\BlockType;
-use App\Models\PageBlock;
 use Illuminate\View\View;
 
 /**
@@ -22,9 +21,15 @@ class BlockRenderer
     /**
      * Render a single block to HTML
      */
-    public function render(PageBlock $block): string
+    public function render(object $block): string
     {
-        return $this->renderBlock($block->block_type, $this->getBlockData($block))->render();
+        $blockType = $this->normalizeBlockType($block->block_type ?? null);
+
+        if (! $blockType) {
+            return '';
+        }
+
+        return $this->renderBlock($blockType, $this->getBlockData($block))->render();
     }
 
     /**
@@ -57,13 +62,26 @@ class BlockRenderer
     /**
      * Get hydrated block data for rendering
      */
-    public function getBlockData(PageBlock $block): array
+    public function getBlockData(object $block): array
     {
-        $content = is_array($block->content)
-            ? $block->content
-            : json_decode($block->content, true) ?? [];
+        $content = [];
+        if (isset($block->content)) {
+            $content = is_array($block->content)
+                ? $block->content
+                : (json_decode((string) $block->content, true) ?? []);
+        }
 
-        return $this->hydrator::hydrate($block->block_type, $content);
+        $blockType = $this->normalizeBlockType($block->block_type ?? null);
+        if (! $blockType) {
+            return [];
+        }
+
+        return [
+            ...$this->hydrator::hydrate($blockType, $content),
+            'block_id' => $block->id ?? null,
+            'page_id' => $block->page_id ?? null,
+            'post_id' => $block->post_id ?? null,
+        ];
     }
 
     /**
@@ -105,5 +123,18 @@ class BlockRenderer
             BlockType::Map => 'map',
             BlockType::ContactForm => 'contact-form',
         };
+    }
+
+    private function normalizeBlockType(mixed $value): ?BlockType
+    {
+        if ($value instanceof BlockType) {
+            return $value;
+        }
+
+        if (is_string($value)) {
+            return BlockType::tryFrom($value);
+        }
+
+        return null;
     }
 }

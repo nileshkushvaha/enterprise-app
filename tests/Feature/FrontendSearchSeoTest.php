@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Enums\PageStatus;
 use App\Enums\PageVisibility;
 use App\Models\Page;
+use App\Models\Post;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -33,6 +34,27 @@ class FrontendSearchSeoTest extends TestCase
         $response->assertOk();
         $response->assertSee('About Company');
         $response->assertDontSee('About Internal');
+    }
+
+    public function test_search_returns_published_posts_too(): void
+    {
+        Page::factory()->create([
+            'title' => 'About Company',
+            'slug' => 'about-company',
+            'status' => PageStatus::Published,
+            'visibility' => PageVisibility::Public,
+        ]);
+
+        Post::factory()->published()->create([
+            'title' => 'About Blog',
+            'slug' => 'about-blog',
+        ]);
+
+        $response = $this->get(route('search.index', ['q' => 'About']));
+
+        $response->assertOk();
+        $response->assertSee('About Company');
+        $response->assertSee('About Blog');
     }
 
     public function test_search_is_not_indexed_by_robots(): void
@@ -97,6 +119,21 @@ class FrontendSearchSeoTest extends TestCase
 
         $response->assertOk();
         $response->assertSee('Pricing Plans');
+    }
+
+    public function test_search_cache_is_invalidated_when_new_post_is_created(): void
+    {
+        $this->get(route('search.index', ['q' => 'Guide']))->assertOk();
+
+        Post::factory()->published()->create([
+            'title' => 'Guide to Architecture',
+            'slug' => 'guide-to-architecture',
+        ]);
+
+        $response = $this->get(route('search.index', ['q' => 'Guide']));
+
+        $response->assertOk();
+        $response->assertSee('Guide to Architecture');
     }
 
     public function test_sitemap_cache_is_invalidated_when_page_is_updated(): void

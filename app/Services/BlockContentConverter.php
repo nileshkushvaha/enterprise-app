@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Enums\BlockType;
+use Illuminate\Support\Str;
 
 /**
  * Converts form data to JSON for storage in database.
@@ -113,8 +114,19 @@ class BlockContentConverter
     private static function tabsToJson(array $data): array
     {
         $items = $data['items'] ?? [];
+
+        $normalizedItems = array_values(array_filter(array_map(
+            static function (array $item): array {
+                return [
+                    'title' => $item['title'] ?? $item['tab_title'] ?? '',
+                    'content' => $item['content'] ?? $item['tab_content'] ?? '',
+                ];
+            },
+            $items
+        ), static fn (array $item): bool => !empty($item['title'])));
+
         return [
-            'items' => array_values(array_filter($items, fn ($item) => !empty($item['tab_title'] ?? null))),
+            'items' => $normalizedItems,
         ];
     }
 
@@ -196,10 +208,29 @@ class BlockContentConverter
     private static function contactFormToJson(array $data): array
     {
         $fields = $data['fields'] ?? [];
+
+        $normalizedFields = array_values(array_filter(array_map(
+            static function (array $field, int $index): array {
+                $label = trim((string) ($field['label'] ?? ''));
+                $name = $field['name'] ?? Str::slug($label !== '' ? $label : "field_{$index}", '_');
+
+                return [
+                    'name' => $name,
+                    'label' => $label,
+                    'type' => $field['type'] ?? 'text',
+                    'placeholder' => $field['placeholder'] ?? '',
+                    'required' => (bool) ($field['required'] ?? false),
+                    'options' => $field['options'] ?? '',
+                ];
+            },
+            $fields,
+            array_keys($fields)
+        ), static fn (array $field): bool => $field['label'] !== ''));
+
         return [
             'title' => $data['title'] ?? '',
             'description' => $data['description'] ?? '',
-            'fields' => array_values(array_filter($fields, fn ($field) => !empty($field['label'] ?? null))),
+            'fields' => $normalizedFields,
             'button_text' => $data['button_text'] ?? 'Send Message',
             'success_message' => $data['success_message'] ?? 'Thank you for your message!',
         ];

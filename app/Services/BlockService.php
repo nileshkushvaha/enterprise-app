@@ -177,14 +177,12 @@ class BlockService
             BlockType::Gallery => [
                 'images' => [],
                 'columns' => 3,
-                'spacing' => 'medium',
+                'gap' => 'md',
             ],
             BlockType::Video => [
-                'url' => '',
-                'title' => '',
-                'description' => '',
-                'autoplay' => false,
-                'loop' => false,
+                'video_url' => '',
+                'caption' => '',
+                'thumbnail' => null,
             ],
             BlockType::CTA => [
                 'title' => 'Call To Action',
@@ -205,8 +203,8 @@ class BlockService
                 ],
             ],
             BlockType::Tabs => [
-                'tabs' => [
-                    ['label' => 'Tab 1', 'content' => 'Content for tab 1'],
+                'items' => [
+                    ['title' => 'Tab 1', 'content' => 'Content for tab 1'],
                 ],
             ],
             BlockType::Team => [
@@ -218,7 +216,7 @@ class BlockService
                 'style' => 'card',
             ],
             BlockType::Statistics => [
-                'items' => [],
+                'stats' => [],
                 'columns' => 3,
             ],
             BlockType::Timeline => [
@@ -240,18 +238,19 @@ class BlockService
                 'height' => 40,
             ],
             BlockType::Map => [
-                'latitude' => 0,
-                'longitude' => 0,
+                'latitude' => '0',
+                'longitude' => '0',
                 'zoom' => 13,
-                'marker_title' => 'Location',
+                'address' => '',
+                'title' => 'Location',
             ],
             BlockType::ContactForm => [
-                'form_fields' => [
-                    ['name' => 'name', 'label' => 'Name', 'type' => 'text', 'required' => true],
-                    ['name' => 'email', 'label' => 'Email', 'type' => 'email', 'required' => true],
-                    ['name' => 'message', 'label' => 'Message', 'type' => 'textarea', 'required' => true],
+                'fields' => [
+                    ['name' => 'name', 'label' => 'Name', 'type' => 'text', 'required' => true, 'placeholder' => '', 'options' => ''],
+                    ['name' => 'email', 'label' => 'Email', 'type' => 'email', 'required' => true, 'placeholder' => '', 'options' => ''],
+                    ['name' => 'message', 'label' => 'Message', 'type' => 'textarea', 'required' => true, 'placeholder' => '', 'options' => ''],
                 ],
-                'submit_button' => 'Send Message',
+                'button_text' => 'Send Message',
                 'success_message' => 'Thank you for your message!',
             ],
         };

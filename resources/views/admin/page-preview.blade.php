@@ -93,7 +93,7 @@
     <div class="preview-container">
         <!-- Preview Banner -->
         <div class="preview-banner">
-            <h2>🔍 Page Preview</h2>
+            <h2>🔍 {{ isset($post) && $post ? 'Post' : 'Page' }} Preview</h2>
             <span class="badge">
                 @if($page->status->value === 'draft')
                     📝 Draft
@@ -114,7 +114,7 @@
         
         <!-- Preview Info -->
         <div class="preview-info">
-            <h3 style="margin-top: 0; margin-bottom: 12px; font-size: 14px;">Page Information</h3>
+            <h3 style="margin-top: 0; margin-bottom: 12px; font-size: 14px;">{{ isset($post) && $post ? 'Post' : 'Page' }} Information</h3>
             
             <div class="info-row">
                 <div class="info-label">Title:</div>
@@ -165,10 +165,12 @@
                 </div>
             @endif
             
-            <div class="info-row">
-                <div class="info-label">Layout:</div>
-                <div>{{ ucfirst($page->layout) }}</div>
-            </div>
+            @if(isset($page->layout))
+                <div class="info-row">
+                    <div class="info-label">Layout:</div>
+                    <div>{{ ucfirst($page->layout) }}</div>
+                </div>
+            @endif
             
             <div class="info-row">
                 <div class="info-label">Visibility:</div>

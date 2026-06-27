@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Page;
+use App\Models\Post;
 use App\Services\CmsCacheService;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Cache;
@@ -21,7 +22,13 @@ class SeoController extends Controller
                     ->latest('updated_at')
                     ->get();
 
-                return view('seo.sitemap', ['pages' => $pages])->render();
+                $posts = Post::query()
+                    ->published()
+                    ->select(['slug', 'updated_at'])
+                    ->latest('updated_at')
+                    ->get();
+
+                return view('seo.sitemap', ['pages' => $pages, 'posts' => $posts])->render();
             }
         );
 

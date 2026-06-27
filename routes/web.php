@@ -24,11 +24,14 @@ Route::get('/search', [App\Http\Controllers\SearchController::class, 'index'])->
 Route::get('/sitemap.xml', [App\Http\Controllers\SeoController::class, 'sitemap'])->name('seo.sitemap');
 Route::get('/robots.txt', [App\Http\Controllers\SeoController::class, 'robots'])->name('seo.robots');
 
-// ── Contact Form Submission ─────────────────────────────────────────
-Route::post('/contact/submit', [App\Http\Controllers\ContactFormController::class, 'submit'])->name('contact.submit');
+// ── Blog ─────────────────────────────────────────────────────────────
+Route::get('/blog', [App\Http\Controllers\PostController::class, 'index'])->name('blog.index');
+Route::get('/blog/{slug}', [App\Http\Controllers\PostController::class, 'show'])->name('blog.show');
 
-// ── Public Pages (CMS) ──────────────────────────────────────────────
-Route::get('/{slug}', [App\Http\Controllers\PageController::class, 'show'])->name('page.show');
+// ── Contact Form Submission ─────────────────────────────────────────
+Route::post('/contact/submit', [App\Http\Controllers\ContactFormController::class, 'submit'])
+    ->middleware('throttle:10,1')
+    ->name('contact.submit');
 
 // ── Login alias — required by Laravel internals (Authenticate middleware, password broker) ──
 Route::get('/login', [LoginController::class, 'showForm'])->name('login');
@@ -165,4 +168,9 @@ Route::prefix('admin')->name('admin.')->middleware([
 ])->group(function (): void {
     // Page Preview
     Route::get('/pages/{page}/preview', App\Http\Controllers\Admin\PagePreviewController::class)->name('pages.preview');
+    // Post Preview
+    Route::get('/posts/{post}/preview', App\Http\Controllers\Admin\PostPreviewController::class)->name('posts.preview');
 });
+
+// ── Public Pages (CMS) Catch-all (must stay last) ───────────────────
+Route::get('/{slug}', [App\Http\Controllers\PageController::class, 'show'])->name('page.show');

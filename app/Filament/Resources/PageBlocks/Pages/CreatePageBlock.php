@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\PageBlocks\Pages;
 
 use App\Enums\BlockType;
+use App\Actions\ValidateBlockContentAction;
 use App\Filament\Resources\PageBlocks\PageBlockResource;
 use App\Services\BlockContentConverter;
 use Filament\Resources\Pages\CreateRecord;
@@ -25,10 +26,18 @@ class CreatePageBlock extends CreateRecord
 
         // Convert form data to JSON
         if (isset($data['block_type'])) {
-            $blockType = BlockType::tryFrom($data['block_type']);
+            $blockTypeValue = $data['block_type'] instanceof BlockType ? $data['block_type']->value : $data['block_type'];
+            $blockType = BlockType::tryFrom($blockTypeValue);
             if ($blockType) {
                 $data['content'] = BlockContentConverter::convert($blockType, $data);
                 $data['settings'] = $data['settings'] ?? [];
+
+                $errors = app(ValidateBlockContentAction::class)->execute($blockType, $data['content']);
+                if ($errors !== []) {
+                    throw ValidationException::withMessages([
+                        'block_type' => implode(' ', $errors),
+                    ]);
+                }
             }
         }
 

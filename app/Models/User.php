@@ -99,6 +99,11 @@ class User extends Authenticatable implements FilamentUser, MustVerifyEmail
         return $this->hasMany(LoginHistory::class)->latest('logged_in_at');
     }
 
+    public function authoredPosts(): HasMany
+    {
+        return $this->hasMany(Post::class, 'author_id');
+    }
+
     // ── Accessors ────────────────────────────────────────────────────
 
     public function getFullNameAttribute(): string
@@ -256,4 +261,3 @@ class User extends Authenticatable implements FilamentUser, MustVerifyEmail
             ->useLogName('user');
     }
 }
-

@@ -23,6 +23,10 @@ class AppServiceProvider extends ServiceProvider
     {
         \App\Models\Page::observe(\App\Observers\PageObserver::class);
         \App\Models\PageBlock::observe(\App\Observers\PageBlockObserver::class);
+        \App\Models\Post::observe(\App\Observers\PostObserver::class);
+        \App\Models\PostBlock::observe(\App\Observers\PostBlockObserver::class);
+        \App\Models\PostCategory::observe(\App\Observers\PostCategoryObserver::class);
+        \App\Models\Tag::observe(\App\Observers\TagObserver::class);
     }
 
     private function registerPolicies(): void

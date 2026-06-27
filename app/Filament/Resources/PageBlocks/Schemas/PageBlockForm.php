@@ -2,7 +2,7 @@
 
 namespace App\Filament\Resources\PageBlocks\Schemas;
 
-use Filament\Forms\Components\Hidden;
+use Filament\Forms\Get;
 use Filament\Schemas\Components\Section;
 use Filament\Forms\Components\Select;
 use Filament\Schemas\Components\Tabs;
@@ -47,6 +47,10 @@ class PageBlockForm
                                             ->required()
                                             ->columnSpanFull(),
                                     ]),
+                                Section::make('Block Content')
+                                    ->collapsible(false)
+                                    ->schema(fn (Get $get): array => self::getDynamicBlockFields($get('block_type')))
+                                    ->visible(fn (Get $get): bool => filled(self::normalizeBlockType($get('block_type')))),
                             ]),
 
                         Tabs\Tab::make('Settings')
@@ -76,9 +80,36 @@ class PageBlockForm
                             ]),
                     ])
                     ->columnSpanFull(),
-
-                Hidden::make('content'),
-                Hidden::make('settings'),
             ]);
+    }
+
+    private static function getDynamicBlockFields(mixed $blockType): array
+    {
+        $normalized = self::normalizeBlockType($blockType);
+
+        if (! $normalized) {
+            return [];
+        }
+
+        $blockTypeEnum = BlockType::tryFrom($normalized);
+
+        if (! $blockTypeEnum) {
+            return [];
+        }
+
+        return BlockFormSchemaFactory::make($blockTypeEnum);
+    }
+
+    private static function normalizeBlockType(mixed $value): ?string
+    {
+        if ($value instanceof BlockType) {
+            return $value->value;
+        }
+
+        if (is_string($value) && $value !== '') {
+            return $value;
+        }
+
+        return null;
     }
 }

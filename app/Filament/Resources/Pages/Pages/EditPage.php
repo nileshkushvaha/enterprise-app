@@ -26,6 +26,12 @@ class EditPage extends EditRecord
             $this->record->clearMediaCollection('featured-image');
             $this->record->addMedia($featuredImage)
                 ->toMediaCollection('featured-image');
+
+            activity()
+                ->performedOn($this->record)
+                ->causedBy(auth()->user())
+                ->event('media_updated')
+                ->log('Page featured image updated');
         }
     }
 
@@ -38,4 +44,3 @@ class EditPage extends EditRecord
         ];
     }
 }
-

@@ -67,11 +67,11 @@ class PageResource extends Resource
 
     public static function canViewAny(): bool
     {
-        return auth()->user()?->can('pages.list') ?? false;
+        return auth()->user()?->can('viewAny', Page::class) ?? false;
     }
 
     public static function canCreate(): bool
     {
-        return auth()->user()?->can('pages.create') ?? false;
+        return auth()->user()?->can('create', Page::class) ?? false;
     }
 }

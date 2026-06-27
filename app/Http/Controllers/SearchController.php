@@ -2,46 +2,50 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Page;
 use App\Services\CmsCacheService;
+use App\Services\PageService;
+use App\Services\PostService;
 use Illuminate\Http\Request;
-use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\View\View;
 
 class SearchController extends Controller
 {
-    public function index(Request $request, CmsCacheService $cacheService): View
+    public function index(
+        Request $request,
+        CmsCacheService $cacheService,
+        PageService $pageService,
+        PostService $postService
+    ): View
     {
         $validated = $request->validate([
             'q' => ['nullable', 'string', 'max:120'],
         ]);
 
         $query = trim((string) ($validated['q'] ?? ''));
-        $pageNumber = max(1, (int) $request->integer('page', 1));
 
-        /** @var LengthAwarePaginator $results */
         $results = Cache::remember(
-            $cacheService->searchKey($query, $pageNumber),
+            $cacheService->searchKey($query, 1),
             now()->addSeconds(max(1, (int) config('cms.cache.search_ttl', 300))),
-            function () use ($query): LengthAwarePaginator {
-                return Page::query()
-                    ->published()
-                    ->when($query !== '', fn ($builder) => $builder->search($query))
-                    ->latest('updated_at')
-                    ->paginate(10)
-                    ->withQueryString();
+            function () use ($query, $pageService, $postService): array {
+                return [
+                    'pages' => $pageService->searchPublishedPages($query),
+                    'posts' => $postService->searchPublishedPosts($query),
+                ];
             }
         );
 
+        $pageCount = $results['pages']->count();
+        $postCount = $results['posts']->count();
+
         $seo = [
             'title' => $query === '' ? 'Search' : "Search results for \"{$query}\"",
-            'description' => 'Search published pages.',
-            'keywords' => 'search,pages',
+            'description' => 'Search published pages and posts.',
+            'keywords' => 'search,pages,posts',
             'robots' => 'noindex, follow',
             'canonical' => route('search.index', array_filter(['q' => $query])),
             'og_title' => $query === '' ? 'Search' : "Search results for \"{$query}\"",
-            'og_description' => 'Search published pages.',
+            'og_description' => 'Search published pages and posts.',
             'og_url' => route('search.index', array_filter(['q' => $query])),
             'og_image' => null,
             'og_type' => 'website',
@@ -50,6 +54,7 @@ class SearchController extends Controller
         return view('pages.search', [
             'query' => $query,
             'results' => $results,
+            'totalResults' => $pageCount + $postCount,
             'seo' => $seo,
         ]);
     }

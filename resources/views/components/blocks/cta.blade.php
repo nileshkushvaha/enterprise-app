@@ -1,7 +1,7 @@
 <!-- Call to Action Block -->
 <section class="cta-block py-16" style="background-color: {{ $background_color ?? '#3b82f6' }}">
     <div class="container">
-        <div class="max-w-2xl mx-auto text-center text-white">
+        <div class="max-w-2xl mx-auto text-center" style="color: {{ $text_color ?? '#ffffff' }}">
             @if($title ?? false)
                 <h2 class="text-3xl md:text-4xl font-bold mb-4">
                     {{ $title }}
@@ -15,7 +15,7 @@
             @if(($button_text ?? false) && ($button_link ?? false))
                 <a href="{{ $button_link }}" 
                    class="inline-block px-8 py-3 rounded-lg font-semibold"
-                   style="background-color: {{ $button_color ?? '#ffffff' }}; color: {{ $button_text_color ?? '#000000' }}">
+                   style="background-color: #ffffff; color: #000000;">
                     {{ $button_text }}
                 </a>
             @endif

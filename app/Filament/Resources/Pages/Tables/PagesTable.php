@@ -28,7 +28,7 @@ class PagesTable
     {
         return $table
             ->columns([
-                ImageColumn::make('featured_image')
+                ImageColumn::make('featured_image_url')
                     ->label('Featured Image')
                     ->circular()
                     ->default('/images/placeholder.png'),
@@ -86,11 +86,13 @@ class PagesTable
                 Action::make('preview')
                     ->label('Preview')
                     ->icon('heroicon-m-eye')
+                    ->authorize(fn ($record) => auth()->user()?->can('view', $record) ?? false)
                     ->url(fn ($record) => route('admin.pages.preview', $record))
                     ->openUrlInNewTab(),
                 Action::make('publish')
                     ->label('Publish')
                     ->icon('heroicon-m-arrow-up-circle')
+                    ->authorize(fn ($record) => auth()->user()?->can('publish', $record) ?? false)
                     ->visible(fn ($record) => $record->status !== PageStatus::Published)
                     ->action(function ($record) {
                         app(PageService::class)->publishPage($record);
@@ -102,6 +104,7 @@ class PagesTable
                 Action::make('unpublish')
                     ->label('Unpublish')
                     ->icon('heroicon-m-arrow-down-circle')
+                    ->authorize(fn ($record) => auth()->user()?->can('publish', $record) ?? false)
                     ->visible(fn ($record) => $record->status === PageStatus::Published)
                     ->action(function ($record) {
                         app(PageService::class)->unpublishPage($record);
@@ -113,6 +116,7 @@ class PagesTable
                 Action::make('duplicate')
                     ->label('Duplicate')
                     ->icon('heroicon-m-document-duplicate')
+                    ->authorize(fn () => auth()->user()?->can('create', \App\Models\Page::class) ?? false)
                     ->action(function ($record) {
                         $newPage = app(PageService::class)->duplicatePage($record);
                         Notification::make()
@@ -124,6 +128,7 @@ class PagesTable
                 Action::make('archive')
                     ->label('Archive')
                     ->icon('heroicon-m-archive-box')
+                    ->authorize(fn ($record) => auth()->user()?->can('publish', $record) ?? false)
                     ->visible(fn ($record) => $record->status !== PageStatus::Archived)
                     ->action(function ($record) {
                         app(PageService::class)->archivePage($record);
@@ -146,4 +151,3 @@ class PagesTable
             ->defaultSort('created_at', 'desc');
     }
 }
-

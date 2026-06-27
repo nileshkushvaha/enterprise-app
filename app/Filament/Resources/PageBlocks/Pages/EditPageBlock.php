@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\PageBlocks\Pages;
 
 use App\Enums\BlockType;
+use App\Actions\ValidateBlockContentAction;
 use App\Filament\Resources\PageBlocks\PageBlockResource;
 use App\Services\BlockContentConverter;
 use App\Services\BlockContentHydrator;
@@ -10,6 +11,7 @@ use Filament\Actions\DeleteAction;
 use Filament\Actions\ForceDeleteAction;
 use Filament\Actions\RestoreAction;
 use Filament\Resources\Pages\EditRecord;
+use Illuminate\Validation\ValidationException;
 
 class EditPageBlock extends EditRecord
 {
@@ -46,6 +48,13 @@ class EditPageBlock extends EditRecord
             if ($blockType) {
                 $data['content'] = BlockContentConverter::convert($blockType, $data);
                 $data['settings'] = $data['settings'] ?? [];
+
+                $errors = app(ValidateBlockContentAction::class)->execute($blockType, $data['content']);
+                if ($errors !== []) {
+                    throw ValidationException::withMessages([
+                        'block_type' => implode(' ', $errors),
+                    ]);
+                }
             }
         }
 

@@ -7,13 +7,16 @@ use Illuminate\Support\Str;
 
 class GeneratePageSlugAction
 {
-    public function execute(string $title, ?string $excludeId = null): string
+    /**
+     * @param  class-string<\Illuminate\Database\Eloquent\Model>  $modelClass
+     */
+    public function execute(string $title, ?string $excludeId = null, string $modelClass = Page::class): string
     {
         $slug = Str::slug($title);
         $originalSlug = $slug;
         $counter = 1;
 
-        while ($this->slugExists($slug, $excludeId)) {
+        while ($this->slugExists($slug, $excludeId, $modelClass)) {
             $slug = "{$originalSlug}-{$counter}";
             $counter++;
         }
@@ -21,9 +24,12 @@ class GeneratePageSlugAction
         return $slug;
     }
 
-    private function slugExists(string $slug, ?string $excludeId = null): bool
+    /**
+     * @param  class-string<\Illuminate\Database\Eloquent\Model>  $modelClass
+     */
+    private function slugExists(string $slug, ?string $excludeId = null, string $modelClass = Page::class): bool
     {
-        $query = Page::where('slug', $slug);
+        $query = $modelClass::query()->where('slug', $slug);
 
         if ($excludeId) {
             $query->where('id', '!=', $excludeId);

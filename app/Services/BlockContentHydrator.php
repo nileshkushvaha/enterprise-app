@@ -110,8 +110,22 @@ class BlockContentHydrator
 
     private static function hydrateTabs(array $content): array
     {
+        $items = array_map(static function (array $item): array {
+            $title = $item['title'] ?? $item['tab_title'] ?? $item['label'] ?? '';
+            $tabContent = $item['content'] ?? $item['tab_content'] ?? '';
+
+            return [
+                'title' => $title,
+                'label' => $title,
+                'content' => $tabContent,
+                // backward compatibility for older forms
+                'tab_title' => $title,
+                'tab_content' => $tabContent,
+            ];
+        }, $content['items'] ?? []);
+
         return [
-            'items' => $content['items'] ?? [],
+            'items' => $items,
         ];
     }
 
@@ -188,10 +202,23 @@ class BlockContentHydrator
 
     private static function hydrateContactForm(array $content): array
     {
+        $fields = array_map(static function (array $field, int $index): array {
+            $name = $field['name'] ?? "field_{$index}";
+
+            return [
+                'name' => $name,
+                'label' => $field['label'] ?? '',
+                'type' => $field['type'] ?? 'text',
+                'placeholder' => $field['placeholder'] ?? '',
+                'required' => (bool) ($field['required'] ?? false),
+                'options' => $field['options'] ?? '',
+            ];
+        }, $content['fields'] ?? [], array_keys($content['fields'] ?? []));
+
         return [
             'title' => $content['title'] ?? '',
             'description' => $content['description'] ?? '',
-            'fields' => $content['fields'] ?? [],
+            'fields' => $fields,
             'button_text' => $content['button_text'] ?? 'Send Message',
             'success_message' => $content['success_message'] ?? 'Thank you for your message!',
         ];

@@ -4,7 +4,7 @@ namespace App\Filament\Resources\Pages\Schemas;
 
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\FileUpload;
-use Filament\Forms\Components\Repeater;
+use Filament\Forms\Components\Placeholder;
 use Filament\Schemas\Components\Section;
 use Filament\Forms\Components\Select;
 use Filament\Schemas\Components\Tabs;
@@ -57,7 +57,8 @@ class PageForm
                                     ->schema([
                                         FileUpload::make('featured_image')
                                             ->image()
-                                            
+                                            ->acceptedFileTypes(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
+                                            ->maxSize(5120)
                                             ->helperText('Upload a featured image (max 5MB)')
                                     ]),
 
@@ -107,47 +108,11 @@ class PageForm
                             ->schema([
                                 Section::make('Page Blocks')
                                     ->collapsible(false)
-                                    ->description('Manage the content blocks for this page')
+                                    ->description('Blocks are managed from the dedicated Blocks resource to keep schema contracts consistent.')
                                     ->schema([
-                                        Repeater::make('blocks')
-                                            ->relationship('blocks')
-                                            ->schema([
-                                               Select::make('block_type')
-                                                   ->label('Block Type')
-                                                   ->options(\App\Enums\BlockType::class)
-                                                   
-                                                   ->required()
-                                                   ->columnSpan(1),
-
-                                               TextInput::make('sort_order')
-                                                   ->label('Order')
-                                                   ->numeric()
-                                                   ->default(0)
-                                                   ->columnSpan(1),
-
-                                               Toggle::make('is_active')
-                                                   ->label('Active')
-                                                   ->default(true)
-                                                   ->columnSpan(1),
-
-                                               Textarea::make('content')
-                                                   ->label('Block Content (JSON)')
-                                                   ->required()
-                                                   ->rows(4)
-                                                   ->columnSpanFull(),
-
-                                               Textarea::make('settings')
-                                                   ->label('Block Settings (JSON)')
-                                                   ->rows(3)
-                                                   ->columnSpanFull(),
-                                            ])
-                                            ->columns(3)
-                                            ->reorderable(true)
-                                            ->collapsible()
-                                            ->itemLabel(fn (array $state): ?string => $state['block_type'] ? \App\Enums\BlockType::tryFrom($state['block_type'])?->label() : null)
-                                            ->addAction(function ($action) {
-                                               return $action->label('Add Block');
-                                            }),
+                                        Placeholder::make('blocks_notice')
+                                            ->label('Block Management')
+                                            ->content('Use Admin > Blocks to create and edit typed blocks. This keeps Form → Converter → Hydrator → Renderer contracts synchronized.'),
                                     ]),
                             ]),
                         
@@ -186,4 +151,3 @@ class PageForm
             ]);
     }
 }
-

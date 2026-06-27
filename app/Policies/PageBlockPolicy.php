@@ -4,7 +4,6 @@ namespace App\Policies;
 
 use App\Models\PageBlock;
 use App\Models\User;
-use Illuminate\Auth\Access\Response;
 
 class PageBlockPolicy
 {
@@ -13,7 +12,7 @@ class PageBlockPolicy
      */
     public function viewAny(User $user): bool
     {
-        return false;
+        return $user->can('pages.view');
     }
 
     /**
@@ -21,7 +20,7 @@ class PageBlockPolicy
      */
     public function view(User $user, PageBlock $pageBlock): bool
     {
-        return false;
+        return $user->can('pages.view');
     }
 
     /**
@@ -29,7 +28,7 @@ class PageBlockPolicy
      */
     public function create(User $user): bool
     {
-        return false;
+        return $user->can('pages.create');
     }
 
     /**
@@ -37,7 +36,7 @@ class PageBlockPolicy
      */
     public function update(User $user, PageBlock $pageBlock): bool
     {
-        return false;
+        return $user->can('pages.update');
     }
 
     /**
@@ -45,7 +44,7 @@ class PageBlockPolicy
      */
     public function delete(User $user, PageBlock $pageBlock): bool
     {
-        return false;
+        return $user->can('pages.delete');
     }
 
     /**
@@ -53,7 +52,7 @@ class PageBlockPolicy
      */
     public function restore(User $user, PageBlock $pageBlock): bool
     {
-        return false;
+        return $user->can('pages.delete');
     }
 
     /**
@@ -61,6 +60,6 @@ class PageBlockPolicy
      */
     public function forceDelete(User $user, PageBlock $pageBlock): bool
     {
-        return false;
+        return $user->can('pages.delete');
     }
 }

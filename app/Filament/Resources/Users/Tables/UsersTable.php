@@ -49,6 +49,10 @@ class UsersTable
                     ->searchable()
                     ->separator(','),
 
+                TextColumn::make('authored_posts_count')
+                    ->label('Posts')
+                    ->counts('authoredPosts'),
+
                 TextColumn::make('status')
                     ->label('Status')
                     ->badge()

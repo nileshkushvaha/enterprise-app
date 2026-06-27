@@ -69,7 +69,7 @@ class ValidateBlockContentAction
 
     private function validateVideo(array $content, array $errors): array
     {
-        if (empty($content['url'])) {
+        if (empty($content['video_url'])) {
             $errors[] = 'Video block requires a URL';
         }
         return $errors;
@@ -104,7 +104,7 @@ class ValidateBlockContentAction
 
     private function validateTabs(array $content, array $errors): array
     {
-        if (empty($content['tabs']) || !is_array($content['tabs'])) {
+        if (empty($content['items']) || !is_array($content['items'])) {
             $errors[] = 'Tabs block requires at least one tab';
         }
         return $errors;
@@ -128,7 +128,7 @@ class ValidateBlockContentAction
 
     private function validateStatistics(array $content, array $errors): array
     {
-        if (empty($content['items']) || !is_array($content['items'])) {
+        if (empty($content['stats']) || !is_array($content['stats'])) {
             $errors[] = 'Statistics block requires at least one statistic';
         }
         return $errors;
@@ -180,7 +180,7 @@ class ValidateBlockContentAction
 
     private function validateContactForm(array $content, array $errors): array
     {
-        if (empty($content['form_fields']) || !is_array($content['form_fields'])) {
+        if (empty($content['fields']) || !is_array($content['fields'])) {
             $errors[] = 'Contact form requires at least one field';
         }
         return $errors;

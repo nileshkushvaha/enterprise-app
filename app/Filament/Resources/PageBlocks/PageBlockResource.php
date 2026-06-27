@@ -66,22 +66,21 @@ class PageBlockResource extends Resource
 
     public static function canViewAny(): bool
     {
-        return auth()->user()?->can('pages.view') ?? false;
+        return auth()->user()?->can('viewAny', PageBlock::class) ?? false;
     }
 
     public static function canCreate(): bool
     {
-        return auth()->user()?->can('pages.create') ?? false;
+        return auth()->user()?->can('create', PageBlock::class) ?? false;
     }
 
     public static function canEdit(\Illuminate\Database\Eloquent\Model $record): bool
     {
-        return auth()->user()?->can('pages.update') ?? false;
+        return auth()->user()?->can('update', $record) ?? false;
     }
 
     public static function canDelete(\Illuminate\Database\Eloquent\Model $record): bool
     {
-        return auth()->user()?->can('pages.delete') ?? false;
+        return auth()->user()?->can('delete', $record) ?? false;
     }
 }
-

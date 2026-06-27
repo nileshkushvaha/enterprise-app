@@ -60,6 +60,16 @@ class PageService
             ->get();
     }
 
+    public function searchPublishedPages(string $term, int $limit = 10): Collection
+    {
+        return Page::query()
+            ->published()
+            ->when($term !== '', fn ($query) => $query->search($term))
+            ->latest('updated_at')
+            ->limit($limit)
+            ->get();
+    }
+
     /**
      * Duplicate a page
      */

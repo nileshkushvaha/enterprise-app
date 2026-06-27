@@ -19,6 +19,7 @@ class PageRenderingTest extends TestCase
         $page = Page::factory()->create([
             'status' => PageStatus::Published,
             'visibility' => PageVisibility::Public,
+            'visibility' => PageVisibility::Public,
         ]);
 
         PageBlock::create([
@@ -75,6 +76,7 @@ class PageRenderingTest extends TestCase
     {
         $page = Page::factory()->create([
             'status' => PageStatus::Published,
+            'visibility' => PageVisibility::Public,
         ]);
 
         PageBlock::create([
@@ -116,6 +118,7 @@ class PageRenderingTest extends TestCase
     {
         $page = Page::factory()->create([
             'status' => PageStatus::Published,
+            'visibility' => PageVisibility::Public,
         ]);
 
         PageBlock::create([
@@ -147,6 +150,7 @@ class PageRenderingTest extends TestCase
     {
         $page = Page::factory()->create([
             'status' => PageStatus::Published,
+            'visibility' => PageVisibility::Public,
             'meta_title' => 'Custom SEO Title',
             'meta_description' => 'Custom SEO Description',
             'meta_keywords' => 'keyword1, keyword2',
@@ -173,6 +177,7 @@ class PageRenderingTest extends TestCase
     {
         $page = Page::factory()->create([
             'status' => PageStatus::Published,
+            'visibility' => PageVisibility::Public,
             'title' => 'Test Page',
             'excerpt' => 'Page excerpt',
         ]);
@@ -199,6 +204,7 @@ class PageRenderingTest extends TestCase
         $homePage = Page::factory()->create([
             'slug' => 'home',
             'status' => PageStatus::Published,
+            'visibility' => PageVisibility::Public,
         ]);
 
         PageBlock::create([
@@ -246,6 +252,7 @@ class PageRenderingTest extends TestCase
     {
         $page = Page::factory()->create([
             'status' => PageStatus::Published,
+            'visibility' => PageVisibility::Public,
         ]);
 
         PageBlock::create([
@@ -283,6 +290,7 @@ class PageRenderingTest extends TestCase
     {
         $page = Page::factory()->create([
             'status' => PageStatus::Published,
+            'visibility' => PageVisibility::Public,
         ]);
 
         PageBlock::create([
@@ -319,6 +327,7 @@ class PageRenderingTest extends TestCase
         $page = Page::factory()->create([
             'status' => PageStatus::Published,
             'canonical_url' => $canonicalUrl,
+            'visibility' => PageVisibility::Public,
         ]);
 
         PageBlock::create([
