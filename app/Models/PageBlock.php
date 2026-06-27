@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\BlockType;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -29,6 +30,7 @@ class PageBlock extends Model
     ];
 
     protected $casts = [
+        'block_type' => BlockType::class,
         'content' => 'array',
         'settings' => 'array',
         'is_active' => 'boolean',

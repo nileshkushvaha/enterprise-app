@@ -73,4 +73,9 @@ class PageFactory extends Factory
             'published_at' => now()->subMonths(3),
         ]);
     }
+
+    public function block(): static
+    {
+        return $this->has(\Database\Factories\PageBlockFactory::new(), 'blocks');
+    }
 }

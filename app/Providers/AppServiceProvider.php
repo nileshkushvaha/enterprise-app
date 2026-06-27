@@ -16,6 +16,13 @@ class AppServiceProvider extends ServiceProvider
         $this->registerSuperAdminGate();
         $this->registerPermissionObserver();
         $this->registerPolicies();
+        $this->registerObservers();
+    }
+
+    private function registerObservers(): void
+    {
+        \App\Models\Page::observe(\App\Observers\PageObserver::class);
+        \App\Models\PageBlock::observe(\App\Observers\PageBlockObserver::class);
     }
 
     private function registerPolicies(): void

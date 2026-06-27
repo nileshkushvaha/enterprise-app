@@ -2,18 +2,19 @@
 
 namespace App\Filament\Resources\Pages\Schemas;
 
+use Filament\Forms\Components\DateTimePicker;
+use Filament\Forms\Components\FileUpload;
+use Filament\Forms\Components\Repeater;
+use Filament\Schemas\Components\Section;
+use Filament\Forms\Components\Select;
+use Filament\Schemas\Components\Tabs;
+use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\Toggle;
+
 use App\Actions\GeneratePageSlugAction;
 use App\Enums\PageStatus;
 use App\Enums\PageVisibility;
-use Filament\Forms\Components\DateTimePickerField;
-use Filament\Forms\Components\FileUploadField;
-use Filament\Forms\Components\Group;
-use Filament\Forms\Components\RichEditorField;
-use Filament\Forms\Components\Section;
-use Filament\Forms\Components\SelectField;
-use Filament\Forms\Components\TabsField;
-use Filament\Forms\Components\TextAreaField;
-use Filament\Forms\Components\TextInputField;
 use Filament\Schemas\Schema;
 
 class PageForm
@@ -22,14 +23,14 @@ class PageForm
     {
         return $schema
             ->components([
-                TabsField::make('page_tabs')
+                Tabs::make('page_tabs')
                     ->tabs([
-                        TabsField\Tab::make('General')
+                        Tabs\Tab::make('General')
                             ->schema([
                                 Section::make('Page Information')
                                     ->collapsible(false)
                                     ->schema([
-                                        TextInputField::make('title')
+                                        TextInput::make('title')
                                             ->required()
                                             ->maxLength(255)
                                             ->live(onBlur: true)
@@ -39,13 +40,13 @@ class PageForm
                                                 }
                                                 $set('slug', app(GeneratePageSlugAction::class)->execute($state));
                                             }),
-                                        TextInputField::make('slug')
+                                        TextInput::make('slug')
                                             ->required()
                                             ->unique('pages', 'slug', ignoreRecord: true)
                                             ->maxLength(255)
                                             ->regex('/^[a-z0-9]+(?:-[a-z0-9]+)*$/')
                                             ->helperText('URL-friendly identifier. Auto-generated from title.'),
-                                        TextAreaField::make('excerpt')
+                                        Textarea::make('excerpt')
                                             ->maxLength(500)
                                             ->rows(3)
                                             ->helperText('Brief summary of the page content.'),
@@ -54,27 +55,23 @@ class PageForm
                                 Section::make('Media')
                                     ->collapsible(false)
                                     ->schema([
-                                        FileUploadField::make('featured_image')
+                                        FileUpload::make('featured_image')
                                             ->image()
-                                            ->imageEditor()
-                                            ->imagePreviewHeight('250')
-                                            ->maxSize(5120)
+                                            
                                             ->helperText('Upload a featured image (max 5MB)')
-                                            ->loadingIndicatorPosition('right')
-                                            ->uploadProgressIndicatorPosition('right'),
                                     ]),
 
                                 Section::make('Template & Layout')
                                     ->collapsible(false)
                                     ->schema([
-                                        SelectField::make('template')
+                                        Select::make('template')
                                             ->options([
                                                 'default' => 'Default',
                                                 'landing' => 'Landing Page',
                                                 'blank' => 'Blank',
                                             ])
                                             ->default('default'),
-                                        SelectField::make('layout')
+                                        Select::make('layout')
                                             ->options([
                                                 'default' => 'Default',
                                                 'sidebar-left' => 'Sidebar Left',
@@ -85,47 +82,95 @@ class PageForm
                                     ]),
                             ]),
 
-                        TabsField\Tab::make('Publishing')
+                        Tabs\Tab::make('Publishing')
                             ->schema([
                                 Section::make('Publication Settings')
                                     ->collapsible(false)
                                     ->schema([
-                                        SelectField::make('status')
+                                        Select::make('status')
                                             ->options(PageStatus::class)
                                             ->default(PageStatus::Draft)
                                             ->native(false)
                                             ->required(),
-                                        SelectField::make('visibility')
+                                        Select::make('visibility')
                                             ->options(PageVisibility::class)
                                             ->default(PageVisibility::Private)
                                             ->native(false)
                                             ->required(),
-                                        DateTimePickerField::make('published_at')
+                                        DateTimePicker::make('published_at')
                                             ->nullable()
                                             ->helperText('When should this page be published?'),
                                     ]),
                             ]),
 
-                        TabsField\Tab::make('SEO')
+                        Tabs\Tab::make('Blocks')
+                            ->schema([
+                                Section::make('Page Blocks')
+                                    ->collapsible(false)
+                                    ->description('Manage the content blocks for this page')
+                                    ->schema([
+                                        Repeater::make('blocks')
+                                            ->relationship('blocks')
+                                            ->schema([
+                                               Select::make('block_type')
+                                                   ->label('Block Type')
+                                                   ->options(\App\Enums\BlockType::class)
+                                                   
+                                                   ->required()
+                                                   ->columnSpan(1),
+
+                                               TextInput::make('sort_order')
+                                                   ->label('Order')
+                                                   ->numeric()
+                                                   ->default(0)
+                                                   ->columnSpan(1),
+
+                                               Toggle::make('is_active')
+                                                   ->label('Active')
+                                                   ->default(true)
+                                                   ->columnSpan(1),
+
+                                               Textarea::make('content')
+                                                   ->label('Block Content (JSON)')
+                                                   ->required()
+                                                   ->rows(4)
+                                                   ->columnSpanFull(),
+
+                                               Textarea::make('settings')
+                                                   ->label('Block Settings (JSON)')
+                                                   ->rows(3)
+                                                   ->columnSpanFull(),
+                                            ])
+                                            ->columns(3)
+                                            ->reorderable(true)
+                                            ->collapsible()
+                                            ->itemLabel(fn (array $state): ?string => $state['block_type'] ? \App\Enums\BlockType::tryFrom($state['block_type'])?->label() : null)
+                                            ->addAction(function ($action) {
+                                               return $action->label('Add Block');
+                                            }),
+                                    ]),
+                            ]),
+                        
+                        Tabs\Tab::make('SEO')
                             ->schema([
                                 Section::make('Search Engine Optimization')
                                     ->collapsible(false)
                                     ->schema([
-                                        TextInputField::make('meta_title')
+                                        TextInput::make('meta_title')
                                             ->maxLength(70)
                                             ->helperText('Recommended: 50-70 characters'),
-                                        TextAreaField::make('meta_description')
+                                        Textarea::make('meta_description')
                                             ->maxLength(160)
                                             ->rows(3)
                                             ->helperText('Recommended: 150-160 characters'),
-                                        TextAreaField::make('meta_keywords')
+                                        Textarea::make('meta_keywords')
                                             ->maxLength(255)
                                             ->rows(2)
                                             ->helperText('Comma-separated keywords'),
-                                        TextInputField::make('canonical_url')
+                                        TextInput::make('canonical_url')
                                             ->url()
                                             ->nullable(),
-                                        SelectField::make('robots')
+                                        Select::make('robots')
                                             ->options([
                                                 'index, follow' => 'Index & Follow',
                                                 'noindex, follow' => 'No Index, Follow',
@@ -136,7 +181,8 @@ class PageForm
                                             ->native(false),
                                     ]),
                             ]),
-                    ]),
+                    ])
+                    ->columnSpanFull(),
             ]);
     }
 }

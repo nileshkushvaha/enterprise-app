@@ -83,6 +83,11 @@ class PagesTable
             ])
             ->recordActions([
                 EditAction::make(),
+                Action::make('preview')
+                    ->label('Preview')
+                    ->icon('heroicon-m-eye')
+                    ->url(fn ($record) => route('admin.pages.preview', $record))
+                    ->openUrlInNewTab(),
                 Action::make('publish')
                     ->label('Publish')
                     ->icon('heroicon-m-arrow-up-circle')

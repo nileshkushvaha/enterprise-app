@@ -127,7 +127,13 @@ class Page extends Model implements HasMedia
      */
     public function scopePublished(Builder $query): Builder
     {
-        return $query->where('status', PageStatus::Published)->where('visibility', PageVisibility::Public);
+        return $query
+            ->where('status', PageStatus::Published)
+            ->where('visibility', PageVisibility::Public)
+            ->where(function (Builder $query): void {
+                $query->whereNull('published_at')
+                    ->orWhere('published_at', '<=', now());
+            });
     }
 
     /**
@@ -168,9 +174,11 @@ class Page extends Model implements HasMedia
      */
     public function scopeSearch(Builder $query, string $term): Builder
     {
-        return $query->where('title', 'like', "%{$term}%")
-            ->orWhere('slug', 'like', "%{$term}%")
-            ->orWhere('excerpt', 'like', "%{$term}%");
+        return $query->where(function (Builder $query) use ($term): void {
+            $query->where('title', 'like', "%{$term}%")
+                ->orWhere('slug', 'like', "%{$term}%")
+                ->orWhere('excerpt', 'like', "%{$term}%");
+        });
     }
 
     /**
@@ -223,6 +231,14 @@ class Page extends Model implements HasMedia
     }
 
     /**
+     * Invalidate render cache
+     */
+    public function invalidateRenderCache(): void
+    {
+        app(\App\Services\PageRenderService::class)->invalidateCache($this);
+    }
+
+    /**
      * Activity Log settings
      */
     public function getActivitylogOptions(): LogOptions
@@ -243,4 +259,3 @@ class Page extends Model implements HasMedia
             ->dontLogIfAttributesChangedOnly(['updated_at']);
     }
 }
-

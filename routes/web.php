@@ -17,7 +17,18 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 // ── Homepage ────────────────────────────────────────────────────────
-Route::get('/', fn () => view('home'))->name('home');
+Route::get('/', [App\Http\Controllers\PageController::class, 'home'])->name('home');
+
+// ── Frontend Search + SEO ───────────────────────────────────────────
+Route::get('/search', [App\Http\Controllers\SearchController::class, 'index'])->name('search.index');
+Route::get('/sitemap.xml', [App\Http\Controllers\SeoController::class, 'sitemap'])->name('seo.sitemap');
+Route::get('/robots.txt', [App\Http\Controllers\SeoController::class, 'robots'])->name('seo.robots');
+
+// ── Contact Form Submission ─────────────────────────────────────────
+Route::post('/contact/submit', [App\Http\Controllers\ContactFormController::class, 'submit'])->name('contact.submit');
+
+// ── Public Pages (CMS) ──────────────────────────────────────────────
+Route::get('/{slug}', [App\Http\Controllers\PageController::class, 'show'])->name('page.show');
 
 // ── Login alias — required by Laravel internals (Authenticate middleware, password broker) ──
 Route::get('/login', [LoginController::class, 'showForm'])->name('login');
@@ -143,4 +154,15 @@ Route::prefix('profile')->name('profile.')->middleware([
 
     // Security alert preferences
     Route::post('/security/alerts',   [SecurityController::class, 'updateAlerts'])->name('security.alerts');
+});
+
+// ── Admin Routes (auth + verified + active) ────────────────────────────
+Route::prefix('admin')->name('admin.')->middleware([
+    'auth',
+    'verified',
+    App\Http\Middleware\EnsureAccountIsActive::class,
+    'session.track',
+])->group(function (): void {
+    // Page Preview
+    Route::get('/pages/{page}/preview', App\Http\Controllers\Admin\PagePreviewController::class)->name('pages.preview');
 });
