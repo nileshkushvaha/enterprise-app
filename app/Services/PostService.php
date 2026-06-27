@@ -6,6 +6,7 @@ use App\Models\Post;
 use App\Models\PostBlock;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Facades\DB;
 
 class PostService
 {
@@ -20,7 +21,7 @@ class PostService
         ?string $search = null,
         int $perPage = 15
     ): LengthAwarePaginator {
-        $query = Post::query()->with('author');
+        $query = Post::query()->with(['author', 'media', 'categories', 'tags']);
 
         if ($status) {
             $query->where('status', $status);
@@ -45,7 +46,7 @@ class PostService
     {
         return Post::query()
             ->published()
-            ->with('author')
+            ->with(['author', 'media', 'categories', 'tags'])
             ->latest('published_at')
             ->paginate($perPage);
     }
@@ -55,7 +56,7 @@ class PostService
         return Post::query()
             ->published()
             ->featured()
-            ->with('author')
+            ->with(['author', 'media'])
             ->latest('published_at')
             ->limit($limit)
             ->get();
@@ -65,43 +66,51 @@ class PostService
     {
         return Post::query()
             ->published()
-            ->with('author')
+            ->with(['author', 'media'])
             ->when($term !== '', fn ($query) => $query->search($term))
             ->latest('updated_at')
             ->limit($limit)
             ->get();
     }
 
+    /**
+     * Duplicate a post inside a transaction so any block, taxonomy, or media failure
+     * rolls back the entire operation and leaves no orphaned records.
+     */
     public function duplicatePost(Post $post): Post
     {
-        $newPost = $post->replicate();
-        $newPost->slug = $this->generateUniqueSlug($post->slug . '-copy');
-        $newPost->title = $post->title . ' (Copy)';
-        $newPost->status = 'draft';
-        $newPost->visibility = 'private';
-        $newPost->published_at = null;
-        $newPost->featured = false;
-        $newPost->save();
+        return DB::transaction(function () use ($post): Post {
+            $newPost = $post->replicate();
+            $newPost->slug = $this->generateUniqueSlug($post->slug . '-copy');
+            $newPost->title = $post->title . ' (Copy)';
+            $newPost->status = 'draft';
+            $newPost->visibility = 'private';
+            $newPost->published_at = null;
+            $newPost->featured = false;
+            $newPost->save();
 
-        foreach ($post->blocks as $block) {
-            $newBlock = $block->replicate();
-            $newBlock->post_id = $newPost->id;
-            $newBlock->save();
-        }
+            foreach ($post->blocks as $block) {
+                $newBlock = $block->replicate();
+                $newBlock->post_id = $newPost->id;
+                $newBlock->save();
+            }
 
-        $post->loadMissing('categories');
-        $newPost->categories()->sync($post->categories->modelKeys());
-        $post->loadMissing('tags');
-        $newPost->tags()->sync($post->tags->modelKeys());
-        $post->loadMissing('relatedPosts');
-        $newPost->relatedPosts()->sync($post->relatedPosts->modelKeys());
+            $post->loadMissing('categories');
+            $newPost->categories()->sync($post->categories->modelKeys());
 
-        $post->getMedia('featured-image')->each(fn ($media) => $media->copy($newPost, 'featured-image'));
-        $post->getMedia('gallery')->each(fn ($media) => $media->copy($newPost, 'gallery'));
+            $post->loadMissing('tags');
+            $newPost->tags()->sync($post->tags->modelKeys());
 
-        $this->refreshReadingTime($newPost);
+            $post->loadMissing('relatedPosts');
+            $newPost->relatedPosts()->sync($post->relatedPosts->modelKeys());
 
-        return $newPost;
+            $post->getMedia('featured-image')->each(fn ($media) => $media->copy($newPost, 'featured-image'));
+            $post->getMedia('gallery')->each(fn ($media) => $media->copy($newPost, 'gallery'));
+
+            $this->refreshReadingTime($newPost);
+
+            return $newPost;
+        });
     }
 
     public function publishPost(Post $post): bool

@@ -30,7 +30,6 @@ class Post extends Model implements HasMedia
         'title',
         'slug',
         'excerpt',
-        'featured_image',
         'author_id',
         'status',
         'visibility',
@@ -43,8 +42,6 @@ class Post extends Model implements HasMedia
         'meta_keywords',
         'canonical_url',
         'robots',
-        'created_by',
-        'updated_by',
     ];
 
     protected $casts = [
@@ -61,12 +58,12 @@ class Post extends Model implements HasMedia
     protected static function booted(): void
     {
         static::creating(function (Post $post): void {
-            $post->created_by = auth()->id() ?? $post->created_by;
-            $post->updated_by = auth()->id() ?? $post->updated_by;
+            $post->created_by = auth()->id() ?? null;
+            $post->updated_by = auth()->id() ?? null;
         });
 
         static::updating(function (Post $post): void {
-            $post->updated_by = auth()->id() ?? $post->updated_by;
+            $post->updated_by = auth()->id() ?? null;
         });
     }
 
@@ -157,7 +154,8 @@ class Post extends Model implements HasMedia
 
     public function scopeScheduled(Builder $query): Builder
     {
-        return $query->where('status', PageStatus::Scheduled);
+        return $query->where('status', PageStatus::Scheduled)
+            ->where('published_at', '<=', now());
     }
 
     public function scopeFeatured(Builder $query): Builder

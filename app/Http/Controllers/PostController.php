@@ -13,7 +13,7 @@ class PostController extends Controller
     {
         $posts = Post::query()
             ->published()
-            ->with('author')
+            ->with(['author', 'media', 'categories', 'tags'])
             ->latest('published_at')
             ->paginate(12);
 

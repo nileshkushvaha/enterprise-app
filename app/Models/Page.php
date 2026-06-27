@@ -38,8 +38,6 @@ class Page extends Model implements HasMedia
         'meta_keywords',
         'canonical_url',
         'robots',
-        'created_by',
-        'updated_by',
     ];
 
     protected $casts = [

@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Page;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Pagination\Paginator;
+use Illuminate\Support\Facades\DB;
 
 class PageService
 {
@@ -71,31 +72,31 @@ class PageService
     }
 
     /**
-     * Duplicate a page
+     * Duplicate a page inside a transaction so a media or block failure rolls back everything.
      */
     public function duplicatePage(Page $page): Page
     {
-        $newPage = $page->replicate();
-        $newPage->slug = $this->generateUniqueSlug($page->slug . '-copy');
-        $newPage->title = $page->title . ' (Copy)';
-        $newPage->status = 'draft';
-        $newPage->visibility = 'private';
-        $newPage->published_at = null;
-        $newPage->save();
+        return DB::transaction(function () use ($page): Page {
+            $newPage = $page->replicate();
+            $newPage->slug = $this->generateUniqueSlug($page->slug . '-copy');
+            $newPage->title = $page->title . ' (Copy)';
+            $newPage->status = 'draft';
+            $newPage->visibility = 'private';
+            $newPage->published_at = null;
+            $newPage->save();
 
-        // Duplicate blocks
-        foreach ($page->blocks as $block) {
-            $newBlock = $block->replicate();
-            $newBlock->page_id = $newPage->id;
-            $newBlock->save();
-        }
+            foreach ($page->blocks as $block) {
+                $newBlock = $block->replicate();
+                $newBlock->page_id = $newPage->id;
+                $newBlock->save();
+            }
 
-        // Duplicate media
-        $page->getMedia('featured-image')->each(function ($media) use ($newPage) {
-            $media->copy($newPage, 'featured-image');
+            $page->getMedia('featured-image')->each(function ($media) use ($newPage): void {
+                $media->copy($newPage, 'featured-image');
+            });
+
+            return $newPage;
         });
-
-        return $newPage;
     }
 
     /**

@@ -19,7 +19,6 @@ class PostFactory extends Factory
             'title' => $title,
             'slug' => str($title)->slug()->toString(),
             'excerpt' => fake()->paragraph(),
-            'featured_image' => null,
             'author_id' => User::factory(),
             'status' => 'draft',
             'visibility' => 'private',
@@ -32,8 +31,6 @@ class PostFactory extends Factory
             'meta_keywords' => fake()->optional()->words(5, true),
             'canonical_url' => fake()->optional()->url(),
             'robots' => 'index, follow',
-            'created_by' => null,
-            'updated_by' => null,
         ];
     }
 
