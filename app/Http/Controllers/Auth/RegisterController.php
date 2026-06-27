@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\RegisterRequest;
 use App\Services\Auth\RegistrationService;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\View\View;
 
 final class RegisterController extends Controller
@@ -23,11 +24,14 @@ final class RegisterController extends Controller
 
     public function store(RegisterRequest $request): RedirectResponse
     {
-        $this->registrationService->register(
+        $user = $this->registrationService->register(
             data: $request->validated(),
             ipAddress: $request->ip() ?? '',
             userAgent: $request->userAgent() ?? '',
         );
+
+        // Log the user in so the signed verification link works when clicked
+        Auth::login($user);
 
         return redirect()
             ->route('auth.verification.notice')

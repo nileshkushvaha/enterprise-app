@@ -104,107 +104,110 @@ class SeoSettingsPage extends Page
     public function form(Schema $schema): Schema
     {
         return $schema->components([
+            Grid::make(2)->schema([
 
-            // ── SEO Meta ──────────────────────────────────────────────
-            Section::make('SEO Meta')
-                ->description('Default meta tags applied to all pages without specific overrides.')
-                ->aside()
-                ->schema([
-                    TextInput::make('meta_title')
-                        ->label('Meta Title')
-                        ->maxLength(70)
-                        ->helperText('Max 70 characters. Shown in browser tab and search results.')
-                        ->suffixAction(
-                            Action::make('count')
-                                ->label(fn ($state) => strlen($state ?? '') . '/70')
-                                ->disabled()
-                        ),
+                // ── SEO Meta ──────────────────────────────────── full width
+                Section::make('SEO Meta')
+                    ->description('Default meta tags applied to all pages without specific overrides.')
+                    ->columnSpanFull()
+                    ->schema([
+                        Grid::make(2)->schema([
+                            TextInput::make('meta_title')
+                                ->label('Meta Title')
+                                ->maxLength(70)
+                                ->helperText('Max 70 characters. Shown in browser tab and search results.')
+                                ->suffixAction(
+                                    Action::make('count')
+                                        ->label(fn ($state) => strlen($state ?? '') . '/70')
+                                        ->disabled()
+                                ),
 
-                    Textarea::make('meta_description')
-                        ->label('Meta Description')
-                        ->rows(3)
-                        ->maxLength(160)
-                        ->helperText('Max 160 characters. Shown in search engine results.'),
+                            TextInput::make('meta_keywords')
+                                ->label('Meta Keywords')
+                                ->maxLength(255)
+                                ->helperText('Comma-separated keywords (less important for modern SEO).'),
+                        ]),
 
-                    TextInput::make('meta_keywords')
-                        ->label('Meta Keywords')
-                        ->maxLength(255)
-                        ->helperText('Comma-separated keywords (less important for modern SEO).'),
+                        Textarea::make('meta_description')
+                            ->label('Meta Description')
+                            ->rows(3)
+                            ->maxLength(160)
+                            ->helperText('Max 160 characters. Shown in search engine results.'),
 
-                    Grid::make(2)->schema([
-                        Select::make('robots')
-                            ->label('Robots Directive')
+                        Grid::make(2)->schema([
+                            Select::make('robots')
+                                ->label('Robots Directive')
+                                ->options([
+                                    'index,follow'     => 'index, follow (default)',
+                                    'noindex,follow'   => 'noindex, follow',
+                                    'index,nofollow'   => 'index, nofollow',
+                                    'noindex,nofollow' => 'noindex, nofollow',
+                                ])
+                                ->native(false)
+                                ->required(),
+
+                            TextInput::make('canonical_url')
+                                ->label('Canonical URL')
+                                ->url()
+                                ->maxLength(255)
+                                ->placeholder('https://example.com'),
+                        ]),
+                    ]),
+
+                // ── Verification & Analytics ──────────────────────── left
+                Section::make('Verification & Analytics')
+                    ->description('Connect your site to Google, Tag Manager, and other analytics tools.')
+                    ->schema([
+                        TextInput::make('google_search_console_verification')
+                            ->label('Google Search Console Verification')
+                            ->maxLength(255)
+                            ->placeholder('google-site-verification=...')
+                            ->helperText('Paste the verification meta tag content value.'),
+
+                        Grid::make(2)->schema([
+                            TextInput::make('google_analytics_id')
+                                ->label('Google Analytics ID')
+                                ->maxLength(30)
+                                ->placeholder('G-XXXXXXXXXX'),
+
+                            TextInput::make('google_tag_manager_id')
+                                ->label('Google Tag Manager ID')
+                                ->maxLength(30)
+                                ->placeholder('GTM-XXXXXXX'),
+                        ]),
+
+                        TextInput::make('facebook_pixel_id')
+                            ->label('Facebook Pixel ID')
+                            ->maxLength(30)
+                            ->placeholder('000000000000000'),
+                    ]),
+
+                // ── Social Sharing ────────────────────────────────── right
+                Section::make('Social Sharing (Open Graph)')
+                    ->description('Controls how your pages appear when shared on social media.')
+                    ->schema([
+                        FileUpload::make('og_image')
+                            ->label('Default OG Image')
+                            ->image()
+                            ->acceptedFileTypes(['image/png', 'image/jpeg'])
+                            ->maxSize(2048)
+                            ->directory('settings/seo')
+                            ->imagePreviewHeight('120')
+                            ->helperText('PNG or JPG, max 2MB. Recommended: 1200×630px.'),
+
+                        Select::make('twitter_card')
+                            ->label('Twitter Card Type')
                             ->options([
-                                'index,follow'     => 'index, follow (default)',
-                                'noindex,follow'   => 'noindex, follow',
-                                'index,nofollow'   => 'index, nofollow',
-                                'noindex,nofollow' => 'noindex, nofollow',
+                                'summary'             => 'Summary',
+                                'summary_large_image' => 'Summary with Large Image',
+                                'app'                 => 'App',
+                                'player'              => 'Player',
                             ])
                             ->native(false)
                             ->required(),
-
-                        TextInput::make('canonical_url')
-                            ->label('Canonical URL')
-                            ->url()
-                            ->maxLength(255)
-                            ->placeholder('https://example.com'),
-                    ]),
-                ]),
-
-            // ── Verification & Analytics ──────────────────────────────
-            Section::make('Verification & Analytics')
-                ->description('Connect your site to Google, Tag Manager, and other analytics tools.')
-                ->aside()
-                ->schema([
-                    TextInput::make('google_search_console_verification')
-                        ->label('Google Search Console Verification')
-                        ->maxLength(255)
-                        ->placeholder('google-site-verification=...')
-                        ->helperText('Paste the verification meta tag content value.'),
-
-                    Grid::make(2)->schema([
-                        TextInput::make('google_analytics_id')
-                            ->label('Google Analytics ID')
-                            ->maxLength(30)
-                            ->placeholder('G-XXXXXXXXXX'),
-
-                        TextInput::make('google_tag_manager_id')
-                            ->label('Google Tag Manager ID')
-                            ->maxLength(30)
-                            ->placeholder('GTM-XXXXXXX'),
                     ]),
 
-                    TextInput::make('facebook_pixel_id')
-                        ->label('Facebook Pixel ID')
-                        ->maxLength(30)
-                        ->placeholder('000000000000000'),
-                ]),
-
-            // ── Social Sharing ────────────────────────────────────────
-            Section::make('Social Sharing (Open Graph)')
-                ->description('Controls how your pages appear when shared on social media.')
-                ->aside()
-                ->schema([
-                    FileUpload::make('og_image')
-                        ->label('Default OG Image')
-                        ->image()
-                        ->acceptedFileTypes(['image/png', 'image/jpeg'])
-                        ->maxSize(2048)
-                        ->directory('settings/seo')
-                        ->imagePreviewHeight('120')
-                        ->helperText('PNG or JPG, max 2MB. Recommended: 1200×630px.'),
-
-                    Select::make('twitter_card')
-                        ->label('Twitter Card Type')
-                        ->options([
-                            'summary'             => 'Summary',
-                            'summary_large_image' => 'Summary with Large Image',
-                            'app'                 => 'App',
-                            'player'              => 'Player',
-                        ])
-                        ->native(false)
-                        ->required(),
-                ]),
+            ]),
         ]);
     }
 

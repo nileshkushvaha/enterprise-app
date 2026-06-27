@@ -6,7 +6,6 @@ namespace App\Listeners\Auth;
 
 use App\Events\Auth\UserRegistered;
 use App\Notifications\Auth\VerifyEmailNotification;
-use App\Notifications\Auth\WelcomeNotification;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Support\Facades\Log;
 use Throwable;
@@ -36,9 +35,6 @@ final class SendRegistrationNotifications implements ShouldQueue
             ]
         );
         $user->notify($notification);
-
-        // Send welcome email
-        $user->notify(new WelcomeNotification);
 
         // Activity log
         activity('auth')

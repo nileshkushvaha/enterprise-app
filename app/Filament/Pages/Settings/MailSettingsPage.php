@@ -126,124 +126,124 @@ class MailSettingsPage extends Page
     public function form(Schema $schema): Schema
     {
         return $schema->components([
+            Grid::make(2)->schema([
 
-            // ── Sender Information ────────────────────────────────────
-            Section::make('Sender Information')
-                ->description('The name and email address shown to recipients.')
-                ->aside()
-                ->schema([
-                    Grid::make(2)->schema([
-                        TextInput::make('from_name')
-                            ->label('From Name')
-                            ->required()
-                            ->maxLength(100)
-                            ->placeholder('Sphere Education'),
+                // ── Sender Information ─────────────────────────── full width
+                Section::make('Sender Information')
+                    ->description('The name and email address shown to recipients.')
+                    ->columnSpanFull()
+                    ->schema([
+                        Grid::make(2)->schema([
+                            TextInput::make('from_name')
+                                ->label('From Name')
+                                ->required()
+                                ->maxLength(100)
+                                ->placeholder('Sphere Education'),
 
-                        TextInput::make('from_email')
-                            ->label('From Email')
-                            ->email()
-                            ->required()
-                            ->maxLength(150)
-                            ->placeholder('noreply@example.com'),
-                    ]),
-                ]),
-
-            // ── SMTP Configuration ────────────────────────────────────
-            Section::make('SMTP Configuration')
-                ->description('Connection settings for your mail server.')
-                ->aside()
-                ->schema([
-                    Grid::make(2)->schema([
-                        Select::make('driver')
-                            ->label('Mail Driver')
-                            ->options([
-                                'smtp'     => 'SMTP',
-                                'sendmail' => 'Sendmail',
-                                'log'      => 'Log (development)',
-                                'array'    => 'Array (testing)',
-                            ])
-                            ->native(false)
-                            ->required()
-                            ->live(),
-
-                        Select::make('encryption')
-                            ->label('Encryption')
-                            ->options([
-                                'tls'  => 'TLS (recommended)',
-                                'ssl'  => 'SSL',
-                                'none' => 'None',
-                            ])
-                            ->native(false)
-                            ->required(),
+                            TextInput::make('from_email')
+                                ->label('From Email')
+                                ->email()
+                                ->required()
+                                ->maxLength(150)
+                                ->placeholder('noreply@example.com'),
+                        ]),
                     ]),
 
-                    Grid::make(2)->schema([
-                        TextInput::make('host')
-                            ->label('SMTP Host')
-                            ->required()
-                            ->maxLength(255)
-                            ->placeholder('smtp.mailtrap.io'),
+                // ── SMTP Configuration ─────────────────────────── full width
+                Section::make('SMTP Configuration')
+                    ->description('Connection settings for your mail server.')
+                    ->columnSpanFull()
+                    ->schema([
+                        Grid::make(4)->schema([
+                            Select::make('driver')
+                                ->label('Mail Driver')
+                                ->options([
+                                    'smtp'     => 'SMTP',
+                                    'sendmail' => 'Sendmail',
+                                    'log'      => 'Log (development)',
+                                    'array'    => 'Array (testing)',
+                                ])
+                                ->native(false)
+                                ->required()
+                                ->live(),
 
-                        TextInput::make('port')
-                            ->label('SMTP Port')
-                            ->numeric()
-                            ->required()
-                            ->minValue(1)
-                            ->maxValue(65535)
-                            ->placeholder('587'),
+                            Select::make('encryption')
+                                ->label('Encryption')
+                                ->options([
+                                    'tls'  => 'TLS (recommended)',
+                                    'ssl'  => 'SSL',
+                                    'none' => 'None',
+                                ])
+                                ->native(false)
+                                ->required(),
+
+                            TextInput::make('host')
+                                ->label('SMTP Host')
+                                ->required()
+                                ->maxLength(255)
+                                ->placeholder('smtp.mailtrap.io')
+                                ->columnSpan(1),
+
+                            TextInput::make('port')
+                                ->label('SMTP Port')
+                                ->numeric()
+                                ->required()
+                                ->minValue(1)
+                                ->maxValue(65535)
+                                ->placeholder('587'),
+                        ]),
+
+                        Grid::make(2)->schema([
+                            TextInput::make('username')
+                                ->label('Username')
+                                ->maxLength(255)
+                                ->autocomplete('off'),
+
+                            TextInput::make('password')
+                                ->label('Password')
+                                ->password()
+                                ->revealable()
+                                ->maxLength(255)
+                                ->autocomplete('new-password')
+                                ->helperText('Leave blank to keep the existing password. Stored encrypted.')
+                                ->dehydrated(fn ($state) => filled($state)),
+                        ]),
                     ]),
 
-                    Grid::make(2)->schema([
-                        TextInput::make('username')
-                            ->label('Username')
-                            ->maxLength(255)
-                            ->autocomplete('off'),
-
-                        TextInput::make('password')
-                            ->label('Password')
-                            ->password()
-                            ->revealable()
-                            ->maxLength(255)
-                            ->autocomplete('new-password')
-                            ->helperText('Leave blank to keep the existing password. Stored encrypted.')
-                            ->dehydrated(fn ($state) => filled($state)),
+                // ── Email Queue ────────────────────────────────────── left
+                Section::make('Email Queue')
+                    ->description('Control whether emails are sent synchronously or queued.')
+                    ->schema([
+                        Toggle::make('queue_emails')
+                            ->label('Queue Emails')
+                            ->helperText('Send emails asynchronously via the queue worker. Requires a running queue worker.')
+                            ->onColor('success'),
                     ]),
-                ]),
 
-            // ── Queue ─────────────────────────────────────────────────
-            Section::make('Email Queue')
-                ->description('Control whether emails are sent synchronously or queued.')
-                ->aside()
-                ->schema([
-                    Toggle::make('queue_emails')
-                        ->label('Queue Emails')
-                        ->helperText('Send emails asynchronously via the queue worker. Requires a running queue worker.')
-                        ->onColor('success'),
-                ]),
+                // ── Advanced ──────────────────────────────────────── right
+                Section::make('Advanced')
+                    ->description('Timeout and retry configuration.')
+                    ->schema([
+                        Grid::make(2)->schema([
+                            TextInput::make('connection_timeout')
+                                ->label('Connection Timeout (seconds)')
+                                ->numeric()
+                                ->required()
+                                ->minValue(5)
+                                ->maxValue(300)
+                                ->default(30),
 
-            // ── Advanced ──────────────────────────────────────────────
-            Section::make('Advanced')
-                ->description('Timeout and retry configuration.')
-                ->aside()
-                ->schema([
-                    Grid::make(2)->schema([
-                        TextInput::make('connection_timeout')
-                            ->label('Connection Timeout (seconds)')
-                            ->numeric()
-                            ->required()
-                            ->minValue(5)
-                            ->maxValue(300)
-                            ->default(30),
-
-                        TextInput::make('retry_attempts')
-                            ->label('Retry Attempts')
-                            ->numeric()
-                            ->required()
-                            ->minValue(1)
-                            ->maxValue(10)
-                            ->default(3),
+                            TextInput::make('retry_attempts')
+                                ->label('Retry Attempts')
+                                ->numeric()
+                                ->required()
+                                ->minValue(1)
+                                ->maxValue(10)
+                                ->default(3),
+                        ]),
                     ]),
-                ]),
+
+            ]),
         ]);
     }
 

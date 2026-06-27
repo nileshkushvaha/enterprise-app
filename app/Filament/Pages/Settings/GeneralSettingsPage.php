@@ -122,207 +122,206 @@ class GeneralSettingsPage extends Page
     public function form(Schema $schema): Schema
     {
         return $schema->components([
+            Grid::make(2)->schema([
 
-            // ── Application Information ──────────────────────────────
-            Section::make('Application Information')
-                ->description('Basic information about your application.')
-                ->aside()
-                ->schema([
-                    Grid::make(2)->schema([
-                        TextInput::make('app_name')
-                            ->label('Application Name')
-                            ->required()
-                            ->maxLength(150)
-                            ->placeholder('Sphere Education'),
+                // ── Application Information ─────────────────────── full width
+                Section::make('Application Information')
+                    ->description('Basic information about your application.')
+                    ->columnSpanFull()
+                    ->schema([
+                        Grid::make(3)->schema([
+                            TextInput::make('app_name')
+                                ->label('Application Name')
+                                ->required()
+                                ->maxLength(150)
+                                ->placeholder('Sphere Education'),
 
-                        TextInput::make('app_short_name')
-                            ->label('Short Name')
-                            ->maxLength(50)
-                            ->placeholder('Sphere'),
+                            TextInput::make('app_short_name')
+                                ->label('Short Name')
+                                ->maxLength(50)
+                                ->placeholder('Sphere'),
+
+                            TextInput::make('organization_name')
+                                ->label('Organization Name')
+                                ->maxLength(150),
+                        ]),
+
+                        Grid::make(3)->schema([
+                            TextInput::make('support_email')
+                                ->label('Support Email')
+                                ->email()
+                                ->required()
+                                ->maxLength(150),
+
+                            TextInput::make('support_phone')
+                                ->label('Support Phone')
+                                ->tel()
+                                ->maxLength(30),
+
+                            TextInput::make('website_url')
+                                ->label('Website URL')
+                                ->url()
+                                ->maxLength(255)
+                                ->placeholder('https://example.com'),
+                        ]),
+
+                        Textarea::make('address')
+                            ->label('Address')
+                            ->rows(2)
+                            ->maxLength(500),
                     ]),
 
-                    Grid::make(2)->schema([
-                        TextInput::make('organization_name')
-                            ->label('Organization Name')
-                            ->maxLength(150),
+                // ── Branding ──────────────────────────────────────── left
+                Section::make('Branding')
+                    ->description('Upload your logo, dark logo, and favicon.')
+                    ->columnSpanFull()
+                    ->schema([
+                        Grid::make(3)->schema([
+                            FileUpload::make('logo')
+                                ->label('Logo (Light)')
+                                ->image()
+                                ->acceptedFileTypes(['image/png', 'image/jpeg', 'image/svg+xml'])
+                                ->maxSize(2048)
+                                ->directory('settings/branding')
+                                ->imagePreviewHeight('80')
+                                ->helperText('PNG, JPG or SVG. Max 2MB.'),
 
-                        TextInput::make('support_email')
-                            ->label('Support Email')
-                            ->email()
-                            ->required()
-                            ->maxLength(150),
+                            FileUpload::make('logo_dark')
+                                ->label('Logo (Dark)')
+                                ->image()
+                                ->acceptedFileTypes(['image/png', 'image/jpeg', 'image/svg+xml'])
+                                ->maxSize(2048)
+                                ->directory('settings/branding')
+                                ->imagePreviewHeight('80')
+                                ->helperText('For dark backgrounds.'),
+
+                            FileUpload::make('favicon')
+                                ->label('Favicon')
+                                ->image()
+                                ->acceptedFileTypes(['image/x-icon', 'image/png'])
+                                ->maxSize(512)
+                                ->directory('settings/branding')
+                                ->imagePreviewHeight('80')
+                                ->helperText('ICO or PNG. Max 512KB.'),
+                        ]),
                     ]),
 
-                    Grid::make(2)->schema([
-                        TextInput::make('support_phone')
-                            ->label('Support Phone')
-                            ->tel()
-                            ->maxLength(30),
+                // ── Localization ──────────────────────────────────── right
+                Section::make('Localization')
+                    ->description('Default timezone, language, and date/time formats.')
+                    ->columnSpanFull()
+                    ->schema([
+                        Grid::make(2)->schema([
+                            Select::make('default_timezone')
+                                ->label('Default Timezone')
+                                ->options(
+                                    collect(\DateTimeZone::listIdentifiers())
+                                        ->mapWithKeys(fn($tz) => [$tz => $tz])
+                                        ->all()
+                                )
+                                ->searchable()
+                                ->native(false)
+                                ->required(),
 
-                        TextInput::make('website_url')
-                            ->label('Website URL')
-                            ->url()
+                            Select::make('default_language')
+                                ->label('Default Language')
+                                ->options([
+                                    'en' => 'English',
+                                    'hi' => 'Hindi',
+                                    'fr' => 'French',
+                                    'de' => 'German',
+                                    'es' => 'Spanish',
+                                    'ar' => 'Arabic',
+                                    'zh' => 'Chinese',
+                                    'ja' => 'Japanese',
+                                    'pt' => 'Portuguese',
+                                ])
+                                ->native(false)
+                                ->required(),
+                        ]),
+
+                        Grid::make(2)->schema([
+                            Select::make('date_format')
+                                ->label('Date Format')
+                                ->options([
+                                    'Y-m-d'   => 'YYYY-MM-DD (2025-06-27)',
+                                    'd/m/Y'   => 'DD/MM/YYYY (27/06/2025)',
+                                    'm/d/Y'   => 'MM/DD/YYYY (06/27/2025)',
+                                    'd-m-Y'   => 'DD-MM-YYYY (27-06-2025)',
+                                    'd M Y'   => 'DD Mon YYYY (27 Jun 2025)',
+                                    'F j, Y'  => 'Month D, YYYY (June 27, 2025)',
+                                ])
+                                ->native(false)
+                                ->required(),
+
+                            Select::make('time_format')
+                                ->label('Time Format')
+                                ->options([
+                                    'H:i'   => '24-hour (14:30)',
+                                    'h:i A' => '12-hour (02:30 PM)',
+                                ])
+                                ->native(false)
+                                ->required(),
+                        ]),
+                    ]),
+
+                // ── Application ───────────────────────────────────── left
+                Section::make('Application')
+                    ->description('Currency, precision, and maintenance settings.')
+                    ->schema([
+                        Grid::make(2)->schema([
+                            Select::make('default_currency')
+                                ->label('Default Currency')
+                                ->options([
+                                    'INR' => 'INR — Indian Rupee (₹)',
+                                    'USD' => 'USD — US Dollar ($)',
+                                    'EUR' => 'EUR — Euro (€)',
+                                    'GBP' => 'GBP — British Pound (£)',
+                                    'AED' => 'AED — UAE Dirham (د.إ)',
+                                    'SGD' => 'SGD — Singapore Dollar (S$)',
+                                    'AUD' => 'AUD — Australian Dollar (A$)',
+                                    'CAD' => 'CAD — Canadian Dollar (C$)',
+                                ])
+                                ->native(false)
+                                ->searchable()
+                                ->required(),
+
+                            Select::make('decimal_precision')
+                                ->label('Decimal Precision')
+                                ->options([
+                                    0 => '0 decimals (100)',
+                                    1 => '1 decimal (100.0)',
+                                    2 => '2 decimals (100.00)',
+                                    3 => '3 decimals (100.000)',
+                                ])
+                                ->native(false)
+                                ->required(),
+                        ]),
+
+                        Toggle::make('maintenance_mode')
+                            ->label('Maintenance Mode')
+                            ->helperText('When enabled, the public site will show a maintenance message.')
+                            ->onColor('danger')
+                            ->offColor('success'),
+                    ]),
+
+                // ── Footer ────────────────────────────────────────── right
+                Section::make('Footer')
+                    ->description('Text displayed in your application\'s footer.')
+                    ->schema([
+                        TextInput::make('footer_copyright')
+                            ->label('Copyright Text')
                             ->maxLength(255)
-                            ->placeholder('https://example.com'),
+                            ->placeholder('© 2025 Sphere Education. All rights reserved.'),
+
+                        Textarea::make('footer_text')
+                            ->label('Footer Text')
+                            ->rows(3)
+                            ->maxLength(500)
+                            ->helperText('Optional additional footer text or legal disclaimer.'),
                     ]),
 
-                    Textarea::make('address')
-                        ->label('Address')
-                        ->rows(2)
-                        ->maxLength(500),
-                ]),
-
-            // ── Branding ─────────────────────────────────────────────
-            Section::make('Branding')
-                ->description('Upload your logo, dark logo, and favicon.')
-                ->aside()
-                ->schema([
-                    Grid::make(3)->schema([
-                        FileUpload::make('logo')
-                            ->label('Logo (Light)')
-                            ->image()
-                            ->acceptedFileTypes(['image/png', 'image/jpeg', 'image/svg+xml'])
-                            ->maxSize(2048)
-                            ->directory('settings/branding')
-                            ->imagePreviewHeight('80')
-                            ->helperText('PNG, JPG or SVG. Max 2MB.'),
-
-                        FileUpload::make('logo_dark')
-                            ->label('Logo (Dark)')
-                            ->image()
-                            ->acceptedFileTypes(['image/png', 'image/jpeg', 'image/svg+xml'])
-                            ->maxSize(2048)
-                            ->directory('settings/branding')
-                            ->imagePreviewHeight('80')
-                            ->helperText('For dark backgrounds.'),
-
-                        FileUpload::make('favicon')
-                            ->label('Favicon')
-                            ->image()
-                            ->acceptedFileTypes(['image/x-icon', 'image/png'])
-                            ->maxSize(512)
-                            ->directory('settings/branding')
-                            ->imagePreviewHeight('80')
-                            ->helperText('ICO or PNG. Max 512KB.'),
-                    ]),
-                ]),
-
-            // ── Localization ──────────────────────────────────────────
-            Section::make('Localization')
-                ->description('Default timezone, language, and date/time formats.')
-                ->aside()
-                ->schema([
-                    Grid::make(2)->schema([
-                        Select::make('default_timezone')
-                            ->label('Default Timezone')
-                            ->options(
-                                collect(\DateTimeZone::listIdentifiers())
-                                    ->mapWithKeys(fn ($tz) => [$tz => $tz])
-                                    ->all()
-                            )
-                            ->searchable()
-                            ->native(false)
-                            ->required(),
-
-                        Select::make('default_language')
-                            ->label('Default Language')
-                            ->options([
-                                'en' => 'English',
-                                'hi' => 'Hindi',
-                                'fr' => 'French',
-                                'de' => 'German',
-                                'es' => 'Spanish',
-                                'ar' => 'Arabic',
-                                'zh' => 'Chinese',
-                                'ja' => 'Japanese',
-                                'pt' => 'Portuguese',
-                            ])
-                            ->native(false)
-                            ->required(),
-                    ]),
-
-                    Grid::make(2)->schema([
-                        Select::make('date_format')
-                            ->label('Date Format')
-                            ->options([
-                                'Y-m-d'   => 'YYYY-MM-DD (2025-06-27)',
-                                'd/m/Y'   => 'DD/MM/YYYY (27/06/2025)',
-                                'm/d/Y'   => 'MM/DD/YYYY (06/27/2025)',
-                                'd-m-Y'   => 'DD-MM-YYYY (27-06-2025)',
-                                'd M Y'   => 'DD Mon YYYY (27 Jun 2025)',
-                                'F j, Y'  => 'Month D, YYYY (June 27, 2025)',
-                            ])
-                            ->native(false)
-                            ->required(),
-
-                        Select::make('time_format')
-                            ->label('Time Format')
-                            ->options([
-                                'H:i'   => '24-hour (14:30)',
-                                'h:i A' => '12-hour (02:30 PM)',
-                            ])
-                            ->native(false)
-                            ->required(),
-                    ]),
-                ]),
-
-            // ── Application ───────────────────────────────────────────
-            Section::make('Application')
-                ->description('Currency, precision, and maintenance settings.')
-                ->aside()
-                ->schema([
-                    Grid::make(2)->schema([
-                        Select::make('default_currency')
-                            ->label('Default Currency')
-                            ->options([
-                                'INR' => 'INR — Indian Rupee (₹)',
-                                'USD' => 'USD — US Dollar ($)',
-                                'EUR' => 'EUR — Euro (€)',
-                                'GBP' => 'GBP — British Pound (£)',
-                                'AED' => 'AED — UAE Dirham (د.إ)',
-                                'SGD' => 'SGD — Singapore Dollar (S$)',
-                                'AUD' => 'AUD — Australian Dollar (A$)',
-                                'CAD' => 'CAD — Canadian Dollar (C$)',
-                            ])
-                            ->native(false)
-                            ->searchable()
-                            ->required(),
-
-                        Select::make('decimal_precision')
-                            ->label('Decimal Precision')
-                            ->options([
-                                0 => '0 decimals (100)',
-                                1 => '1 decimal (100.0)',
-                                2 => '2 decimals (100.00)',
-                                3 => '3 decimals (100.000)',
-                            ])
-                            ->native(false)
-                            ->required(),
-                    ]),
-
-                    Toggle::make('maintenance_mode')
-                        ->label('Maintenance Mode')
-                        ->helperText('When enabled, the public site will show a maintenance message.')
-                        ->onColor('danger')
-                        ->offColor('success'),
-                ]),
-
-            // ── Footer ────────────────────────────────────────────────
-            Section::make('Footer')
-                ->description('Text displayed in your application\'s footer.')
-                ->aside()
-                ->schema([
-                    TextInput::make('footer_copyright')
-                        ->label('Copyright Text')
-                        ->maxLength(255)
-                        ->placeholder('© 2025 Sphere Education. All rights reserved.'),
-
-                    Textarea::make('footer_text')
-                        ->label('Footer Text')
-                        ->rows(2)
-                        ->maxLength(500)
-                        ->helperText('Optional additional footer text or legal disclaimer.'),
-                ]),
+            ]),
         ]);
     }
 

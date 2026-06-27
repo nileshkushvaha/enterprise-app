@@ -2,18 +2,15 @@
 
 namespace App\Filament\Resources\Users\Schemas;
 
-use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Tabs;
 use Filament\Schemas\Components\Tabs\Tab;
 use Filament\Schemas\Schema;
 use Illuminate\Validation\Rules\Password;
-use Spatie\Permission\Models\Role;
 
 class UserForm
 {
@@ -62,8 +59,8 @@ class UserForm
                                                 ->required($isCreate)
                                                 ->confirmed()
                                                 ->rule(Password::min(8))
-                                                ->dehydrated(fn (?string $state): bool => filled($state))
-                                                ->dehydrateStateUsing(fn (string $state): string => $state),
+                                                ->dehydrated(fn(?string $state): bool => filled($state))
+                                                ->dehydrateStateUsing(fn(string $state): string => $state),
 
                                             TextInput::make('password_confirmation')
                                                 ->label('Confirm Password')
@@ -82,12 +79,7 @@ class UserForm
                                                 ])
                                                 ->default('active')
                                                 ->required()
-                                                ->native(false),
-
-                                            DateTimePicker::make('email_verified_at')
-                                                ->label('Email Verified At')
-                                                ->nullable()
-                                                ->helperText('Leave empty if not verified. Set to now to mark as verified.'),
+                                                ->native(false)
                                         ]),
                                     ]),
                             ]),
