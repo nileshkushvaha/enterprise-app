@@ -139,7 +139,7 @@
                                         $fRequired = (bool) ($f['required'] ?? false);
                                         $fPlaceholder = $f['placeholder'] ?? '';
                                         $fValue    = old($fName);
-                                        $hasErr    = $errors->has($fName) ?? false;
+                                        $hasErr    = isset($errors) && $errors->has($fName);
                                     @endphp
                                     <div>
                                         <label for="{{ $fName }}" class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">
@@ -174,7 +174,7 @@
                                     $fPlaceholder = $field['placeholder'] ?? '';
                                     $fValue    = old($fieldName);
                                     $fOptions  = array_filter(array_map('trim', explode(',', (string) ($field['options'] ?? ''))));
-                                    $hasErr    = $errors->has($fieldName) ?? false;
+                                    $hasErr    = isset($errors) && $errors->has($fieldName);
                                 @endphp
                                 <div>
                                     <label for="{{ $fieldName }}" class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">

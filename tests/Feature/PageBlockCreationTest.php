@@ -192,7 +192,7 @@ class PageBlockCreationTest extends TestCase
         }
 
         $this->assertCount(
-            18,
+            count(BlockType::cases()),
             ContentBlock::where('blockable_type', 'page')
                 ->where('blockable_id', $page->id)
                 ->get()

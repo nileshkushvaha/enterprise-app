@@ -173,6 +173,12 @@ class ContentBlockService
                 'button_text'     => 'Send Message',
                 'success_message' => 'Thank you for your message!',
             ],
+            BlockType::ContactInfo => [
+                'eyebrow'     => '',
+                'title'       => 'Get In Touch',
+                'description' => 'We would love to hear from you.',
+                'items'       => [],
+            ],
         };
     }
 

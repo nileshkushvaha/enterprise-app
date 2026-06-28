@@ -64,7 +64,7 @@ class AdminPanelProvider extends PanelProvider
                 'Masters',
                 'Configuration',
                 'Payment',
-                // System group reserved for: Activity Logs, Queue Monitor, Scheduler, Cache Manager
+                'System',
             ])
             ->pages([
                 Dashboard::class,

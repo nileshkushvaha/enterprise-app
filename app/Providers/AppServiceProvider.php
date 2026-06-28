@@ -12,8 +12,11 @@ use App\Observers\PageObserver;
 use App\Observers\PostCategoryObserver;
 use App\Observers\PostObserver;
 use App\Observers\TagObserver;
+use App\Policies\ActivityLogPolicy;
+use App\Policies\CacheManagerPolicy;
 use App\Policies\NavigationMenuPolicy;
 use App\Policies\ProfilePolicy;
+use Spatie\Activitylog\Models\Activity;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 use Spatie\Permission\Models\Permission;
@@ -46,6 +49,11 @@ class AppServiceProvider extends ServiceProvider
     {
         Gate::policy(User::class, ProfilePolicy::class);
         Gate::policy(NavigationMenu::class, NavigationMenuPolicy::class);
+        Gate::policy(Activity::class, ActivityLogPolicy::class);
+
+        Gate::define('cache_manager.view', [CacheManagerPolicy::class, 'viewPage']);
+        Gate::define('cache_manager.clear', [CacheManagerPolicy::class, 'clearApplicationCache']);
+        Gate::define('cache_manager.optimize', [CacheManagerPolicy::class, 'optimize']);
 
         Gate::define('profile.view', [ProfilePolicy::class, 'view']);
         Gate::define('profile.update', [ProfilePolicy::class, 'update']);

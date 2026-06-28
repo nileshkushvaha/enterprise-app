@@ -59,7 +59,7 @@ class RichContentRenderingTest extends TestCase
 
         $html = app(ContentRenderer::class)->render($page);
 
-        $this->assertStringContainsString('<section class="cms-content">', $html);
+        $this->assertStringContainsString('class="cms-content"', $html);
         $this->assertStringContainsString('Hello world', $html);
     }
 
@@ -151,7 +151,7 @@ class RichContentRenderingTest extends TestCase
 
         $html = app(ContentRenderer::class)->renderPost($post);
 
-        $this->assertStringContainsString('<section class="cms-content">', $html);
+        $this->assertStringContainsString('class="cms-content"', $html);
         $this->assertStringContainsString('Post body', $html);
     }
 

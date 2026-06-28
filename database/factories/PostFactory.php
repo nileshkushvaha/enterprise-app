@@ -27,7 +27,7 @@ class PostFactory extends Factory
             'reading_time' => fake()->numberBetween(1, 8),
             'featured' => fake()->boolean(25),
             'allow_comments' => true,
-            'meta_title' => fake()->optional()->sentence(6),
+            'meta_title' => fake()->optional()->text(70),
             'meta_description' => fake()->optional()->text(120),
             'meta_keywords' => fake()->optional()->words(5, true),
             'canonical_url' => fake()->optional()->url(),
