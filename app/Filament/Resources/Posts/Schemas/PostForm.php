@@ -8,8 +8,9 @@ use App\Enums\PageVisibility;
 use App\Models\Post;
 use Illuminate\Support\HtmlString;
 use Filament\Forms\Components\DateTimePicker;
-use Filament\Forms\Components\FileUpload;
+use Filament\Forms\Components\SpatieMediaLibraryFileUpload;
 use Filament\Forms\Components\Placeholder;
+use Filament\Forms\Components\RichEditor;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
@@ -47,10 +48,8 @@ class PostForm
                                             ->maxLength(255)
                                             ->regex('/^[a-z0-9]+(?:-[a-z0-9]+)*$/')
                                             ->helperText('URL-friendly identifier. Auto-generated from title.'),
-                                        Textarea::make('excerpt')
-                                            ->rows(3)
-                                            ->maxLength(500),
-                                        FileUpload::make('featured_image')
+                                        SpatieMediaLibraryFileUpload::make('featured_image')
+                                            ->collection('featured-image')
                                             ->image()
                                             ->acceptedFileTypes(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
                                             ->maxSize(5120)
@@ -89,19 +88,60 @@ class PostForm
 
                         Tabs\Tab::make('Content')
                             ->schema([
-                                Section::make('Post Blocks')
-                                    ->description('Use Admin > Post Blocks to manage reusable blocks for this post using the shared block pipeline.')
+                                Section::make('Main Content')
+                                    ->description('Write your post content here. This is the primary editable area.')
+                                    ->collapsible(false)
+                                    ->schema([
+                                        RichEditor::make('content')
+                                            ->label('')
+                                            ->toolbarButtons([
+                                                'bold',
+                                                'italic',
+                                                'underline',
+                                                'strike',
+                                                'link',
+                                                'h2',
+                                                'h3',
+                                                'bulletList',
+                                                'orderedList',
+                                                'blockquote',
+                                                'codeBlock',
+                                                'table',
+                                                'attachFiles',
+                                                'undo',
+                                                'redo',
+                                            ])
+                                            ->extraAttributes(['style' => 'min-height:500px'])
+                                            ->columnSpanFull(),
+
+                                        Textarea::make('excerpt')
+                                            ->label('Excerpt')
+                                            ->rows(3)
+                                            ->maxLength(500)
+                                            ->helperText('Optional short summary — used for blog listing cards, search results, RSS, and SEO fallback.'),
+                                    ]),
+
+                                Section::make('Advanced Layout')
+                                    ->description('Use Content Blocks only when building advanced layouts or reusable sections. Leave empty for standard posts.')
+                                    ->collapsible(true)
+                                    ->collapsed(true)
                                     ->schema([
                                         Placeholder::make('blocks_notice')
-                                            ->label('Block Management')
+                                            ->label('Block Builder')
                                             ->content(function (?Post $record): HtmlString {
                                                 if (! $record) {
-                                                    return new HtmlString('Save this post first, then manage content blocks from Admin → Post Blocks.');
+                                                    return new HtmlString('Save this post first, then you can add content blocks.');
                                                 }
 
-                                                $url = url('/admin/post-blocks/create?post_id=' . $record->id);
+                                                $createUrl = url('/admin/page-blocks/create?post_id=' . $record->id);
+                                                $listUrl   = url('/admin/page-blocks?tableFilters[blockable_type][value]=App%5CModels%5CPost');
 
-                                                return new HtmlString("Manage content blocks from <a href=\"{$url}\" class=\"text-primary-600 underline\">Post Blocks</a>.");
+                                                return new HtmlString(
+                                                    '<div style="display:flex;gap:12px;align-items:center;">'
+                                                    . '<a href="' . $createUrl . '" style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;background:#f59e0b;color:#fff;border-radius:6px;font-weight:600;text-decoration:none;">+ Add Block</a>'
+                                                    . '<a href="' . $listUrl . '" style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border:1px solid #d1d5db;border-radius:6px;font-weight:500;text-decoration:none;">View Post Blocks</a>'
+                                                    . '</div>'
+                                                );
                                             }),
                                     ]),
                             ]),

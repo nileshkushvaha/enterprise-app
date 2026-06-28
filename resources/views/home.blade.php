@@ -1,12 +1,21 @@
 @extends('layouts.frontend')
-@section('bare', true)
 
 @section('title', config('app.name') . ' — Find Your Perfect 1-on-1 Tutor')
 
 @section('content')
 
 @php
-$appName = config('app.name', 'EduVerse');
+// $appName, $logo, $supportEmail, $supportPhone, $address,
+// $footerText, $footerCopyright, $recentPosts
+// are passed from PageController::home()
+$appName ??= config('app.name', 'App');
+$logo ??= null;
+$supportEmail ??= null;
+$supportPhone ??= null;
+$address ??= null;
+$footerText ??= null;
+$footerCopyright ??= null;
+$recentPosts ??= collect();
 
 $countries = ['🇮🇳 India', '🇺🇸 United States', '🇬🇧 United Kingdom', '🇨🇦 Canada', '🇦🇺 Australia', '🌐 All Regions'];
 
@@ -70,19 +79,17 @@ $faqs = [
 ];
 @endphp
 
+@include('partials.home-banner')
+
 {{-- ============================================================
      MAIN WRAPPER — Alpine.js root
      ============================================================ --}}
 <div
+    style="background:#05080F"
     x-data="{
-        mobileOpen: false,
-        scrolled: false,
-        activeCountry: '🇮🇳 India',
         activeFaq: null,
     }"
     x-init="
-        window.addEventListener('scroll', () => { scrolled = window.scrollY > 30; });
-
         /* ---- Counter animation triggered by Intersection Observer ---- */
         const animateCounters = () => {
             document.querySelectorAll('[data-counter]').forEach(el => {
@@ -109,308 +116,6 @@ $faqs = [
             }, { threshold: 0.3 }).observe(statsEl);
         }
     ">
-
-    {{-- ============================================================
-     NAVBAR
-     ============================================================ --}}
-    <nav class="navbar fixed top-0 left-0 right-0 z-50" :class="{ scrolled: scrolled }">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex items-center justify-between h-16">
-
-                {{-- Logo --}}
-                <a href="/" class="flex items-center gap-2.5 flex-shrink-0">
-                    <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-500/30">
-                        <svg class="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                        </svg>
-                    </div>
-                    <span class="text-xl font-bold text-white">{{ explode(' ', $appName)[0] }}<span class="text-grad"> {{ implode(' ', array_slice(explode(' ', $appName), 1)) }}</span></span>
-                </a>
-
-                {{-- Desktop Nav --}}
-                <div class="hidden md:flex items-center gap-7">
-                    @foreach(['Home'=>'#','Courses'=>'#courses','Tutors'=>'#tutors','Pricing'=>'#pricing','Blog'=>'#','Contact'=>'#'] as $label => $href)
-                    <a href="{{ $href }}" class="text-gray-400 hover:text-white text-sm font-medium transition-colors duration-200">{{ $label }}</a>
-                    @endforeach
-                </div>
-
-                {{-- Auth Buttons — dynamic based on auth state --}}
-                <div class="hidden md:flex items-center gap-3">
-                    @auth
-                    <a href="{{ route('dashboard') }}" class="text-gray-300 hover:text-white text-sm font-medium transition-colors px-3 py-2 flex items-center gap-1.5">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-                        </svg>
-                        Dashboard
-                    </a>
-                    <form method="POST" action="{{ route('auth.logout') }}">
-                        @csrf
-                        <button type="submit" class="glass-md px-5 py-2.5 rounded-xl text-gray-300 hover:text-white text-sm font-semibold transition-colors flex items-center gap-1.5">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                            </svg>
-                            Sign Out
-                        </button>
-                    </form>
-                    @else
-                    <a href="{{ route('auth.login') }}" class="text-gray-300 hover:text-white text-sm font-medium transition-colors px-3 py-2">Sign In</a>
-                    <a href="{{ route('auth.register') }}" class="btn-amber px-5 py-2.5 rounded-xl text-white text-sm font-bold">Get Started →</a>
-                    @endauth
-                </div>
-
-                {{-- Mobile Hamburger --}}
-                <button @click="mobileOpen = !mobileOpen" class="md:hidden text-gray-300 p-2 rounded-lg glass-md">
-                    <svg x-show="!mobileOpen" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-                    </svg>
-                    <svg x-show="mobileOpen" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                </button>
-            </div>
-
-            {{-- Mobile Menu --}}
-            <div x-show="mobileOpen" x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0 -translate-y-2" x-transition:enter-end="opacity-100 translate-y-0" class="md:hidden py-4 border-t border-white/10">
-                <div class="flex flex-col gap-1">
-                    @foreach(['Home'=>'#','Courses'=>'#courses','Tutors'=>'#tutors','Pricing'=>'#pricing','Blog'=>'#'] as $label => $href)
-                    <a href="{{ $href }}" class="text-gray-300 hover:text-white px-4 py-2.5 rounded-lg hover:bg-white/10 text-sm font-medium transition-colors">{{ $label }}</a>
-                    @endforeach
-                    <div class="border-t border-white/10 mt-2 pt-3 flex gap-3 px-4">
-                        @auth
-                        <a href="{{ route('dashboard') }}" class="flex-1 text-center glass py-2.5 rounded-xl text-gray-300 text-sm font-semibold flex items-center justify-center gap-1.5">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-                            </svg>
-                            Dashboard
-                        </a>
-                        <form method="POST" action="{{ route('auth.logout') }}" class="flex-1">
-                            @csrf
-                            <button type="submit" class="w-full text-center btn-amber py-2.5 rounded-xl text-white text-sm font-bold">Sign Out</button>
-                        </form>
-                        @else
-                        <a href="{{ route('auth.login') }}" class="flex-1 text-center glass py-2.5 rounded-xl text-gray-300 text-sm font-semibold">Sign In</a>
-                        <a href="{{ route('auth.register') }}" class="flex-1 text-center btn-amber py-2.5 rounded-xl text-white text-sm font-bold">Get Started</a>
-                        @endauth
-                    </div>
-                </div>
-            </div>
-        </div>
-    </nav>
-
-    {{-- ============================================================
-     HERO SECTION
-     ============================================================ --}}
-    <section class="hero-mesh min-h-screen flex flex-col">
-
-        {{-- Background orbs --}}
-        <div class="bg-orb w-[600px] h-[600px] top-[-200px] right-[-150px] opacity-20"
-            style="background: radial-gradient(circle, #6366F1, transparent)"></div>
-        <div class="bg-orb w-[400px] h-[400px] bottom-0 left-[-80px] opacity-15"
-            style="background: radial-gradient(circle, #8B5CF6, transparent); animation-delay: 3s;"></div>
-        <div class="bg-orb w-[250px] h-[250px] top-1/3 left-1/3 opacity-10"
-            style="background: radial-gradient(circle, #F59E0B, transparent); animation-delay: 5s;"></div>
-
-        {{-- Spacer for fixed navbar --}}
-        <div class="h-16 flex-shrink-0"></div>
-
-        {{-- Main Hero Content --}}
-        <div class="max-w-7xl mx-auto px-4 w-full flex-1 flex items-center py-12 relative z-10">
-            <div class="grid lg:grid-cols-2 gap-12 xl:gap-20 items-center w-full">
-
-                {{-- LEFT: Copy --}}
-                <div>
-                    {{-- Badge --}}
-                    <div class="inline-flex items-center gap-2 glass rounded-full px-4 py-2 mb-6">
-                        <div class="badge-dot"></div>
-                        <span class="text-gray-300 text-sm">Trusted by <strong class="text-white">10,000+</strong> Students</span>
-                        <span class="text-amber-400 text-xs font-bold ml-1">⭐ 4.9 Rated</span>
-                    </div>
-
-                    {{-- Headline --}}
-                    <h1 class="text-4xl sm:text-5xl xl:text-6xl font-bold text-white leading-[1.1] mb-6">
-                        Top Online Private<br>
-                        Tutors for<br>
-                        <span class="text-grad">1-on-1 Learning</span>
-                    </h1>
-
-                    {{-- Subheadline --}}
-                    <p class="text-gray-400 text-lg leading-relaxed mb-8 max-w-lg">
-                        Get expert online tutoring for school subjects and competitive exams.
-                        Learn at your own pace with <span class="text-white font-medium">personalised sessions</span> from verified experts.
-                    </p>
-
-                    {{-- CTAs --}}
-                    <div class="flex flex-wrap gap-4 mb-10">
-                        <a href="/register" class="btn-amber px-8 py-4 rounded-2xl text-white font-bold text-base shadow-xl">
-                            Find Tutor Now 🚀
-                        </a>
-                        <a href="#how-it-works" class="glass-md px-8 py-4 rounded-2xl text-white font-semibold text-base hover:bg-white/15 transition-colors flex items-center gap-2">
-                            <div class="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center text-xs">▶</div>
-                            Watch Demo
-                        </a>
-                    </div>
-
-                    {{-- Mini Stats --}}
-                    <div class="flex flex-wrap gap-6 items-center">
-                        <div class="text-center">
-                            <div class="text-2xl font-bold text-white">10K+</div>
-                            <div class="text-gray-500 text-xs mt-0.5">Students</div>
-                        </div>
-                        <div class="w-px h-8 bg-white/15"></div>
-                        <div class="text-center">
-                            <div class="text-2xl font-bold text-white">200+</div>
-                            <div class="text-gray-500 text-xs mt-0.5">Expert Tutors</div>
-                        </div>
-                        <div class="w-px h-8 bg-white/15"></div>
-                        <div class="text-center">
-                            <div class="text-2xl font-bold text-white">500+</div>
-                            <div class="text-gray-500 text-xs mt-0.5">Courses</div>
-                        </div>
-                        <div class="w-px h-8 bg-white/15"></div>
-                        <div class="text-center">
-                            <div class="text-2xl font-bold text-white">4.9 ★</div>
-                            <div class="text-gray-500 text-xs mt-0.5">Avg Rating</div>
-                        </div>
-                    </div>
-                </div>
-
-                {{-- RIGHT: Dashboard Mockup --}}
-                <div class="hidden lg:flex items-center justify-center relative py-12">
-
-                    {{-- Floating geometric bg shapes --}}
-                    <div class="absolute w-72 h-72 rounded-full border border-white/5 top-4 left-4 float-y-slow"></div>
-                    <div class="absolute w-48 h-48 rounded-full border border-indigo-500/10 bottom-8 right-8 float-y" style="animation-delay:2s"></div>
-
-                    {{-- Main course card --}}
-                    <div class="glass-light rounded-3xl p-6 w-80 shadow-2xl float-y relative z-10">
-                        <div class="flex items-center gap-3 mb-5">
-                            <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-2xl shadow-lg shadow-indigo-500/30">💻</div>
-                            <div>
-                                <div class="font-bold text-slate-900 text-sm">Data Structures & Algo</div>
-                                <div class="text-slate-500 text-xs">Computer Science · Intermediate</div>
-                            </div>
-                        </div>
-
-                        {{-- Progress --}}
-                        <div class="mb-4">
-                            <div class="flex justify-between text-xs mb-1.5">
-                                <span class="text-slate-500">Course Progress</span>
-                                <span class="text-indigo-600 font-bold">68%</span>
-                            </div>
-                            <div class="h-2 bg-slate-100 rounded-full overflow-hidden">
-                                <div class="h-full w-[68%] bg-gradient-to-r from-indigo-500 to-violet-500 rounded-full shimmer-line"></div>
-                            </div>
-                        </div>
-
-                        {{-- Next lesson --}}
-                        <div class="glass rounded-xl p-3 mb-4" style="background:rgba(99,102,241,.06); border-color:rgba(99,102,241,.15);">
-                            <div class="flex items-center gap-2">
-                                <span class="text-lg">▶</span>
-                                <div>
-                                    <div class="text-xs text-slate-500">Next Lesson</div>
-                                    <div class="text-sm font-semibold text-slate-900">Binary Trees & BST</div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="flex items-center justify-between">
-                            <div class="flex -space-x-2">
-                                @foreach(['🟣','🔵','🟢'] as $dot)
-                                <div class="w-7 h-7 rounded-full border-2 border-white bg-gradient-to-br from-indigo-400 to-violet-400 flex items-center justify-center text-xs">{{ $loop->iteration }}</div>
-                                @endforeach
-                                <div class="w-7 h-7 rounded-full border-2 border-white bg-slate-100 flex items-center justify-center text-[10px] text-slate-500 font-bold">+9</div>
-                            </div>
-                            <button class="btn-indigo px-4 py-2 rounded-xl text-white text-xs font-bold">Continue →</button>
-                        </div>
-                    </div>
-
-                    {{-- Floating Achievement Badge --}}
-                    <div class="absolute -bottom-2 -left-6 glass-light rounded-2xl p-4 shadow-xl float-y" style="animation-delay:1.5s; z-index:20;">
-                        <div class="flex items-center gap-3">
-                            <div class="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center text-xl">🏆</div>
-                            <div>
-                                <div class="text-[10px] text-slate-400 uppercase tracking-wide">Achievement</div>
-                                <div class="font-bold text-slate-900 text-sm">7-Day Streak!</div>
-                                <div class="flex gap-0.5 mt-0.5">
-                                    @for($i=0;$i<7;$i++)<div class="w-3 h-1.5 bg-amber-400 rounded-full {{ $i < 5 ? '' : 'opacity-30' }}">
-                                </div>@endfor
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                {{-- Floating Tutor Badge --}}
-                <div class="absolute -top-2 -right-4 glass-light rounded-2xl p-4 shadow-xl float-y" style="animation-delay:.8s; z-index:20;">
-                    <div class="flex items-center gap-3">
-                        <div class="w-12 h-12 rounded-full bg-gradient-to-br from-violet-400 to-indigo-500 flex items-center justify-center text-2xl border-2 border-white shadow">👩</div>
-                        <div>
-                            <div class="text-[10px] text-slate-400 uppercase tracking-wide">Your Tutor</div>
-                            <div class="font-bold text-slate-900 text-sm">Dr. Sarah K.</div>
-                            <div class="text-amber-400 text-xs">★★★★★ <span class="text-slate-400">(128)</span></div>
-                        </div>
-                    </div>
-                    <div class="flex items-center gap-1.5 mt-2">
-                        <div class="badge-dot"></div>
-                        <span class="text-[11px] text-emerald-500 font-medium">Available Now</span>
-                    </div>
-                </div>
-
-                {{-- Floating Live Session Badge --}}
-                <div class="absolute top-1/2 -right-8 glass-light rounded-2xl px-4 py-3 shadow-xl" style="transform:translateY(40px); z-index:20;">
-                    <div class="flex items-center gap-2">
-                        <div class="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
-                        <span class="text-xs font-bold text-slate-900">Live Session</span>
-                    </div>
-                    <div class="text-[10px] text-slate-400 mt-0.5">Physics · 43 students</div>
-                </div>
-            </div>
-        </div>
-</div>
-
-{{-- Country Selector Banner --}}
-<div class="max-w-4xl mx-auto px-4 w-full pb-16 relative z-10">
-    <div class="glass-md rounded-2xl p-5 shadow-2xl shadow-indigo-500/10">
-        <div class="flex items-center gap-3 mb-4">
-            <div class="w-8 h-8 rounded-xl bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center flex-shrink-0">
-                <svg class="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-            </div>
-            <div>
-                <p class="text-white text-sm font-semibold">Select Your Country</p>
-                <p class="text-gray-400 text-xs">Find tutors and courses tailored to your curriculum</p>
-            </div>
-            <div class="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex-shrink-0">
-                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse inline-block"></span>
-                <span class="text-emerald-400 text-xs font-medium" x-text="activeCountry || '🇮🇳 India'"></span>
-            </div>
-        </div>
-
-        <div class="flex flex-wrap gap-2">
-            @foreach($countries as $country)
-            <button
-                @click="activeCountry = '{{ $country }}'"
-                :class="activeCountry === '{{ $country }}'
-                        ? 'bg-indigo-500/25 border-indigo-500/60 text-indigo-300 shadow-lg shadow-indigo-500/10'
-                        : 'text-gray-400 hover:text-gray-200 hover:border-white/25'"
-                class="glass px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all duration-200 border border-white/10 flex items-center gap-1.5">
-                {{ $country }}
-                <span x-show="activeCountry === '{{ $country }}'" class="w-1.5 h-1.5 rounded-full bg-indigo-400 inline-block flex-shrink-0"></span>
-            </button>
-            @endforeach
-        </div>
-
-        <div class="mt-4 pt-4 border-t border-white/10 flex items-center justify-between">
-            <p class="text-gray-500 text-xs">
-                Showing tutors available in <span class="text-white font-medium" x-text="activeCountry || '🇮🇳 India'"></span>
-            </p>
-            <a href="{{ route('auth.register') }}" class="btn-amber px-5 py-2 rounded-xl text-white font-bold text-sm">
-                Find Tutors →
-            </a>
-        </div>
-    </div>
-</div>
-</section>
 
 {{-- ============================================================
      ALL-IN-ONE FEATURES SECTION
@@ -754,6 +459,84 @@ $faqs = [
 </section>
 
 {{-- ============================================================
+     LATEST BLOG POSTS — dynamic from $recentPosts
+     ============================================================ --}}
+@if($recentPosts->isNotEmpty())
+<section class="py-24" style="background: linear-gradient(180deg, #06080f 0%, #0b0d1a 100%)">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="text-center mb-14">
+            <span class="inline-block bg-indigo-500/10 text-indigo-400 text-xs font-bold uppercase tracking-widest px-4 py-1.5 rounded-full mb-4 border border-indigo-500/20">Blog</span>
+            <h2 class="text-4xl font-bold text-white">Latest <span class="gradient-text">Insights</span></h2>
+            <p class="mt-4 text-slate-400 max-w-xl mx-auto">Tips, strategies, and stories from our learning community.</p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            @foreach($recentPosts as $index => $post)
+            <article class="group bg-white/[0.02] border border-white/[0.06] rounded-2xl overflow-hidden card-glow transition-all duration-300 animate-fade-in-up"
+                style="animation-delay: {{ $index * 0.08 }}s">
+                {{-- Thumbnail --}}
+                @php $thumb = $post->getFirstMediaUrl('thumbnail') ?: $post->getFirstMediaUrl(); @endphp
+                @if($thumb)
+                <a href="{{ route('blog.show', $post->slug) }}" class="block aspect-video overflow-hidden">
+                    <img src="{{ $thumb }}" alt="{{ $post->title }}"
+                        class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500">
+                </a>
+                @else
+                <div class="aspect-video bg-gradient-to-br from-indigo-900/30 to-violet-900/20 flex items-center justify-center">
+                    <svg class="w-12 h-12 text-indigo-500/30" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                    </svg>
+                </div>
+                @endif
+
+                <div class="p-6">
+                    {{-- Category --}}
+                    @if($post->categories->isNotEmpty())
+                    <span class="inline-block text-xs font-semibold text-indigo-400 uppercase tracking-wider mb-3">
+                        {{ $post->categories->first()->name }}
+                    </span>
+                    @endif
+
+                    <h3 class="text-lg font-bold text-white mb-2 leading-snug group-hover:text-indigo-300 transition-colors">
+                        <a href="{{ route('blog.show', $post->slug) }}">{{ $post->title }}</a>
+                    </h3>
+
+                    @if($post->excerpt)
+                    <p class="text-slate-400 text-sm leading-relaxed mb-4 line-clamp-2">{{ $post->excerpt }}</p>
+                    @endif
+
+                    <div class="flex items-center justify-between mt-4 pt-4 border-t border-white/[0.05]">
+                        <div class="flex items-center gap-2">
+                            @if($post->author)
+                            <div class="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                                {{ strtoupper(substr($post->author->name ?? 'A', 0, 1)) }}
+                            </div>
+                            <span class="text-xs text-slate-500">{{ $post->author->name }}</span>
+                            @endif
+                        </div>
+                        @if($post->published_at)
+                        <span class="text-xs text-slate-600">{{ $post->published_at->format('M j, Y') }}</span>
+                        @endif
+                    </div>
+                </div>
+            </article>
+            @endforeach
+        </div>
+
+        <div class="text-center mt-10">
+            <a href="{{ route('blog.index') }}"
+                class="inline-flex items-center gap-2 px-7 py-3 rounded-xl bg-white/[0.04] border border-white/[0.08] text-slate-300 hover:text-white hover:border-indigo-500/40 text-sm font-semibold transition-all duration-200">
+                View all posts
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+                </svg>
+            </a>
+        </div>
+    </div>
+</section>
+@endif
+
+{{-- ============================================================
      FAQ
      ============================================================ --}}
 <section class="py-24 bg-white">
@@ -823,76 +606,6 @@ $faqs = [
     </div>
 </section>
 
-{{-- ============================================================
-     FOOTER
-     ============================================================ --}}
-<footer class="bg-slate-950 text-gray-400">
-    <div class="max-w-7xl mx-auto px-4 py-16">
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-10 mb-12">
-
-            {{-- Brand --}}
-            <div class="lg:col-span-1">
-                <div class="flex items-center gap-2.5 mb-4">
-                    <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center">
-                        <svg class="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                        </svg>
-                    </div>
-                    <span class="text-xl font-bold text-white">{{ explode(' ', $appName)[0] }}<span class="text-grad"> {{ implode(' ', array_slice(explode(' ', $appName), 1)) }}</span></span>
-                </div>
-                <p class="text-sm leading-relaxed text-gray-500 mb-5">
-                    The leading platform connecting students with verified expert tutors for personalised 1-on-1 learning experiences.
-                </p>
-                <div class="flex items-center gap-3">
-                    @foreach(['𝕏','f','in','▶'] as $icon)
-                    <a href="#" class="w-9 h-9 rounded-xl glass flex items-center justify-center text-gray-400 hover:text-white hover:bg-indigo-500/20 transition-colors text-sm font-bold">{{ $icon }}</a>
-                    @endforeach
-                </div>
-            </div>
-
-            {{-- Quick Links --}}
-            <div>
-                <h4 class="text-white font-semibold mb-5 text-sm uppercase tracking-wider">Quick Links</h4>
-                <ul class="space-y-2.5">
-                    @foreach(['Home','About Us','Courses & Subjects','SAT Series','Pricing','Contact Us'] as $link)
-                    <li><a href="#" class="foot-link text-sm">{{ $link }}</a></li>
-                    @endforeach
-                </ul>
-            </div>
-
-            {{-- Subjects --}}
-            <div>
-                <h4 class="text-white font-semibold mb-5 text-sm uppercase tracking-wider">Subjects</h4>
-                <ul class="space-y-2.5">
-                    @foreach(['Mathematics','Computer Science','Physics & Chemistry','English Language','Biology & Life Science','Competitive Exams'] as $link)
-                    <li><a href="#" class="foot-link text-sm">{{ $link }}</a></li>
-                    @endforeach
-                </ul>
-            </div>
-
-            {{-- Legal --}}
-            <div>
-                <h4 class="text-white font-semibold mb-5 text-sm uppercase tracking-wider">Legal</h4>
-                <ul class="space-y-2.5 mb-6">
-                    @foreach(['Privacy Policy','Terms of Service','Cookie Policy','Refund Policy','FAQ'] as $link)
-                    <li><a href="#" class="foot-link text-sm">{{ $link }}</a></li>
-                    @endforeach
-                </ul>
-            </div>
-        </div>
-
-        <div class="border-t border-white/5 pt-8 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <p class="text-xs text-gray-600">© {{ date('Y') }} {{ $appName }}. All rights reserved. Built with ❤️ for learners worldwide.</p>
-            <div class="flex items-center gap-4 text-xs text-gray-600">
-                <a href="#" class="hover:text-gray-400 transition-colors">Privacy</a>
-                <span>·</span>
-                <a href="#" class="hover:text-gray-400 transition-colors">Terms</a>
-                <span>·</span>
-                <a href="#" class="hover:text-gray-400 transition-colors">Sitemap</a>
-            </div>
-        </div>
-    </div>
-</footer>
 
 </div>{{-- /x-data --}}
 

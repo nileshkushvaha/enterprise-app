@@ -24,6 +24,24 @@ class PageBlocksTable
     {
         return $table
             ->columns([
+                TextColumn::make('name')
+                    ->label('Name')
+                    ->placeholder('—')
+                    ->searchable()
+                    ->description(fn ($record): string => $record->block_type instanceof BlockType
+                        ? $record->block_type->label()
+                        : (string) $record->block_type
+                    )
+                    ->weight('semibold'),
+
+                TextColumn::make('blockable_type')
+                    ->label('Owner')
+                    ->formatStateUsing(fn ($state, $record): string => match ($state) {
+                        'App\Models\Post' => '📝 Post: ' . ($record->post?->title ?? '—'),
+                        default           => '📄 Page: ' . ($record->page?->title ?? '—'),
+                    })
+                    ->searchable(false),
+
                 TextColumn::make('block_type')
                     ->label('Block Type')
                     ->badge()
@@ -36,18 +54,12 @@ class PageBlocksTable
                     ->sortable()
                     ->width('100px'),
 
-                TextColumn::make('content')
-                    ->label('Preview')
-                    ->limit(50)
-                    ->formatStateUsing(function ($state) {
-                        if (is_string($state)) {
-                            $decoded = json_decode($state, true);
-                        } else {
-                            $decoded = $state;
-                        }
-                        return json_encode($decoded, JSON_UNESCAPED_SLASHES) ?: 'N/A';
-                    })
-                    ->copyable(),
+                TextColumn::make('position')
+                    ->label('Position')
+                    ->badge()
+                    ->color(fn (string $state): string => $state === 'before_content' ? 'info' : 'gray')
+                    ->formatStateUsing(fn (string $state): string => $state === 'before_content' ? 'Before' : 'After')
+                    ->sortable(),
 
                 ToggleColumn::make('is_active')
                     ->label('Active'),
@@ -63,6 +75,13 @@ class PageBlocksTable
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
+                SelectFilter::make('blockable_type')
+                    ->label('Owner Type')
+                    ->options([
+                        'App\Models\Page' => 'Pages',
+                        'App\Models\Post' => 'Posts',
+                    ]),
+
                 SelectFilter::make('block_type')
                     ->label('Block Type')
                     ->options(BlockType::class)

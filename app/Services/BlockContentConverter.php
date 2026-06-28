@@ -32,6 +32,7 @@ class BlockContentConverter
             BlockType::Spacer => self::spacerToJson($formData),
             BlockType::Map => self::mapToJson($formData),
             BlockType::ContactForm => self::contactFormToJson($formData),
+            BlockType::ContactInfo => self::contactInfoToJson($formData),
         };
     }
 
@@ -233,6 +234,18 @@ class BlockContentConverter
             'fields' => $normalizedFields,
             'button_text' => $data['button_text'] ?? 'Send Message',
             'success_message' => $data['success_message'] ?? 'Thank you for your message!',
+        ];
+    }
+
+    private static function contactInfoToJson(array $data): array
+    {
+        $items = $data['items'] ?? [];
+
+        return [
+            'eyebrow'     => $data['eyebrow'] ?? '',
+            'title'       => $data['title'] ?? '',
+            'description' => $data['description'] ?? '',
+            'items'       => array_values(array_filter($items, fn ($i) => !empty($i['value'] ?? null))),
         ];
     }
 }

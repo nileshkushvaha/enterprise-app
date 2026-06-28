@@ -8,18 +8,22 @@ use App\Content\Contracts\HasContentBlocks;
 use App\Content\SEO\SeoManager;
 use App\Models\Page;
 use App\Models\Post;
+use Illuminate\Support\Facades\Storage;
 use App\Services\BlockRenderer;
 use App\Settings\GeneralSettings;
 use App\Settings\SeoSettings;
 use Illuminate\Support\Collection;
 
 /**
- * Unified content renderer — superset of PageRenderService.
+ * Unified content renderer.
  *
- * Replaces the duplicated Page/Post rendering in PageRenderService with a
- * single, owner-agnostic pipeline. All PageRenderService method signatures
- * are preserved so that zero external callsites need to change; the old
- * PageRenderService class simply extends this one.
+ * Rendering order per owner:
+ *   1. Content blocks where position = 'before_content'
+ *   2. Primary rich content (<section class="cms-content">)
+ *   3. Content blocks where position = 'after_content'
+ *
+ * Backward compatible: owners with no rich content and/or no before-blocks
+ * continue rendering exactly as before.
  */
 class ContentRenderer
 {
@@ -30,37 +34,24 @@ class ContentRenderer
         private readonly SeoSettings $seoSettings,
     ) {}
 
-    // ── Generalised API (new, for any HasContentBlocks owner) ────────────
+    // ── Generalised API ──────────────────────────────────────────────────
 
-    /**
-     * Render any content type, with caching.
-     */
     public function renderContent(HasContentBlocks $owner): string
     {
-        return cache()->remember(
-            $this->contentCacheKey($owner),
-            now()->addSeconds($this->renderTtl()),
-            fn () => $this->renderContentUncached($owner)
-        );
+        return $this->renderContentUncached($owner);
     }
 
-    /**
-     * Render without caching (for admin preview).
-     */
     public function renderContentPreview(HasContentBlocks $owner): string
     {
         return $this->renderContentUncached($owner);
     }
 
-    /**
-     * Flush the render cache for any owner.
-     */
     public function invalidateContentCache(HasContentBlocks $owner): void
     {
         cache()->forget($this->contentCacheKey($owner));
     }
 
-    // ── Backward-compatible Page API (mirrors PageRenderService exactly) ─
+    // ── Backward-compatible Page API ─────────────────────────────────────
 
     public function render(Page $page): string
     {
@@ -89,7 +80,7 @@ class ContentRenderer
         return $this->seoManager->getPageStructuredData($page);
     }
 
-    // ── Backward-compatible Post API (mirrors PageRenderService exactly) ─
+    // ── Backward-compatible Post API ─────────────────────────────────────
 
     public function renderPost(Post $post): string
     {
@@ -122,22 +113,56 @@ class ContentRenderer
 
     private function renderContentUncached(HasContentBlocks $owner): string
     {
-        $blocksHtml = $this->renderBlocks($owner->blocks);
+        $combined = cache()->remember(
+            $this->contentCacheKey($owner),
+            now()->addSeconds($this->renderTtl()),
+            fn () => $this->assembleCombinedContent($owner)
+        );
+
         $seo        = $this->resolveSeo($owner);
         $structured = $this->resolveStructuredData($owner);
 
-        return $this->applyLayout($blocksHtml, $owner, $seo, $structured);
+        return $this->applyLayout($combined, $owner, $seo, $structured);
+    }
+
+    private function assembleCombinedContent(HasContentBlocks $owner): string
+    {
+        $allBlocks = $owner->blocks;
+
+        $beforeHtml = $this->renderBlocks(
+            $allBlocks->where('is_active', true)->where('position', 'before_content')
+        );
+
+        $richHtml = $this->renderRichContent($owner);
+
+        $afterHtml = $this->renderBlocks(
+            $allBlocks->where('is_active', true)
+                ->whereIn('position', ['after_content', null, ''])
+        );
+
+        return $beforeHtml . $richHtml . $afterHtml;
+    }
+
+    private function renderRichContent(HasContentBlocks $owner): string
+    {
+        $content = $owner->content ?? null;
+
+        if (blank($content) || blank(strip_tags((string) $content))) {
+            return '';
+        }
+
+        return '<section class="py-12"><div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8"><div class="cms-content">' . $content . '</div></div></section>';
     }
 
     private function renderBlocks(Collection $blocks): string
     {
-        if ($blocks->isEmpty()) {
+        $sorted = $blocks->sortBy('sort_order');
+
+        if ($sorted->isEmpty()) {
             return '';
         }
 
-        return $blocks
-            ->sortBy('sort_order')
-            ->where('is_active', true)
+        return $sorted
             ->map(fn ($block) => $this->renderSingleBlock($block))
             ->join("\n");
     }
@@ -155,7 +180,7 @@ class ContentRenderer
 
     private function applyLayout(string $content, object $contentModel, array $seo, array $structuredData): string
     {
-        $layoutName = $contentModel->layout ?? 'default';
+        $layoutName = $contentModel->template ?? 'default';
         $layout     = match ($layoutName) {
             'landing' => 'layouts.landing',
             'blank'   => 'layouts.blank',
@@ -198,6 +223,17 @@ class ContentRenderer
         return strtolower("{$type}-render:{$id}");
     }
 
+    private function toStorageUrl(?string $path): ?string
+    {
+        if (blank($path)) {
+            return null;
+        }
+        if (str_starts_with($path, 'http') || str_starts_with($path, '//')) {
+            return $path;
+        }
+        return Storage::disk('public')->url($path);
+    }
+
     private function renderTtl(): int
     {
         return max(1, (int) config('cms.cache.page_render_ttl', 3600));
@@ -222,28 +258,28 @@ class ContentRenderer
 
         if (! $general) {
             return [
-                'app_name'                            => config('app.name'),
-                'logo'                                => null,
-                'favicon'                             => null,
-                'footer_text'                         => null,
-                'footer_copyright'                    => null,
-                'google_analytics_id'                 => null,
-                'google_tag_manager_id'               => null,
-                'facebook_pixel_id'                   => null,
-                'google_search_console_verification'  => null,
+                'app_name'                           => config('app.name'),
+                'logo'                               => null,
+                'favicon'                            => null,
+                'footer_text'                        => null,
+                'footer_copyright'                   => null,
+                'google_analytics_id'                => null,
+                'google_tag_manager_id'              => null,
+                'facebook_pixel_id'                  => null,
+                'google_search_console_verification' => null,
             ];
         }
 
         return [
-            'app_name'                            => $general->app_name,
-            'logo'                                => $general->logo,
-            'favicon'                             => $general->favicon,
-            'footer_text'                         => $general->footer_text,
-            'footer_copyright'                    => $general->footer_copyright,
-            'google_analytics_id'                 => $this->seoSettings->google_analytics_id,
-            'google_tag_manager_id'               => $this->seoSettings->google_tag_manager_id,
-            'facebook_pixel_id'                   => $this->seoSettings->facebook_pixel_id,
-            'google_search_console_verification'  => $this->seoSettings->google_search_console_verification,
+            'app_name'                           => $general->app_name,
+            'logo'                               => $this->toStorageUrl($general->logo),
+            'favicon'                            => $this->toStorageUrl($general->favicon),
+            'footer_text'                        => $general->footer_text,
+            'footer_copyright'                   => $general->footer_copyright,
+            'google_analytics_id'                => $this->seoSettings->google_analytics_id,
+            'google_tag_manager_id'              => $this->seoSettings->google_tag_manager_id,
+            'facebook_pixel_id'                  => $this->seoSettings->facebook_pixel_id,
+            'google_search_console_verification' => $this->seoSettings->google_search_console_verification,
         ];
     }
 }

@@ -189,6 +189,7 @@ class SeoSettingsPage extends Page
                         FileUpload::make('og_image')
                             ->label('Default OG Image')
                             ->image()
+                            ->disk('public')
                             ->acceptedFileTypes(['image/png', 'image/jpeg'])
                             ->maxSize(2048)
                             ->directory('settings/seo')

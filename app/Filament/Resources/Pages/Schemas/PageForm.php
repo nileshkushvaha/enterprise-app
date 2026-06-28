@@ -2,20 +2,23 @@
 
 namespace App\Filament\Resources\Pages\Schemas;
 
-use Filament\Forms\Components\DateTimePicker;
-use Filament\Forms\Components\FileUpload;
-use Filament\Forms\Components\Placeholder;
-use Filament\Schemas\Components\Section;
-use Filament\Forms\Components\Select;
-use Filament\Schemas\Components\Tabs;
-use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\Textarea;
-use Filament\Forms\Components\Toggle;
-
 use App\Actions\GeneratePageSlugAction;
 use App\Enums\PageStatus;
 use App\Enums\PageVisibility;
+use App\Models\Page;
+use Filament\Forms\Components\DateTimePicker;
+use Filament\Forms\Components\SpatieMediaLibraryFileUpload;
+use Filament\Forms\Components\Placeholder;
+use Filament\Forms\Components\Radio;
+use Filament\Forms\Components\RichEditor;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\Toggle;
+use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Tabs;
 use Filament\Schemas\Schema;
+use Illuminate\Support\HtmlString;
 
 class PageForm
 {
@@ -46,40 +49,109 @@ class PageForm
                                             ->maxLength(255)
                                             ->regex('/^[a-z0-9]+(?:-[a-z0-9]+)*$/')
                                             ->helperText('URL-friendly identifier. Auto-generated from title.'),
-                                        Textarea::make('excerpt')
-                                            ->maxLength(500)
-                                            ->rows(3)
-                                            ->helperText('Brief summary of the page content.'),
                                     ]),
 
                                 Section::make('Media')
                                     ->collapsible(false)
                                     ->schema([
-                                        FileUpload::make('featured_image')
+                                        SpatieMediaLibraryFileUpload::make('featured_image')
+                                            ->collection('featured-image')
                                             ->image()
                                             ->acceptedFileTypes(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
                                             ->maxSize(5120)
-                                            ->helperText('Upload a featured image (max 5MB)')
+                                            ->helperText('Upload a featured image (max 5MB)'),
                                     ]),
 
-                                Section::make('Template & Layout')
+                                Section::make('Page Template')
+                                    ->description('Controls the outer chrome — header, footer, and page hero visibility.')
                                     ->collapsible(false)
                                     ->schema([
-                                        Select::make('template')
+                                        Radio::make('template')
+                                            ->label('Template')
                                             ->options([
                                                 'default' => 'Default',
                                                 'landing' => 'Landing Page',
-                                                'blank' => 'Blank',
+                                                'blank'   => 'Blank',
                                             ])
-                                            ->default('default'),
+                                            ->descriptions([
+                                                'default' => 'Global header + footer + page title hero banner. Best for standard content pages.',
+                                                'landing' => 'No header or footer. Full-width clean canvas for sales or promo pages.',
+                                                'blank'   => 'Zero chrome. Raw block output only — for embeds or iframes.',
+                                            ])
+                                            ->default('default')
+                                            ->inline(false),
+
                                         Select::make('layout')
+                                            ->label('Content Width')
+                                            ->helperText('Controls how wide the content area stretches inside the template.')
                                             ->options([
-                                                'default' => 'Default',
-                                                'sidebar-left' => 'Sidebar Left',
-                                                'sidebar-right' => 'Sidebar Right',
-                                                'full-width' => 'Full Width',
+                                                'default'       => '🖥️  Default (max-w-7xl)',
+                                                'full-width'    => '⬛  Full Width (edge to edge)',
+                                                'sidebar-left'  => '◧  Sidebar Left (coming soon)',
+                                                'sidebar-right' => '◨  Sidebar Right (coming soon)',
                                             ])
+                                            ->native(false)
                                             ->default('default'),
+                                    ]),
+                            ]),
+
+                        Tabs\Tab::make('Content')
+                            ->schema([
+                                Section::make('Main Content')
+                                    ->description('Write your page content here. This is the primary editable area, similar to a WordPress post editor.')
+                                    ->collapsible(false)
+                                    ->schema([
+                                        RichEditor::make('content')
+                                            ->label('')
+                                            ->toolbarButtons([
+                                                'bold',
+                                                'italic',
+                                                'underline',
+                                                'strike',
+                                                'link',
+                                                'h2',
+                                                'h3',
+                                                'bulletList',
+                                                'orderedList',
+                                                'blockquote',
+                                                'codeBlock',
+                                                'table',
+                                                'attachFiles',
+                                                'undo',
+                                                'redo',
+                                            ])
+                                            ->extraAttributes(['style' => 'min-height:500px'])
+                                            ->columnSpanFull(),
+
+                                        Textarea::make('excerpt')
+                                            ->label('Excerpt')
+                                            ->rows(3)
+                                            ->maxLength(500)
+                                            ->helperText('Optional short summary — used for cards, search results, RSS, and SEO fallback.'),
+                                    ]),
+
+                                Section::make('Advanced Layout')
+                                    ->description('Use Content Blocks only when building advanced landing pages or reusable sections. Leave empty for standard pages.')
+                                    ->collapsible(true)
+                                    ->collapsed(true)
+                                    ->schema([
+                                        Placeholder::make('blocks_notice')
+                                            ->label('Block Builder')
+                                            ->content(function (?Page $record): HtmlString {
+                                                if (! $record) {
+                                                    return new HtmlString('Save this page first, then you can add content blocks.');
+                                                }
+
+                                                $createUrl = url('/admin/page-blocks/create?page_id=' . $record->id);
+                                                $listUrl   = url('/admin/page-blocks?tableFilters[blockable_type][value]=App%5CModels%5CPage');
+
+                                                return new HtmlString(
+                                                    '<div style="display:flex;gap:12px;align-items:center;">'
+                                                    . '<a href="' . $createUrl . '" style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;background:#f59e0b;color:#fff;border-radius:6px;font-weight:600;text-decoration:none;">+ Add Block</a>'
+                                                    . '<a href="' . $listUrl . '" style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border:1px solid #d1d5db;border-radius:6px;font-weight:500;text-decoration:none;">View Page Blocks</a>'
+                                                    . '</div>'
+                                                );
+                                            }),
                                     ]),
                             ]),
 
@@ -104,18 +176,6 @@ class PageForm
                                     ]),
                             ]),
 
-                        Tabs\Tab::make('Blocks')
-                            ->schema([
-                                Section::make('Page Blocks')
-                                    ->collapsible(false)
-                                    ->description('Blocks are managed from the dedicated Blocks resource to keep schema contracts consistent.')
-                                    ->schema([
-                                        Placeholder::make('blocks_notice')
-                                            ->label('Block Management')
-                                            ->content('Use Admin > Blocks to create and edit typed blocks. This keeps Form → Converter → Hydrator → Renderer contracts synchronized.'),
-                                    ]),
-                            ]),
-                        
                         Tabs\Tab::make('SEO')
                             ->schema([
                                 Section::make('Search Engine Optimization')
@@ -137,9 +197,9 @@ class PageForm
                                             ->nullable(),
                                         Select::make('robots')
                                             ->options([
-                                                'index, follow' => 'Index & Follow',
-                                                'noindex, follow' => 'No Index, Follow',
-                                                'index, nofollow' => 'Index, No Follow',
+                                                'index, follow'     => 'Index & Follow',
+                                                'noindex, follow'   => 'No Index, Follow',
+                                                'index, nofollow'   => 'Index, No Follow',
                                                 'noindex, nofollow' => 'No Index, No Follow',
                                             ])
                                             ->default('index, follow')

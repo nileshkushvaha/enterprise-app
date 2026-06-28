@@ -30,6 +30,7 @@ class Page extends Model implements HasMedia, HasContentBlocks
         'title',
         'slug',
         'excerpt',
+        'content',
         'template',
         'layout',
         'status',
@@ -118,6 +119,22 @@ class Page extends Model implements HasMedia, HasContentBlocks
             ->orderBy('sort_order');
     }
 
+    public function beforeBlocks(): MorphMany
+    {
+        return $this->morphMany(ContentBlock::class, 'blockable')
+            ->where('is_active', true)
+            ->where('position', 'before_content')
+            ->orderBy('sort_order');
+    }
+
+    public function afterBlocks(): MorphMany
+    {
+        return $this->morphMany(ContentBlock::class, 'blockable')
+            ->where('is_active', true)
+            ->where('position', 'after_content')
+            ->orderBy('sort_order');
+    }
+
     /**
      * Scope: Get published pages
      */
@@ -173,7 +190,8 @@ class Page extends Model implements HasMedia, HasContentBlocks
         return $query->where(function (Builder $query) use ($term): void {
             $query->where('title', 'like', "%{$term}%")
                 ->orWhere('slug', 'like', "%{$term}%")
-                ->orWhere('excerpt', 'like', "%{$term}%");
+                ->orWhere('excerpt', 'like', "%{$term}%")
+                ->orWhere('content', 'like', "%{$term}%");
         });
     }
 

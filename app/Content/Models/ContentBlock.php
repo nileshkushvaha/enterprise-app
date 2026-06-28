@@ -7,8 +7,10 @@ namespace App\Content\Models;
 use App\Enums\BlockType;
 use App\Models\Page;
 use App\Models\Post;
+use Database\Factories\ContentBlockFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -44,6 +46,11 @@ class ContentBlock extends Model
 
     protected $table = 'content_blocks';
 
+    protected static function newFactory(): Factory
+    {
+        return ContentBlockFactory::new();
+    }
+
     protected $keyType = 'string';
 
     public $incrementing = false;
@@ -52,9 +59,11 @@ class ContentBlock extends Model
         'blockable_type',
         'blockable_id',
         'block_type',
+        'name',
         'content',
         'settings',
         'sort_order',
+        'position',
         'is_active',
     ];
 
@@ -125,7 +134,7 @@ class ContentBlock extends Model
     public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()
-            ->logOnly(['block_type', 'content', 'settings', 'sort_order', 'is_active'])
+            ->logOnly(['block_type', 'name', 'content', 'settings', 'sort_order', 'position', 'is_active'])
             ->useLogName('content_blocks')
             ->logOnlyDirty()
             ->dontLogIfAttributesChangedOnly(['updated_at']);

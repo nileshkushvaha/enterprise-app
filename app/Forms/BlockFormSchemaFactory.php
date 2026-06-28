@@ -6,6 +6,7 @@ use App\Enums\BlockType;
 use App\Forms\Blocks\AccordionBlockForm;
 use App\Forms\Blocks\ButtonBlockForm;
 use App\Forms\Blocks\ContactFormBlockForm;
+use App\Forms\Blocks\ContactInfoBlockForm;
 use App\Forms\Blocks\CTABlockForm;
 use App\Forms\Blocks\DividerBlockForm;
 use App\Forms\Blocks\FAQBlockForm;
@@ -49,6 +50,7 @@ class BlockFormSchemaFactory
             BlockType::Spacer => SpacerBlockForm::schema(),
             BlockType::Map => MapBlockForm::schema(),
             BlockType::ContactForm => ContactFormBlockForm::schema(),
+            BlockType::ContactInfo => ContactInfoBlockForm::schema(),
         };
     }
 }

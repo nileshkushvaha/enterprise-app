@@ -145,16 +145,10 @@ class PageRenderingTest extends TestCase
 
     public function test_home_route_renders_home_page(): void
     {
-        $homePage = Page::factory()->create([
-            'slug'       => 'home',
-            'status'     => PageStatus::Published,
-            'visibility' => PageVisibility::Public,
-        ]);
-
-        $this->addBlock($homePage, BlockType::Hero, ['title' => 'Welcome Home']);
-
-        $this->get('/')->assertStatus(200)->assertSee('Welcome Home');
+        // Default setting is 'template' — should return the home.blade.php view with status 200
+        $this->get('/')->assertStatus(200)->assertSee('<!DOCTYPE html>', false);
     }
+
 
     public function test_public_page_returns_complete_html_document(): void
     {

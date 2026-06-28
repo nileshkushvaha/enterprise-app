@@ -29,6 +29,7 @@ class ContentBlockFactory extends Factory
                 'padding'          => fake()->randomElement(['small', 'medium', 'large']),
             ],
             'sort_order'     => fake()->numberBetween(0, 10),
+            'position'       => 'after_content',
             'is_active'      => fake()->boolean(90),
         ];
     }

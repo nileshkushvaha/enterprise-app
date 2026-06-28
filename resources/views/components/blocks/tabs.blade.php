@@ -1,24 +1,25 @@
-<!-- Tabs Block -->
-<section class="tabs-block py-12">
-    <div class="container">
-        <div x-data="{ activeTab: 0 }" class="max-w-4xl mx-auto">
-            <!-- Tab Buttons -->
-            <div class="flex border-b gap-2 flex-wrap">
+{{-- Tabs Block --}}
+<section class="py-12">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div x-data="{ activeTab: 0 }">
+            <div class="flex gap-1 border-b border-slate-200 overflow-x-auto">
                 @foreach($items ?? [] as $index => $item)
-                    <button @click="activeTab = {{ $index }}" 
-                            :class="{ 'border-b-2 border-blue-500 font-semibold': activeTab === {{ $index }} }"
-                            class="px-4 py-3 text-gray-700 hover:text-blue-500 transition">
-                         {{ $item['title'] ?? $item['label'] ?? 'Tab ' . ($index + 1) }}
+                    <button
+                        @click="activeTab = {{ $index }}"
+                        :class="activeTab === {{ $index }}
+                            ? 'border-b-2 border-indigo-600 text-indigo-600 font-semibold'
+                            : 'text-slate-500 hover:text-slate-700'"
+                        class="px-4 py-3 text-sm transition-colors whitespace-nowrap flex-shrink-0 -mb-px">
+                        {{ $item['title'] ?? $item['label'] ?? 'Tab ' . ($index + 1) }}
                     </button>
                 @endforeach
             </div>
-            
-            <!-- Tab Content -->
-            <div class="py-8">
+            <div class="pt-8">
                 @foreach($items ?? [] as $index => $item)
-                    <div x-show="activeTab === {{ $index }}" x-cloak>
-                        @if(($item['content'] ?? $item['tab_content'] ?? false))
-                            {!! nl2br(e($item['content'] ?? $item['tab_content'])) !!}
+                    <div x-show="activeTab === {{ $index }}" x-cloak
+                         class="prose prose-slate prose-sm max-w-none prose-headings:text-slate-900 prose-p:text-slate-600 prose-a:text-indigo-600 prose-strong:text-slate-800">
+                        @if($item['content'] ?? $item['tab_content'] ?? false)
+                            {!! $item['content'] ?? $item['tab_content'] !!}
                         @endif
                     </div>
                 @endforeach

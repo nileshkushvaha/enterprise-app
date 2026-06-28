@@ -32,7 +32,7 @@ class SeoManager
         $globalSeo = $this->seoSettings;
 
         $title       = $page->meta_title       ?: ($globalSeo?->meta_title       ?: ($page->title   ?: $appName));
-        $description = $page->meta_description ?: ($globalSeo?->meta_description ?: ($page->excerpt ?: "Read more on {$appName}."));
+        $description = $page->meta_description ?: ($globalSeo?->meta_description ?: ($page->excerpt ?: $this->firstCharsOfContent($page->content) ?: "Read more on {$appName}."));
         $keywords    = $page->meta_keywords    ?: ($globalSeo?->meta_keywords    ?? null);
         $robots      = $this->normaliseRobots($page->robots ?: ($globalSeo?->robots ?? 'index, follow'));
         $canonical   = $page->canonical_url    ?: ($globalSeo?->canonical_url    ?: $pageUrl);
@@ -78,7 +78,7 @@ class SeoManager
         $globalSeo = $this->seoSettings;
 
         $title       = $post->meta_title       ?: ($globalSeo?->meta_title       ?: ($post->title   ?: $appName));
-        $description = $post->meta_description ?: ($globalSeo?->meta_description ?: ($post->excerpt ?: "Read more on {$appName}."));
+        $description = $post->meta_description ?: ($globalSeo?->meta_description ?: ($post->excerpt ?: $this->firstCharsOfContent($post->content) ?: "Read more on {$appName}."));
         $keywords    = $post->meta_keywords    ?: ($globalSeo?->meta_keywords    ?? null);
         $robots      = $this->normaliseRobots($post->robots ?: ($globalSeo?->robots ?? 'index, follow'));
         $canonical   = $post->canonical_url    ?: ($globalSeo?->canonical_url    ?: $postUrl);
@@ -141,12 +141,32 @@ class SeoManager
         return str_contains($robots, ',') ? str_replace(',', ', ', $robots) : $robots;
     }
 
-    private function resolveOgImage(string $ogImage): string
+    private function firstCharsOfContent(?string $html, int $length = 160): string
     {
-        if ($ogImage === '' && $this->seoSettings?->og_image) {
-            return $this->seoSettings->og_image;
+        if (blank($html)) {
+            return '';
         }
 
-        return $ogImage;
+        return str(strip_tags($html))->squish()->limit($length, '')->toString();
+    }
+
+    private function resolveOgImage(string $ogImage): string
+    {
+        $path = ($ogImage === '' && $this->seoSettings?->og_image)
+            ? $this->seoSettings->og_image
+            : $ogImage;
+
+        return $this->toStorageUrl($path);
+    }
+
+    private function toStorageUrl(?string $path): string
+    {
+        if (blank($path)) {
+            return '';
+        }
+        if (str_starts_with($path, 'http') || str_starts_with($path, '//')) {
+            return $path;
+        }
+        return \Illuminate\Support\Facades\Storage::disk('public')->url($path);
     }
 }

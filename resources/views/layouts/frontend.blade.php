@@ -1,8 +1,9 @@
 @php
     $generalSettings = app(\App\Settings\GeneralSettings::class);
     $seoSettings     = app(\App\Settings\SeoSettings::class);
-    $favicon         = $generalSettings->favicon ?? null;
-    $logo            = $generalSettings->logo ?? null;
+    $toStorageUrl = fn(?string $p): ?string => blank($p) ? null : (str_starts_with($p, 'http') || str_starts_with($p, '//') ? $p : Storage::disk('public')->url($p));
+    $favicon         = $toStorageUrl($generalSettings->favicon ?? null);
+    $logo            = $toStorageUrl($generalSettings->logo ?? null);
     $appName         = $generalSettings->app_name ?? config('app.name');
     $footerCopyright = $generalSettings->footer_copyright ?? null;
     $footerText      = $generalSettings->footer_text ?? null;
@@ -51,39 +52,7 @@
     <script defer src="https://cdn.jsdelivr.net/npm/@alpinejs/collapse@3.x.x/dist/cdn.min.js"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.3/dist/cdn.min.js"></script>
 
-    <style>
-        body { font-family: 'Inter', ui-sans-serif, system-ui, sans-serif; }
-        [x-cloak] { display: none !important; }
-
-        @keyframes fadeInUp {
-            from { opacity: 0; transform: translateY(20px); }
-            to   { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes fadeIn {
-            from { opacity: 0; }
-            to   { opacity: 1; }
-        }
-        @keyframes shimmer {
-            0%   { background-position: -200% center; }
-            100% { background-position:  200% center; }
-        }
-        .animate-fade-in-up  { animation: fadeInUp .5s ease-out both; }
-        .animate-fade-in     { animation: fadeIn .4s ease-out both; }
-        .anim-delay-100 { animation-delay: .1s; }
-        .anim-delay-200 { animation-delay: .2s; }
-        .anim-delay-300 { animation-delay: .3s; }
-        .anim-delay-400 { animation-delay: .4s; }
-
-        .gradient-text {
-            background: linear-gradient(135deg, #818cf8 0%, #a78bfa 50%, #c4b5fd 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-        .card-glow:hover {
-            box-shadow: 0 0 0 1px rgba(99,102,241,.25), 0 8px 32px rgba(99,102,241,.08);
-        }
-    </style>
+    @include('partials.head-styles')
 
     @if($gaId)
         <script async src="https://www.googletagmanager.com/gtag/js?id={{ $gaId }}"></script>
@@ -92,7 +61,7 @@
 
     @stack('head')
 </head>
-<body class="bg-[#05080F] text-slate-200 antialiased">
+<body class="text-slate-800 antialiased" style="background: linear-gradient(160deg, #f8f7ff 0%, #f0ebff 30%, #e8f4ff 60%, #f5f0ff 100%); min-height: 100vh;">
 
     @if($gtmId)
         <noscript><iframe src="https://www.googletagmanager.com/ns.html?id={{ $gtmId }}" height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>

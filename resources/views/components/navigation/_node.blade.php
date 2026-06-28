@@ -35,9 +35,9 @@
             onclick="window.location='{{ $url }}'"
         @endif
         @class([
-            'flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
-            'text-white bg-white/[0.07]'  => $node->isActive,
-            'text-slate-400 hover:text-white hover:bg-white/[0.04]' => ! $node->isActive,
+            'flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200',
+            'text-violet-700 bg-violet-50 font-semibold'  => $node->isActive,
+            'text-slate-600 hover:text-violet-700 hover:bg-violet-50' => ! $node->isActive,
             $node->cssClass ?? '',
         ])
         @if($node->cssId) id="{{ $node->cssId }}" @endif
@@ -75,12 +75,13 @@
         target="{{ $node->link->target }}"
         @if($node->link->rel) rel="{{ $node->link->rel }}" @endif
         @class([
-            'flex items-center gap-1.5 transition-colors',
+            'flex items-center gap-1.5 transition-all duration-200',
             'px-3 py-2 rounded-lg text-sm font-medium' => $isRoot,
             'px-3 py-2 text-sm'                        => !$isRoot,
-            'text-white bg-white/[0.07]'                => $node->isActive,
-            'text-slate-400 hover:text-white hover:bg-white/[0.04]' => !$node->isActive && $isRoot,
-            'text-slate-300 hover:text-white hover:bg-white/[0.04]' => !$node->isActive && !$isRoot,
+            'text-violet-700 bg-violet-50 font-semibold'            => $node->isActive && $isRoot,
+            'text-violet-600 font-medium'                            => $node->isActive && !$isRoot,
+            'text-slate-600 hover:text-violet-700 hover:bg-violet-50' => !$node->isActive && $isRoot,
+            'text-slate-500 hover:text-violet-600 hover:bg-violet-50/60 rounded-md' => !$node->isActive && !$isRoot,
             $node->cssClass ?? '',
         ])
         @if($node->cssId) id="{{ $node->cssId }}" @endif
@@ -119,8 +120,8 @@
             x-transition:enter-end="opacity-100 scale-100 translate-y-0"
             x-transition:leave="transition ease-in duration-100"
             x-transition:leave-end="opacity-0 scale-95"
-            class="absolute top-full left-0 mt-1 min-w-[14rem] py-1.5 rounded-xl border border-white/[0.10] shadow-2xl shadow-black/60 z-50 focus:outline-none"
-            style="display:none; background:rgba(8,11,22,.97);backdrop-filter:blur(24px);"
+            class="absolute top-full left-0 mt-2 min-w-[14rem] py-2 rounded-2xl border border-violet-100 shadow-2xl shadow-violet-100/60 z-50 focus:outline-none"
+            style="display:none; background:rgba(255,255,255,0.97); backdrop-filter:blur(24px);"
             role="menu"
             aria-label="{{ $node->label }} submenu"
         >

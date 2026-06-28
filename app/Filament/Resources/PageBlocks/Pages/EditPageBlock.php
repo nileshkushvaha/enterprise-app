@@ -6,6 +6,7 @@ use App\Actions\ValidateBlockContentAction;
 use App\Enums\BlockType;
 use App\Filament\Resources\PageBlocks\PageBlockResource;
 use App\Models\Page;
+use App\Models\Post;
 use App\Services\BlockContentConverter;
 use App\Services\BlockContentHydrator;
 use Filament\Actions\DeleteAction;
@@ -18,36 +19,39 @@ class EditPageBlock extends EditRecord
 {
     protected static string $resource = PageBlockResource::class;
 
-    protected function fillForm(): void
+    protected function mutateFormDataBeforeFill(array $data): array
     {
-        parent::fillForm();
+        $blockTypeRaw = $data['block_type'] ?? null;
+        $blockType    = $blockTypeRaw instanceof BlockType
+            ? $blockTypeRaw
+            : BlockType::tryFrom((string) $blockTypeRaw);
 
-        if ($this->record && $this->record->block_type) {
-            $blockType = $this->record->block_type instanceof BlockType
-                ? $this->record->block_type
-                : BlockType::tryFrom($this->record->block_type);
+        $isPost = ($data['blockable_type'] ?? '') === (new Post)->getMorphClass();
 
-            if ($blockType) {
-                $hydratedData = BlockContentHydrator::hydrate($blockType, $this->record->content ?? []);
+        $data[$isPost ? 'post_id' : 'page_id'] = $data['blockable_id'] ?? $this->record->blockable_id;
 
-                $this->form->fill([
-                    ...$this->record->toArray(),
-                    // Expose blockable_id as page_id for the form Select field
-                    'page_id' => $this->record->blockable_id,
-                    ...$hydratedData,
-                ]);
-            }
+        if ($blockType) {
+            $data = array_merge($data, BlockContentHydrator::hydrate($blockType, $this->record->content ?? []));
         }
+
+        return $data;
     }
 
     protected function mutateFormDataBeforeSave(array $data): array
     {
-        // Map virtual page_id → polymorphic pair (preserved across the edit form)
-        if (isset($data['page_id'])) {
+        $blockableType = $data['blockable_type'] ?? $this->record->blockable_type;
+
+        if ($blockableType === (new Post)->getMorphClass()) {
+            $ownerId = $data['post_id'] ?? $this->record->blockable_id;
+            $data['blockable_type'] = (new Post)->getMorphClass();
+            $data['blockable_id']   = $ownerId;
+        } else {
+            $ownerId = $data['page_id'] ?? $this->record->blockable_id;
             $data['blockable_type'] = (new Page)->getMorphClass();
-            $data['blockable_id']   = $data['page_id'];
-            unset($data['page_id']);
+            $data['blockable_id']   = $ownerId;
         }
+
+        unset($data['page_id'], $data['post_id']);
 
         if (isset($data['block_type'])) {
             $blockType = $data['block_type'] instanceof BlockType
@@ -67,9 +71,11 @@ class EditPageBlock extends EditRecord
             }
         }
 
+        $data['position'] ??= 'after_content';
+
         $databaseColumns = [
-            'id', 'blockable_type', 'blockable_id', 'block_type', 'content',
-            'settings', 'sort_order', 'is_active', 'created_at', 'updated_at', 'deleted_at',
+            'id', 'blockable_type', 'blockable_id', 'block_type', 'name', 'content',
+            'settings', 'sort_order', 'position', 'is_active', 'created_at', 'updated_at', 'deleted_at',
         ];
 
         return array_intersect_key($data, array_flip($databaseColumns));

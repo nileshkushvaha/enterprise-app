@@ -14,7 +14,7 @@
     id="{{ $tree->slug }}-mobile-nav"
 >
     <ul
-        class="divide-y divide-white/[0.04]"
+        class="divide-y divide-violet-100"
         role="list"
     >
         @foreach($tree->nodes as $node)

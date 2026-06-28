@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Pages\Settings;
 
+use App\Models\Page as PageModel;
 use App\Settings\GeneralSettings;
 use BackedEnum;
 use Filament\Actions\Action;
@@ -86,6 +87,8 @@ class GeneralSettingsPage extends Page
             'maintenance_mode'  => $settings->maintenance_mode,
             'footer_copyright'  => $settings->footer_copyright,
             'footer_text'       => $settings->footer_text,
+            'homepage_display'  => $settings->homepage_display ?? 'template',
+            'homepage_id'       => $settings->homepage_id,
         ]);
     }
 
@@ -180,6 +183,7 @@ class GeneralSettingsPage extends Page
                             FileUpload::make('logo')
                                 ->label('Logo (Light)')
                                 ->image()
+                                ->disk('public')
                                 ->acceptedFileTypes(['image/png', 'image/jpeg', 'image/svg+xml'])
                                 ->maxSize(2048)
                                 ->directory('settings/branding')
@@ -189,6 +193,7 @@ class GeneralSettingsPage extends Page
                             FileUpload::make('logo_dark')
                                 ->label('Logo (Dark)')
                                 ->image()
+                                ->disk('public')
                                 ->acceptedFileTypes(['image/png', 'image/jpeg', 'image/svg+xml'])
                                 ->maxSize(2048)
                                 ->directory('settings/branding')
@@ -198,6 +203,7 @@ class GeneralSettingsPage extends Page
                             FileUpload::make('favicon')
                                 ->label('Favicon')
                                 ->image()
+                                ->disk('public')
                                 ->acceptedFileTypes(['image/x-icon', 'image/png'])
                                 ->maxSize(512)
                                 ->directory('settings/branding')
@@ -321,6 +327,39 @@ class GeneralSettingsPage extends Page
                             ->helperText('Optional additional footer text or legal disclaimer.'),
                     ]),
 
+                // ── Reading ───────────────────────────────────────── full width
+                Section::make('Reading')
+                    ->description('Control what visitors see on your homepage — your custom template or any published page.')
+                    ->columnSpanFull()
+                    ->schema([
+                        Select::make('homepage_display')
+                            ->label('Your homepage displays')
+                            ->options([
+                                'template'    => '🏠  Default template (home.blade.php)',
+                                'static_page' => '📄  A static page',
+                            ])
+                            ->native(false)
+                            ->live()
+                            ->required()
+                            ->helperText('Choose "Default template" to use your custom-coded homepage, or "A static page" to pick any published CMS page.'),
+
+                        Select::make('homepage_id')
+                            ->label('Homepage')
+                            ->placeholder('— Select a page —')
+                            ->options(fn () => PageModel::query()
+                                ->published()
+                                ->orderBy('title')
+                                ->get()
+                                ->mapWithKeys(fn ($page) => [(string) $page->id => $page->title])
+                                ->all()
+                            )
+                            ->searchable()
+                            ->native(false)
+                            ->visible(fn ($get) => $get('homepage_display') === 'static_page')
+                            ->required(fn ($get) => $get('homepage_display') === 'static_page')
+                            ->helperText('This page will be shown at your site root ( / ).'),
+                    ]),
+
             ]),
         ]);
     }
@@ -354,6 +393,10 @@ class GeneralSettingsPage extends Page
         $settings->maintenance_mode  = (bool) ($data['maintenance_mode'] ?? false);
         $settings->footer_copyright  = $data['footer_copyright'] ?? null;
         $settings->footer_text       = $data['footer_text'] ?? null;
+        $settings->homepage_display  = $data['homepage_display'] ?? 'template';
+        $settings->homepage_id       = ($data['homepage_display'] ?? 'template') === 'static_page'
+                                        ? ($data['homepage_id'] ?? null)
+                                        : null;
 
         $settings->save();
 
@@ -374,6 +417,8 @@ class GeneralSettingsPage extends Page
         $settings->default_currency  = 'INR';
         $settings->decimal_precision = 2;
         $settings->maintenance_mode  = false;
+        $settings->homepage_display  = 'template';
+        $settings->homepage_id       = null;
 
         $settings->save();
 

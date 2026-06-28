@@ -1,3 +1,7 @@
+@php
+    $appName  = $site['app_name']  ?? config('app.name');
+    $favicon  = $site['favicon']   ?? null;
+@endphp
 <!DOCTYPE html>
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
 <head>
@@ -5,10 +9,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
 
-    <title>{{ $seo['title'] ?? ($site['app_name'] ?? config('app.name')) }}</title>
+    <title>{{ $seo['title'] ?? $appName }}</title>
 
-    @if($site['favicon'] ?? false)
-        <link rel="icon" href="{{ $site['favicon'] }}">
+    @if($favicon)
+        <link rel="icon" href="{{ $favicon }}">
     @else
         <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><defs><linearGradient id='g' x1='0%25' y1='0%25' x2='100%25' y2='100%25'><stop offset='0%25' stop-color='%236366f1'/><stop offset='100%25' stop-color='%238b5cf6'/></linearGradient></defs><rect width='32' height='32' rx='8' fill='url(%23g)'/><text x='16' y='22' font-size='18' text-anchor='middle' fill='white'>E</text></svg>">
     @endif
@@ -22,8 +26,11 @@
         <meta property="og:title" content="{{ $seo['og_title'] ?? ($seo['title'] ?? '') }}">
         <meta property="og:description" content="{{ $seo['og_description'] ?? ($seo['description'] ?? '') }}">
         <meta property="og:url" content="{{ $seo['og_url'] ?? ($seo['canonical'] ?? '') }}">
+        <meta property="og:site_name" content="{{ $appName }}">
         @if($seo['og_image'] ?? false)
             <meta property="og:image" content="{{ $seo['og_image'] }}">
+            <meta property="og:image:width" content="1200">
+            <meta property="og:image:height" content="630">
         @endif
         <meta name="twitter:card" content="{{ $seo['twitter_card'] ?? 'summary_large_image' }}">
         <meta name="twitter:title" content="{{ $seo['og_title'] ?? ($seo['title'] ?? '') }}">
@@ -54,14 +61,14 @@
     <script defer src="https://cdn.jsdelivr.net/npm/@alpinejs/collapse@3.x.x/dist/cdn.min.js"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.3/dist/cdn.min.js"></script>
 
-    <style>body { font-family: 'Inter', ui-sans-serif, system-ui, sans-serif; }</style>
+    @include('partials.head-styles')
 
     @if($site['google_analytics_id'] ?? false)
         <script async src="https://www.googletagmanager.com/gtag/js?id={{ $site['google_analytics_id'] }}"></script>
         <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','{{ $site['google_analytics_id'] }}');</script>
     @endif
 </head>
-<body class="bg-[#05080F] text-slate-200 antialiased" style="font-family:'Inter',ui-sans-serif,system-ui,sans-serif">
+<body class="text-slate-800 antialiased" style="background: linear-gradient(160deg, #f8f7ff 0%, #f0ebff 30%, #e8f4ff 60%, #f5f0ff 100%); min-height: 100vh;">
 
     @if($site['google_tag_manager_id'] ?? false)
         <noscript><iframe src="https://www.googletagmanager.com/ns.html?id={{ $site['google_tag_manager_id'] }}" height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
@@ -72,6 +79,7 @@
         <noscript><img height="1" width="1" style="display:none" src="https://www.facebook.com/tr?id={{ $site['facebook_pixel_id'] }}&ev=PageView&noscript=1"/></noscript>
     @endif
 
+    {{-- Landing pages have no global header or footer — full conversion focus --}}
     <main id="main-content">
         {!! $content ?? '' !!}
     </main>

@@ -96,8 +96,9 @@
                             </a>
                         </h2>
 
-                        @if($post->excerpt)
-                            <p class="mt-2 text-sm text-slate-400 line-clamp-2 leading-relaxed">{{ $post->excerpt }}</p>
+                        @php $cardSummary = $post->excerpt ?: (filled($post->content) ? \Illuminate\Support\Str::limit(strip_tags($post->content), 140) : null); @endphp
+                        @if($cardSummary)
+                            <p class="mt-2 text-sm text-slate-400 line-clamp-2 leading-relaxed">{{ $cardSummary }}</p>
                         @endif
 
                         <div class="mt-4 flex items-center gap-2 text-xs text-slate-500">

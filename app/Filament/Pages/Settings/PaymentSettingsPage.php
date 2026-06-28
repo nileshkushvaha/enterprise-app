@@ -361,6 +361,7 @@ abstract class PaymentSettingsPage extends Page
                         FileUpload::make('qr_code_image')
                             ->label('QR Code Image')
                             ->image()
+                            ->disk('public')
                             ->acceptedFileTypes(['image/png', 'image/jpeg', 'image/svg+xml'])
                             ->maxSize(2048)
                             ->directory('settings/payment'),

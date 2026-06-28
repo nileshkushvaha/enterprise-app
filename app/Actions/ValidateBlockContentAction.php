@@ -32,6 +32,7 @@ class ValidateBlockContentAction
             BlockType::Spacer => $this->validateSpacer($content, $errors),
             BlockType::Map => $this->validateMap($content, $errors),
             BlockType::ContactForm => $this->validateContactForm($content, $errors),
+            BlockType::ContactInfo => $this->validateContactInfo($content, $errors),
         };
     }
 
@@ -182,6 +183,14 @@ class ValidateBlockContentAction
     {
         if (empty($content['fields']) || !is_array($content['fields'])) {
             $errors[] = 'Contact form requires at least one field';
+        }
+        return $errors;
+    }
+
+    private function validateContactInfo(array $content, array $errors): array
+    {
+        if (empty($content['items']) || !is_array($content['items'])) {
+            $errors[] = 'Contact info block requires at least one card';
         }
         return $errors;
     }

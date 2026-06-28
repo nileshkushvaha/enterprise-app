@@ -31,6 +31,7 @@ class BlockContentHydrator
             BlockType::Spacer => self::hydrateSpacer($jsonContent),
             BlockType::Map => self::hydrateMap($jsonContent),
             BlockType::ContactForm => self::hydrateContactForm($jsonContent),
+            BlockType::ContactInfo => self::hydrateContactInfo($jsonContent),
         };
     }
 
@@ -221,6 +222,16 @@ class BlockContentHydrator
             'fields' => $fields,
             'button_text' => $content['button_text'] ?? 'Send Message',
             'success_message' => $content['success_message'] ?? 'Thank you for your message!',
+        ];
+    }
+
+    private static function hydrateContactInfo(array $content): array
+    {
+        return [
+            'eyebrow'     => $content['eyebrow'] ?? '',
+            'title'       => $content['title'] ?? '',
+            'description' => $content['description'] ?? '',
+            'items'       => $content['items'] ?? [],
         ];
     }
 }

@@ -26,6 +26,7 @@ class UsersTable
                 ImageColumn::make('avatar')
                     ->label('')
                     ->circular()
+                    ->disk('public')
                     ->defaultImageUrl(fn ($record) => 'https://ui-avatars.com/api/?name=' . urlencode($record->name) . '&color=ffffff&background=6366f1')
                     ->size(40),
 

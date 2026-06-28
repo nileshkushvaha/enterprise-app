@@ -32,6 +32,7 @@ class Post extends Model implements HasMedia, HasContentBlocks
         'title',
         'slug',
         'excerpt',
+        'content',
         'author_id',
         'status',
         'visibility',
@@ -118,6 +119,22 @@ class Post extends Model implements HasMedia, HasContentBlocks
             ->orderBy('sort_order');
     }
 
+    public function beforeBlocks(): MorphMany
+    {
+        return $this->morphMany(ContentBlock::class, 'blockable')
+            ->where('is_active', true)
+            ->where('position', 'before_content')
+            ->orderBy('sort_order');
+    }
+
+    public function afterBlocks(): MorphMany
+    {
+        return $this->morphMany(ContentBlock::class, 'blockable')
+            ->where('is_active', true)
+            ->where('position', 'after_content')
+            ->orderBy('sort_order');
+    }
+
     public function categories(): BelongsToMany
     {
         return $this->belongsToMany(PostCategory::class, 'post_category_post')->withTimestamps();
@@ -173,6 +190,7 @@ class Post extends Model implements HasMedia, HasContentBlocks
             $query->where('title', 'like', "%{$term}%")
                 ->orWhere('slug', 'like', "%{$term}%")
                 ->orWhere('excerpt', 'like', "%{$term}%")
+                ->orWhere('content', 'like', "%{$term}%")
                 ->orWhereHas('author', fn (Builder $authorQuery) => $authorQuery->where('name', 'like', "%{$term}%"));
         });
     }

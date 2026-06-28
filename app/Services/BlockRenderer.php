@@ -56,6 +56,7 @@ class BlockRenderer
             BlockType::Spacer => view('components.blocks.spacer', $data),
             BlockType::Map => view('components.blocks.map', $data),
             BlockType::ContactForm => view('components.blocks.contact-form', $data),
+            BlockType::ContactInfo => view('components.blocks.contact-info', $data),
         };
     }
 
@@ -122,6 +123,7 @@ class BlockRenderer
             BlockType::Spacer => 'spacer',
             BlockType::Map => 'map',
             BlockType::ContactForm => 'contact-form',
+            BlockType::ContactInfo => 'contact-info',
         };
     }
 

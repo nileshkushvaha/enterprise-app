@@ -1,25 +1,31 @@
-<!-- Video Block -->
-<section class="video-block py-12">
-    <div class="container max-w-4xl">
-        <div class="aspect-video rounded-lg overflow-hidden shadow-lg">
-            @if(strpos($video_url ?? '', 'youtube.com') !== false || strpos($video_url ?? '', 'youtu.be') !== false)
-                <iframe width="100%" height="100%" 
-                        src="{{ str_replace('watch?v=', 'embed/', $video_url) }}" 
-                        frameborder="0" 
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-                        allowfullscreen>
-                </iframe>
-            @elseif(strpos($video_url ?? '', 'vimeo.com') !== false)
-                <iframe src="{{ $video_url }}" width="100%" height="100%" frameborder="0" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe>
-            @else
-                <video width="100%" height="100%" controls>
-                    <source src="{{ $video_url ?? '' }}" type="video/mp4">
-                    Your browser does not support the video tag.
+{{-- Video Block --}}
+<section class="py-12">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="aspect-video rounded-2xl overflow-hidden border border-white/70 shadow-lg shadow-slate-200/50 bg-slate-100">
+            @php
+                $url = $video_url ?? '';
+                $isYoutube = str_contains($url, 'youtube.com') || str_contains($url, 'youtu.be');
+                $isVimeo   = str_contains($url, 'vimeo.com');
+                if ($isYoutube) {
+                    preg_match('/(?:v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/', $url, $m);
+                    $embedUrl = 'https://www.youtube.com/embed/' . ($m[1] ?? '');
+                }
+            @endphp
+            @if($isYoutube)
+                <iframe width="100%" height="100%" src="{{ $embedUrl }}" frameborder="0"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowfullscreen></iframe>
+            @elseif($isVimeo)
+                <iframe src="{{ $url }}" width="100%" height="100%" frameborder="0"
+                        allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe>
+            @elseif($url)
+                <video width="100%" height="100%" controls class="w-full h-full">
+                    <source src="{{ $url }}" type="video/mp4">
                 </video>
             @endif
         </div>
         @if($caption ?? false)
-            <p class="text-center mt-4 text-gray-600">{{ $caption }}</p>
+            <p class="text-center mt-3 text-sm text-slate-500">{{ $caption }}</p>
         @endif
     </div>
 </section>

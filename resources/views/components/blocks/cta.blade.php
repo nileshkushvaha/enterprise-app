@@ -1,14 +1,14 @@
 {{-- Call to Action Block --}}
 <section class="py-16 relative overflow-hidden">
-    <div class="absolute inset-0 pointer-events-none" style="background: linear-gradient(135deg, rgba(79,70,229,.12) 0%, rgba(124,58,237,.08) 100%)"></div>
-    <div class="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-indigo-500/20 to-transparent"></div>
-    <div class="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-violet-500/20 to-transparent"></div>
-    <div class="relative max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center animate-fade-in-up">
+    <div class="absolute inset-0 pointer-events-none" style="background: linear-gradient(135deg, rgba(99,102,241,.07) 0%, rgba(139,92,246,.05) 100%)"></div>
+    <div class="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-indigo-300/40 to-transparent"></div>
+    <div class="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-violet-300/40 to-transparent"></div>
+    <div class="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
         @if($title ?? false)
-            <h2 class="text-3xl md:text-4xl font-bold text-white mb-4">{{ $title }}</h2>
+            <h2 class="text-3xl md:text-4xl font-bold text-slate-900 mb-4">{{ $title }}</h2>
         @endif
         @if($description ?? false)
-            <p class="text-lg text-slate-400 mb-8 leading-relaxed">{{ $description }}</p>
+            <p class="text-lg text-slate-600 mb-8 leading-relaxed max-w-2xl mx-auto">{{ $description }}</p>
         @endif
         @if(($button_text ?? false) && ($button_link ?? false))
             <a href="{{ $button_link }}"

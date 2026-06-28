@@ -6,7 +6,7 @@
     </div>
     <div class="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
-            <div class="animate-fade-in-up">
+            <div>
                 @if($title ?? false)
                     <h1 class="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight text-white leading-tight">
                         {{ $title }}
@@ -26,8 +26,8 @@
                 @endif
             </div>
             @if($image ?? false)
-                <div class="animate-fade-in-up" style="animation-delay:.15s">
-                    <img src="{{ $image }}" alt="{{ $title ?? 'Hero' }}" class="w-full rounded-2xl shadow-2xl shadow-black/40 border border-white/[0.06]">
+                <div>
+                    <img src="{{ $image }}" alt="{{ $title ?? 'Hero' }}" class="w-full rounded-2xl shadow-2xl shadow-black/40 border border-white/10">
                 </div>
             @endif
         </div>

@@ -15,6 +15,7 @@
 @php
     $type       = $typeMap[$item['link_type']] ?? $typeMap['url'];
     $childCount = count($item['children'] ?? []);
+    $depth      = $depth ?? 0;
 
     $now          = now();
     $publishFrom  = $item['publish_from']  ? \Carbon\Carbon::parse($item['publish_from'])  : null;
@@ -22,35 +23,38 @@
     $isExpired    = $publishUntil && $now->isAfter($publishUntil);
     $isScheduled  = !$isExpired && $publishFrom && $now->isBefore($publishFrom);
     $isWindowed   = !$isExpired && !$isScheduled && ($publishFrom || $publishUntil);
+
+    $displayUrl = $item['url'] ?? ($item['route_name'] ?? null);
 @endphp
 <li
     data-item-id="{{ $item['id'] }}"
     wire:key="nav-item-{{ $item['id'] }}"
     class="select-none"
 >
-    {{-- Row --}}
-    <div
-        class="flex items-stretch bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg mb-1.5 shadow-sm group hover:border-gray-300 dark:hover:border-gray-600 hover:shadow-md transition-all overflow-hidden"
-    >
-        {{-- Colored accent strip --}}
-        <div class="w-1 flex-shrink-0 rounded-l-lg" style="background-color: {{ $type['hex'] }}"></div>
+    {{-- Item card --}}
+    <div class="group flex items-stretch bg-white dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700 rounded-xl mb-2 shadow-sm hover:shadow-md hover:border-gray-300 dark:hover:border-gray-600 transition-all duration-150 overflow-hidden">
 
-        {{-- Drag handle --}}
+        {{-- Colored left accent --}}
+        <div class="w-1 flex-shrink-0 rounded-l-xl" style="background-color: {{ $type['hex'] }}"></div>
+
+        {{-- Drag handle — always visible, prominent --}}
         <div
             data-drag-handle
-            class="cursor-grab active:cursor-grabbing flex items-center px-2 text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400 flex-shrink-0"
+            class="cursor-grab active:cursor-grabbing flex items-center px-2.5 text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400 flex-shrink-0 transition-colors"
             title="Drag to reorder"
         >
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 20 20">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
                 <path d="M7 2a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 2zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 8zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 14zm6-8a2 2 0 1 0-.001-4.001A2 2 0 0 0 13 6zm0 2a2 2 0 1 0 .001 4.001A2 2 0 0 0 13 8zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 13 14z"/>
             </svg>
         </div>
 
         {{-- Type icon --}}
         <div class="flex items-center pr-2 flex-shrink-0" style="color: {{ $type['hex'] }}">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="{{ $type['path'] }}"/>
-            </svg>
+            <div class="flex h-6 w-6 items-center justify-center rounded-md" style="background-color: {{ $type['hex'] }}18">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="{{ $type['path'] }}"/>
+                </svg>
+            </div>
         </div>
 
         {{-- Content --}}
@@ -60,61 +64,71 @@
                 @if($item['icon'])
                 <span class="text-xs font-mono text-gray-400 dark:text-gray-500 flex-shrink-0">{{ $item['icon'] }}</span>
                 @endif
-                <span class="text-sm font-semibold text-gray-800 dark:text-gray-100 truncate">
+                <span class="text-sm font-semibold text-gray-800 dark:text-gray-100 truncate leading-snug">
                     {{ $item['label'] ?: '(no label)' }}
                 </span>
                 @if($childCount > 0)
-                <span class="inline-flex items-center px-1.5 py-0 rounded-full text-xs bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 leading-5 flex-shrink-0">
+                <span class="inline-flex items-center px-1.5 py-0 rounded-full text-[10px] font-bold bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 leading-5 flex-shrink-0">
                     {{ $childCount }}
                 </span>
                 @endif
             </div>
-            {{-- Meta row --}}
-            <div class="flex items-center gap-1.5 mt-1">
-                <span class="text-xs font-mono text-gray-400 dark:text-gray-500">{{ $type['label'] }}</span>
+
+            {{-- Meta row: url + badges --}}
+            <div class="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                {{-- URL / path --}}
+                @if($displayUrl)
+                <span class="text-[10px] font-mono text-gray-400 dark:text-gray-500 truncate max-w-[180px]" title="{{ $displayUrl }}">
+                    {{ Str::limit($displayUrl, 45) }}
+                </span>
+                <span class="text-gray-200 dark:text-gray-700 text-[10px] select-none">&bull;</span>
+                @endif
+
+                <span class="text-[10px] font-semibold" style="color: {{ $type['hex'] }}">{{ $type['label'] }}</span>
 
                 @if($item['target'] === '_blank')
-                <span class="inline-flex items-center gap-0.5 text-xs text-gray-400 dark:text-gray-500">
+                <span class="inline-flex items-center gap-0.5 text-[10px] text-gray-400 dark:text-gray-500">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                    new tab
                 </span>
                 @endif
 
                 @if($item['visibility'] !== 'all')
-                <span class="inline-flex items-center px-1.5 py-0 rounded text-xs bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 leading-5">
+                <span class="inline-flex items-center px-1.5 py-0 rounded text-[10px] bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 leading-5 font-medium">
                     {{ ucfirst(str_replace('_', ' ', $item['visibility'])) }}
                 </span>
                 @endif
 
                 @if(!$item['is_active'])
-                <span class="inline-flex items-center px-1.5 py-0 rounded text-xs bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 leading-5">Inactive</span>
+                <span class="inline-flex items-center px-1.5 py-0 rounded text-[10px] bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 leading-5 font-medium">Inactive</span>
                 @endif
 
                 @if($isExpired)
-                <span class="inline-flex items-center px-1.5 py-0 rounded text-xs bg-red-50 dark:bg-red-900/30 text-red-500 dark:text-red-400 leading-5">Expired</span>
+                <span class="inline-flex items-center px-1.5 py-0 rounded text-[10px] bg-red-50 dark:bg-red-900/30 text-red-500 dark:text-red-400 leading-5 font-medium">Expired</span>
                 @elseif($isScheduled)
-                <span class="inline-flex items-center px-1.5 py-0 rounded text-xs bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 leading-5">Scheduled</span>
+                <span class="inline-flex items-center px-1.5 py-0 rounded text-[10px] bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 leading-5 font-medium">Scheduled</span>
                 @elseif($isWindowed)
-                <span class="inline-flex items-center px-1.5 py-0 rounded text-xs bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 leading-5">Live</span>
+                <span class="inline-flex items-center px-1.5 py-0 rounded text-[10px] bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 leading-5 font-medium">Live</span>
                 @endif
 
                 @if($item['locale'])
-                <span class="inline-flex items-center px-1.5 py-0 rounded text-xs font-mono bg-violet-50 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400 leading-5">{{ $item['locale'] }}</span>
+                <span class="inline-flex items-center px-1.5 py-0 rounded text-[10px] font-mono bg-violet-50 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400 leading-5">{{ $item['locale'] }}</span>
                 @endif
 
                 @if($item['badge_text'])
-                <span class="inline-flex items-center px-1.5 py-0 rounded text-xs text-white leading-5" style="background-color: {{ $item['badge_color'] ?: '#6b7280' }}">
+                <span class="inline-flex items-center px-1.5 py-0 rounded text-[10px] text-white leading-5 font-medium" style="background-color: {{ $item['badge_color'] ?: '#6b7280' }}">
                     {{ $item['badge_text'] }}
                 </span>
                 @endif
             </div>
         </div>
 
-        {{-- Actions --}}
+        {{-- Actions — always visible --}}
         <div class="flex items-center gap-0.5 pr-2 flex-shrink-0">
             <button
                 wire:click="editItem('{{ $item['id'] }}')"
                 title="Edit"
-                class="p-1.5 rounded-md text-gray-400 hover:text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/30 transition-colors"
+                class="p-1.5 rounded-lg text-gray-400 hover:text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/30 transition-colors"
             >
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
@@ -123,7 +137,7 @@
             <button
                 wire:click="duplicateItem('{{ $item['id'] }}')"
                 title="Duplicate"
-                class="p-1.5 rounded-md text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 transition-colors opacity-0 group-hover:opacity-100"
+                class="p-1.5 rounded-lg text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 transition-colors"
             >
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
@@ -133,7 +147,7 @@
                 wire:click="deleteItem('{{ $item['id'] }}')"
                 wire:confirm="Delete '{{ addslashes($item['label']) }}'? This will also remove all child items."
                 title="Delete"
-                class="p-1.5 rounded-md text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors opacity-0 group-hover:opacity-100"
+                class="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors"
             >
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
@@ -146,10 +160,10 @@
     <ul
         data-sortable
         data-parent="{{ $item['id'] }}"
-        class="pl-5 ml-3.5 border-l-2 border-dashed border-gray-200 dark:border-gray-700 {{ empty($item['children']) ? 'min-h-[1.25rem]' : 'space-y-0' }}"
+        class="pl-5 ml-5 border-l-2 border-dashed border-gray-200 dark:border-gray-700 {{ empty($item['children']) ? 'min-h-[1.5rem]' : '' }}"
     >
         @if(!empty($item['children']))
-            @include('livewire.navigation.partials.tree-item', ['items' => $item['children'], 'depth' => ($depth ?? 0) + 1, 'typeMap' => $typeMap])
+            @include('livewire.navigation.partials.tree-item', ['items' => $item['children'], 'depth' => $depth + 1, 'typeMap' => $typeMap])
         @endif
     </ul>
 </li>

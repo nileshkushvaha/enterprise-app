@@ -70,36 +70,14 @@
     <script defer src="https://cdn.jsdelivr.net/npm/@alpinejs/collapse@3.x.x/dist/cdn.min.js"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.3/dist/cdn.min.js"></script>
 
-    <style>
-        body { font-family: 'Inter', ui-sans-serif, system-ui, sans-serif; }
-        [x-cloak] { display: none !important; }
-        @keyframes fadeInUp {
-            from { opacity: 0; transform: translateY(20px); }
-            to   { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes fadeIn {
-            from { opacity: 0; }
-            to   { opacity: 1; }
-        }
-        .animate-fade-in-up { animation: fadeInUp .5s ease-out both; }
-        .animate-fade-in    { animation: fadeIn .4s ease-out both; }
-        .gradient-text {
-            background: linear-gradient(135deg, #818cf8 0%, #a78bfa 50%, #c4b5fd 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-        .card-glow:hover {
-            box-shadow: 0 0 0 1px rgba(99,102,241,.25), 0 8px 32px rgba(99,102,241,.08);
-        }
-    </style>
+    @include('partials.head-styles')
 
     @if($site['google_analytics_id'] ?? false)
         <script async src="https://www.googletagmanager.com/gtag/js?id={{ $site['google_analytics_id'] }}"></script>
         <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','{{ $site['google_analytics_id'] }}');</script>
     @endif
 </head>
-<body class="bg-[#05080F] text-slate-200 antialiased">
+<body class="text-slate-800 antialiased" style="background: linear-gradient(160deg, #f8f7ff 0%, #f0ebff 30%, #e8f4ff 60%, #f5f0ff 100%); min-height: 100vh;">
 
     @if($site['google_tag_manager_id'] ?? false)
         <noscript><iframe src="https://www.googletagmanager.com/ns.html?id={{ $site['google_tag_manager_id'] }}" height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
@@ -130,6 +108,64 @@
     @endif
 
     <main id="main-content">
+        {{-- ── Page hero: vibrant animated gradient banner — hidden when this page IS the homepage ── --}}
+        @php
+            $homepageSettings = app(\App\Settings\GeneralSettings::class);
+            $isHomepage = ($homepageSettings->homepage_display ?? 'template') === 'static_page'
+                       && $homepageSettings->homepage_id
+                       && ($page->id ?? null) === $homepageSettings->homepage_id;
+        @endphp
+        @if(($page ?? null) && ($page->title ?? false) && !$isHomepage)
+        <div class="relative overflow-hidden" style="background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 40%, #9333ea 70%, #ec4899 100%); min-height: 220px;">
+
+            {{-- Animated blob orbs --}}
+            <div class="blob-orb animate-blob w-72 h-72 -top-20 -right-10" style="background: rgba(236,72,153,0.5);"></div>
+            <div class="blob-orb animate-blob anim-delay-400 w-64 h-64 bottom-0 -left-16" style="background: rgba(99,102,241,0.6); animation-delay: 2s;"></div>
+            <div class="blob-orb animate-float w-40 h-40 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" style="background: rgba(167,139,250,0.3); animation-delay: 1s;"></div>
+
+            {{-- Mesh grid overlay --}}
+            <div class="absolute inset-0 opacity-10" style="background-image: linear-gradient(rgba(255,255,255,.15) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.15) 1px, transparent 1px); background-size: 40px 40px;"></div>
+
+            {{-- Shine sweep --}}
+            <div class="absolute inset-0 opacity-20" style="background: linear-gradient(105deg, transparent 40%, rgba(255,255,255,0.3) 50%, transparent 60%); background-size: 200% 100%; animation: shimmer 3s ease-in-out infinite;"></div>
+
+            {{-- Content — centred --}}
+            <div class="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14 lg:py-20 text-center animate-fade-in-up">
+
+                {{-- Breadcrumb --}}
+                <div class="flex items-center justify-center gap-2 text-sm mb-5">
+                    <a href="{{ url('/') }}" class="text-white/70 hover:text-white transition-colors flex items-center gap-1">
+                        <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25"/></svg>
+                        Home
+                    </a>
+                    <svg class="h-3.5 w-3.5 text-white/40" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5"/></svg>
+                    <span class="text-white/90 font-medium">{{ $page->title }}</span>
+                </div>
+
+                {{-- Title --}}
+                <h1 class="text-4xl lg:text-5xl xl:text-6xl font-extrabold tracking-tight text-white leading-[1.1] drop-shadow-lg">
+                    {{ $page->title }}
+                </h1>
+
+                @if($page->excerpt ?? false)
+                    <p class="mt-5 text-lg text-white/75 leading-relaxed">{{ $page->excerpt }}</p>
+                @endif
+            </div>
+
+            {{-- Bottom wave --}}
+            <div class="absolute bottom-0 left-0 right-0 h-8 overflow-hidden">
+                <svg viewBox="0 0 1440 32" fill="none" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none" class="w-full h-full">
+                    <path d="M0 32 C360 0 1080 0 1440 32 L1440 32 L0 32Z" style="fill: linear-gradient(160deg, #f8f7ff 0%, #f0ebff 30%, #e8f4ff 60%, #f5f0ff 100%)"></path>
+                    <path d="M0 32 C360 0 1080 0 1440 32 L1440 32 L0 32Z" fill="#f8f7ff"></path>
+                </svg>
+            </div>
+        </div>
+        @endif
+
+        @if($isHomepage ?? false)
+            @include('partials.home-banner')
+        @endif
+
         {!! $content ?? '' !!}
     </main>
 

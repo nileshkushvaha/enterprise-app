@@ -22,6 +22,7 @@ enum BlockType: string
     case Spacer = 'spacer';
     case Map = 'map';
     case ContactForm = 'contact_form';
+    case ContactInfo = 'contact_info';
 
     public function label(): string
     {
@@ -44,6 +45,7 @@ enum BlockType: string
             self::Spacer => 'Spacer',
             self::Map => 'Map',
             self::ContactForm => 'Contact Form',
+            self::ContactInfo => 'Contact Info',
         };
     }
 
@@ -68,6 +70,7 @@ enum BlockType: string
             self::Spacer => 'heroicon-m-pause',
             self::Map => 'heroicon-m-map',
             self::ContactForm => 'heroicon-m-envelope',
+            self::ContactInfo => 'heroicon-m-map-pin',
         };
     }
 
@@ -92,6 +95,7 @@ enum BlockType: string
             self::Spacer => 'Whitespace/spacing element',
             self::Map => 'Map/location display',
             self::ContactForm => 'Contact form',
+            self::ContactInfo => 'Phone, email & address cards',
         };
     }
 
@@ -106,6 +110,7 @@ enum BlockType: string
             self::Team, self::Testimonials, self::Statistics, self::Timeline => 'Components',
             self::Map => 'Location',
             self::ContactForm => 'Forms',
+            self::ContactInfo => 'Forms',
         };
     }
 
@@ -125,6 +130,7 @@ enum BlockType: string
             self::Divider, self::Spacer => 'gray',
             self::Map => 'cyan',
             self::ContactForm => 'amber',
+            self::ContactInfo => 'cyan',
         };
     }
 

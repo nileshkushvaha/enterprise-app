@@ -24,6 +24,7 @@ class PageFactory extends Factory
             'title' => $title,
             'slug' => $slug,
             'excerpt' => fake()->paragraph(2),
+            'content' => fake()->optional(0.6)->randomHtml(),
             'template' => fake()->randomElement(['default', 'landing', 'blank']),
             'layout' => fake()->randomElement(['default', 'sidebar-left', 'sidebar-right', 'full-width']),
             'status' => fake()->randomElement(['draft', 'published', 'scheduled', 'archived']),

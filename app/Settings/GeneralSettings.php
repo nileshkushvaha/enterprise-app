@@ -37,6 +37,10 @@ class GeneralSettings extends Settings
     public ?string $footer_copyright;
     public ?string $footer_text;
 
+    // Reading (WordPress-style homepage control)
+    public string  $homepage_display;  // 'template' | 'static_page'
+    public ?string $homepage_id;       // Page UUID when homepage_display = 'static_page'
+
     public static function group(): string
     {
         return 'general';

@@ -45,6 +45,8 @@ class MenuBuilder extends Component
 
     // ── Left-panel custom link inputs ──────────────────────────────────────
 
+    public string $customLinkType = 'url';
+
     public string $routeNameInput = '';
 
     public string $routeLabel = '';
@@ -111,11 +113,13 @@ class MenuBuilder extends Component
     #[Computed]
     public function pages(): Collection
     {
-        $q = Page::query()->select(['id', 'title', 'slug']);
+        $q = Page::query()->select(['id', 'title', 'slug', 'status']);
 
         if ($this->searchPages !== '') {
-            $q->where('title', 'like', '%'.$this->searchPages.'%')
-                ->orWhere('slug', 'like', '%'.$this->searchPages.'%');
+            $q->where(function ($sub) {
+                $sub->where('title', 'like', '%'.$this->searchPages.'%')
+                    ->orWhere('slug', 'like', '%'.$this->searchPages.'%');
+            });
         }
 
         return $q->orderBy('title')->limit(20)->get();
@@ -124,11 +128,13 @@ class MenuBuilder extends Component
     #[Computed]
     public function posts(): Collection
     {
-        $q = Post::query()->select(['id', 'title', 'slug']);
+        $q = Post::query()->select(['id', 'title', 'slug', 'status']);
 
         if ($this->searchPosts !== '') {
-            $q->where('title', 'like', '%'.$this->searchPosts.'%')
-                ->orWhere('slug', 'like', '%'.$this->searchPosts.'%');
+            $q->where(function ($sub) {
+                $sub->where('title', 'like', '%'.$this->searchPosts.'%')
+                    ->orWhere('slug', 'like', '%'.$this->searchPosts.'%');
+            });
         }
 
         return $q->orderBy('title')->limit(20)->get();
@@ -140,8 +146,10 @@ class MenuBuilder extends Component
         $q = PostCategory::query()->select(['id', 'name', 'slug']);
 
         if ($this->searchCategories !== '') {
-            $q->where('name', 'like', '%'.$this->searchCategories.'%')
-                ->orWhere('slug', 'like', '%'.$this->searchCategories.'%');
+            $q->where(function ($sub) {
+                $sub->where('name', 'like', '%'.$this->searchCategories.'%')
+                    ->orWhere('slug', 'like', '%'.$this->searchCategories.'%');
+            });
         }
 
         return $q->orderBy('name')->limit(20)->get();
@@ -153,8 +161,10 @@ class MenuBuilder extends Component
         $q = Tag::query()->select(['id', 'name', 'slug']);
 
         if ($this->searchTags !== '') {
-            $q->where('name', 'like', '%'.$this->searchTags.'%')
-                ->orWhere('slug', 'like', '%'.$this->searchTags.'%');
+            $q->where(function ($sub) {
+                $sub->where('name', 'like', '%'.$this->searchTags.'%')
+                    ->orWhere('slug', 'like', '%'.$this->searchTags.'%');
+            });
         }
 
         return $q->orderBy('name')->limit(20)->get();
@@ -286,6 +296,18 @@ class MenuBuilder extends Component
         $this->customUrlInput = '';
         $this->customUrlLabel = '';
         $this->loadTree();
+    }
+
+    public function addCustomLink(): void
+    {
+        match ($this->customLinkType) {
+            'url'    => $this->addCustomUrl(),
+            'route'  => $this->addRoute(),
+            'email'  => $this->addEmail(),
+            'phone'  => $this->addPhone(),
+            'anchor' => $this->addAnchor(),
+            default  => null,
+        };
     }
 
     public function addEmail(): void

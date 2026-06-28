@@ -19,6 +19,7 @@ class PostFactory extends Factory
             'title' => $title,
             'slug' => str($title)->slug()->toString(),
             'excerpt' => fake()->paragraph(),
+            'content' => fake()->optional(0.6)->randomHtml(),
             'author_id' => User::factory(),
             'status' => 'draft',
             'visibility' => 'private',

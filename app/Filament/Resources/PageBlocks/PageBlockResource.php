@@ -8,7 +8,6 @@ use App\Filament\Resources\PageBlocks\Pages\ListPageBlocks;
 use App\Filament\Resources\PageBlocks\Schemas\PageBlockForm;
 use App\Filament\Resources\PageBlocks\Tables\PageBlocksTable;
 use App\Content\Models\ContentBlock;
-use App\Models\Page;
 use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
@@ -61,14 +60,12 @@ class PageBlockResource extends Resource
 
     public static function getEloquentQuery(): Builder
     {
-        return parent::getEloquentQuery()
-            ->where('blockable_type', (new Page)->getMorphClass());
+        return parent::getEloquentQuery();
     }
 
     public static function getRecordRouteBindingEloquentQuery(): Builder
     {
         return parent::getRecordRouteBindingEloquentQuery()
-            ->where('blockable_type', (new Page)->getMorphClass())
             ->withoutGlobalScopes([
                 SoftDeletingScope::class,
             ]);
