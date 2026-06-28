@@ -1,95 +1,170 @@
-# Testing Guide
+# Testing
 
-## Overview
+## The Rule
 
+```bash
+composer test        # always use this
 ```
-Development  →  .env              →  enterprise_app
-Testing      →  .env.testing      →  enterprise_app_testing
-```
 
-Tests use `RefreshDatabase`, which runs `migrate:fresh` before each test class. That wipes all tables. **`enterprise_app_testing` is disposable. `enterprise_app` is not.**
+This runs `php artisan test --env=testing`. Never run `php artisan test` bare — it uses `.env` (dev database).
 
 ---
 
-## Running tests
+## Environment Separation
 
-```bash
-composer test
+```
+.env          → APP_ENV=local  → DB: enterprise_app       (development — never touch in tests)
+.env.testing  → APP_ENV=testing → DB: enterprise_app_testing  (disposable)
 ```
 
-This maps to `php artisan test --env=testing`. The `--env=testing` flag tells artisan to boot with `APP_ENV=testing`, which causes Laravel to load `.env.testing` before populating the process environment.
-
-Use `composer test` as the standard project command. If you run `php artisan test` directly, always include `--env=testing`. The safety guard in `TestCase` will catch a misconfigured run and abort with a clear message before `RefreshDatabase` can do any damage.
-
-Running a subset:
-
-```bash
-# Single test class
-php artisan test --env=testing --filter CacheManagerServiceTest
-
-# Single method
-php artisan test --env=testing --filter "CacheManagerServiceTest::test_clearApplicationCache_returns_result_array"
-
-# Single file
-php artisan test --env=testing tests/Feature/ActivityLogResourceTest.php
-```
+`RefreshDatabase` runs `migrate:fresh` which wipes all tables. It's safe on `enterprise_app_testing`. It would destroy the dev database. The safety guard in `TestCase` catches misconfigured runs before any damage occurs.
 
 ---
 
-## First-time setup
+## Safety Guard
 
-Create the dedicated test database once:
+`tests/TestCase.php` aborts with a clear message if:
+1. `APP_ENV` is not `testing` (caught by Check 1)
+2. The active database is `enterprise_app` (caught by Check 2)
+
+**Never remove or weaken this guard.** It exists because of a prior incident where `migrate:fresh` wiped the development database.
+
+---
+
+## First-Time Setup
 
 ```bash
 mysql -uroot -p -e "CREATE DATABASE IF NOT EXISTS enterprise_app_testing CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
 ```
 
-Migrations run automatically via `RefreshDatabase` on the first test run — no manual step needed.
+No manual migration step — `RefreshDatabase` runs migrations automatically.
 
 ---
 
-## Why `RefreshDatabase` is safe here
-
-`RefreshDatabase` uses database transactions on databases that support them (rollback after each test, very fast). On MySQL it falls back to `migrate:fresh` (drop all tables, re-run migrations) before each test class.
-
-Because `enterprise_app_testing` exists only for tests and contains no real data, `migrate:fresh` is safe. The production database `enterprise_app` is never touched as long as tests run via `composer test`.
-
----
-
-## The safety guard
-
-`tests/TestCase.php` runs two checks before every test:
-
-```php
-// 1. Environment must be "testing"
-if (! app()->environment('testing')) {
-    $this->fail('SAFETY ABORT: APP_ENV is [' . app()->environment() . '], not [testing]...');
-}
-
-// 2. Database must not be the development database
-$database = config('database.connections.' . config('database.default') . '.database');
-if ($database === 'enterprise_app') {
-    $this->fail('SAFETY ABORT: tests are pointed at the development database...');
-}
-```
-
-The double check covers two distinct failure modes:
-- **Check 1** catches running without `--env=testing` (APP_ENV stays `local`, `.env.testing` never loads).
-- **Check 2** catches a misconfigured `.env.testing` where APP_ENV is correct but DB_DATABASE still points at the dev database.
-
-The database check uses the hardcoded name `enterprise_app` (not `enterprise_app_testing`) so it stays valid for any CI or Docker database name — only the development database is explicitly blocked.
-
----
-
-## CI / CD and Docker
-
-Ensure `APP_ENV=testing` is set before artisan boots, then run:
+## Running Tests
 
 ```bash
-php artisan test --env=testing
+# Full suite (762 tests)
+composer test
+
+# Single class
+php artisan test --env=testing --filter SecurityPolicyTest
+
+# Single method
+php artisan test --env=testing --filter "AuthenticationSettingsTest::test_save_logs_changed_fields_diff"
+
+# Single file
+php artisan test --env=testing tests/Feature/Security/AuthenticationSettingsTest.php
+
+# All Security tests
+php artisan test --env=testing tests/Feature/Security/
 ```
 
-GitHub Actions example:
+---
+
+## Test Structure
+
+```
+tests/
+├── TestCase.php                           — base class with safety guard + RefreshDatabase
+├── Unit/
+│   ├── Navigation/                        — unit tests for navigation system
+│   └── Services/                          — unit tests for Block services, SeoManager
+└── Feature/
+    ├── Security/                          — 8 test classes, one per Security settings page
+    │   ├── AuthenticationSettingsTest.php
+    │   ├── PasswordPolicySettingsTest.php
+    │   ├── LoginSecuritySettingsTest.php
+    │   ├── SessionSettingsTest.php
+    │   ├── RegistrationSettingsTest.php
+    │   ├── AccountProtectionSettingsTest.php
+    │   ├── PasswordRuleBuilderTest.php
+    │   └── SecurityPolicyTest.php
+    ├── Navigation/                        — 13 test classes for navigation system
+    ├── Frontend/                          — frontend rendering integration tests
+    └── *.php                              — feature tests (CMS, cache, scheduler, etc.)
+```
+
+---
+
+## Settings Tests
+
+Settings tests have a required `setUp` call:
+
+```php
+protected function setUp(): void
+{
+    parent::setUp();
+
+    // Must use path-based migrate — 'settings:migrate' command does not exist
+    $this->artisan('migrate', ['--path' => 'database/settings']);
+
+    // Seed roles and permissions for this test class only
+    $superAdminRole = Role::firstOrCreate(['name' => 'super_admin', 'guard_name' => 'web']);
+    Permission::firstOrCreate(['name' => 'security.authentication.view', 'guard_name' => 'web']);
+    Permission::firstOrCreate(['name' => 'security.authentication.update', 'guard_name' => 'web']);
+
+    $this->superAdmin = User::factory()->create(['status' => 'active']);
+    $this->superAdmin->assignRole($superAdminRole);
+}
+```
+
+After saving settings in a test, use `refresh()` to avoid stale in-memory state:
+
+```php
+$settings = app()->make(PasswordPolicySettings::class)->refresh();
+$this->assertSame(12, $settings->min_length);
+```
+
+---
+
+## Filament Page Tests (Livewire)
+
+Test Filament pages via `Livewire::test()`:
+
+```php
+$this->actingAs($this->superAdmin);
+
+Livewire::test(PasswordPolicyPage::class)
+    ->set('data.min_length', 12)
+    ->set('data.expiry_enabled', true)  // set toggle BEFORE dependent field
+    ->set('data.expiry_days', 60)
+    ->call('save')
+    ->assertNotified('Password policy saved');
+```
+
+**Critical:** Fields with `.visible(fn($get) => ...)` are excluded from `getState()` when hidden. Always set the controlling toggle before the dependent field, or the dependent field's value will be ignored on save.
+
+---
+
+## PermissionDoesNotExist in Tests
+
+When a test only seeds one page's permissions, Filament builds all navigation items and calls `canAccess()` on all Security pages. If a permission doesn't exist in the test DB, `hasPermissionTo()` throws `PermissionDoesNotExist`.
+
+This is handled in `HasSecurityAccess::canAccess()` with a try/catch. Do not remove it — it exists specifically to prevent this cascade during tests.
+
+---
+
+## Diagnostic Command
+
+```bash
+php artisan app:doctor                    # verify dev environment
+php artisan app:doctor --env=testing      # verify test environment
+```
+
+Expected test output:
+```
+✓  Environment    testing
+✓  Database       enterprise_app_testing
+✓  Cache          array
+✓  Queue          sync
+✓  Mail           array
+✓  Session        array
+```
+
+---
+
+## CI Setup
 
 ```yaml
 - name: Run tests
@@ -101,59 +176,17 @@ GitHub Actions example:
   run: php artisan test --env=testing
 ```
 
-The safety guard checks `APP_ENV=testing` and blocks `DB_DATABASE=enterprise_app`. Any other database name (including a CI-specific one) will pass.
+The safety guard passes any `DB_DATABASE` other than `enterprise_app` — CI-specific database names work without changes.
 
 ---
 
-## Verifying environment configuration
-
-Before running tests — or when onboarding — run the doctor command:
-
-```bash
-php artisan app:doctor                    # development
-php artisan app:doctor --env=testing      # testing
-```
-
-Expected output for development:
-
-```
-Environment Check
-
-✓  Environment          local
-✓  Connection           mysql
-✓  Database             enterprise_app
-✓  Cache                database
-✓  Queue                database
-✓  Mail                 smtp
-✓  Session              database
-
-All checks passed.
-```
-
-Expected output for testing:
-
-```
-Environment Check
-
-✓  Environment          testing
-✓  Connection           mysql
-✓  Database             enterprise_app_testing
-✓  Cache                array
-✓  Queue                sync
-✓  Mail                 array
-✓  Session              array
-
-All checks passed.
-```
-
----
-
-## Common pitfalls
+## Common Pitfalls
 
 | Symptom | Cause | Fix |
-|---------|-------|-----|
+|---|---|---|
 | `SAFETY ABORT: APP_ENV is [local]` | Ran `php artisan test` without `--env=testing` | Use `composer test` |
-| Tests pass but wipe production data | Guard was removed or bypassed | Restore `guardAgainstProductionDatabase()` in `TestCase` |
-| `.env` has two `DB_DATABASE` lines | Stale duplicate — dotenv takes the first value | Remove the duplicate |
-| `migrate:fresh` fails on missing table | Migration added but not yet run | `composer test` runs migrations automatically |
-| `Undefined variable $errors` in blade | Component rendered outside a request context | Guard with `isset($errors)` before accessing |
+| Test saves setting but assertion reads stale value | In-memory settings cache not flushed | Use `app()->make(Settings::class)->refresh()` |
+| Field value ignored in Livewire test | Field is hidden (`.visible()`) when value is set | Set the controlling toggle first |
+| `The command does not exist` for settings:migrate | Wrong command | Use `$this->artisan('migrate', ['--path' => 'database/settings'])` |
+| `PermissionDoesNotExist` during canAccess() | Permission not seeded in test setUp | Expected — caught by HasSecurityAccess. Check setUp is creating the right permissions. |
+| `migrate:fresh` fails on missing table | Migration added but not run on test DB | Run `composer test` — RefreshDatabase handles it |

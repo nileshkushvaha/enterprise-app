@@ -1,58 +1,148 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Enterprise App
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+An enterprise-grade starter kit built on **Laravel 13** and **Filament v4** — covering authentication, CMS, navigation, security configuration, payment infrastructure, and system monitoring. Designed as the stable foundation for business modules (e-commerce, LMS, etc.).
 
-## About Laravel
+---
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+## Tech Stack
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+| | |
+|---|---|
+| **Language** | PHP 8.5 |
+| **Framework** | Laravel 13 |
+| **Admin Panel** | Filament v4 (`/admin`) |
+| **Database** | MySQL |
+| **Permissions** | Spatie Laravel Permission v7 |
+| **Settings** | Spatie Laravel Settings v3.9 |
+| **Activity Log** | Spatie Laravel Activitylog v5 |
+| **Media** | Spatie Laravel Media Library v11 |
+| **Auth Shield** | Bezhansalleh Filament Shield v4 |
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+---
 
-## Learning Laravel
+## Modules
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+### Auth
+Email/password login · remember me · email verification · password reset · account lock after N failed attempts · self-service unlock via email · two-factor authentication (TOTP + recovery codes) · suspicious login detection · full login history
 
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+### Profile
+Profile editing · avatar upload · password change · active session list with revoke
 
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
+### Security (6 admin pages)
+All settings are DB-backed, admin-configurable, and permission-gated with separate view/update permissions.
 
-## Agentic Development
+- **Authentication** — login methods, remember me, email verification
+- **Password Policy** — min length, complexity, expiry, prevent-reuse history
+- **Login Security** — max failed attempts, lockout duration, 2FA config
+- **Session** — driver, lifetime, single-device mode, force-logout-all
+- **Registration** — open/closed, allowed domains, default role assignment
+- **Account Protection** — auto-lock threshold, suspicious login alerts
 
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+### CMS
+- **Pages** — UUID PK, scheduled publishing, SEO fields, page templates, soft deletes
+- **Posts** — author, categories, tags, related posts, featured image, scheduled publishing
+- **Content Blocks** — 19 types: Hero · Rich Text · Image · Gallery · Video · CTA · FAQ · Accordion · Tabs · Team · Testimonials · Statistics · Timeline · Button · Divider · Spacer · Map · Contact Form · Contact Info
+- **Navigation** — multi-menu system, 10 link types, role/permission-based item visibility, publish windows
+- **Search** — full-text frontend search
+- **SEO** — sitemap.xml, robots.txt, per-page meta/OG/JSON-LD
+- **Media** — Spatie Media Library (avatars, featured images)
+- **Contact form** — submission + email notification
+
+### Settings (7 admin pages)
+General · SEO · Mail (SMTP) · Payment Gateways · Payment Configuration · Payment Advanced · Bank Account
+
+### System
+- **Cache Manager** — clear/optimize by cache type, permission-gated
+- **Scheduler Monitor** — task list, run on-demand, 30-day history, mutex detection, cron descriptions
+- **Queue Monitor** — pending/failed job counts by queue
+
+### Payment Infrastructure (scaffolded, not yet activated)
+Webhook controller, signature verification, and job queue for Stripe · Razorpay · PayPal · Cashfree · PayU · PhonePe · Manual. Gateway settings pages are fully built. Order/product logic is a future module.
+
+---
+
+## Quick Start
 
 ```bash
-composer require laravel/boost --dev
+composer install
+cp .env.example .env
+php artisan key:generate
 
-php artisan boost:install
+# Create databases
+mysql -uroot -p -e "CREATE DATABASE enterprise_app CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+mysql -uroot -p -e "CREATE DATABASE enterprise_app_testing CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+
+# Migrations
+php artisan migrate
+php artisan migrate --path=database/settings
+
+# Seed super admin + roles
+php artisan db:seed --class=SuperAdminSeeder
+
+# Assets
+npm install && npm run build
+
+# Run
+php artisan serve
+php artisan queue:work
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+Admin panel at **`/admin`**. Log in with the super admin credentials from `SuperAdminSeeder`.
 
-## Contributing
+---
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+## Tests
 
-## Code of Conduct
+```bash
+composer test
+```
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+Always use `composer test` — it enforces `--env=testing` and targets `enterprise_app_testing`. Running `php artisan test` bare risks the development database. A safety guard in `TestCase` will abort before any damage, but use the composer script as the habit.
 
-## Security Vulnerabilities
+```bash
+# Subset
+php artisan test --env=testing --filter SecurityPolicyTest
+php artisan test --env=testing tests/Feature/Security/
+```
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+Current suite: **762 tests, 762 passing**.
 
-## License
+---
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+## Admin Panel Structure
+
+| Navigation Group | Contains |
+|---|---|
+| Administration | Users, Roles, Permissions |
+| CMS | Pages, Posts, Post Categories, Tags, Content Blocks |
+| Masters | Countries |
+| Configuration | General, SEO, Mail settings |
+| Payment | Gateway, Configuration, Advanced, Bank Account settings |
+| Security | Authentication, Password Policy, Login Security, Session, Registration, Account Protection |
+| System | Cache Manager, Scheduler Monitor, Queue Monitor, Activity Log |
+
+---
+
+## Artisan Commands
+
+```bash
+php artisan app:doctor                    # health check (dev)
+php artisan app:doctor --env=testing      # health check (test)
+php artisan migrate --path=database/settings   # run settings migrations
+php artisan shield:generate --all         # regenerate Shield permissions after new resources
+```
+
+---
+
+## Documentation
+
+| | |
+|---|---|
+| [Architecture](docs/Architecture.md) | Module map, directory layout, service providers, data flow, DB schema |
+| [Development Guide](docs/Development-Guide.md) | Local setup, daily commands, adding resources and settings pages |
+| [Coding Standards](docs/Coding-Standards.md) | PHP and Filament conventions, Gate patterns, naming rules |
+| [Permission Matrix](docs/Permission-Matrix.md) | Every Gate ability, role definitions, policy map, Shield permissions |
+| [Settings Architecture](docs/Settings-Architecture.md) | All 13 settings classes and groups, how to add a new settings group |
+| [CMS Architecture](docs/CMS-Architecture.md) | Content bounded context, block type system, rendering pipeline |
+| [Testing](docs/Testing.md) | Safety guard, test commands, settings test patterns, common pitfalls |
+| [Roadmap](docs/Roadmap.md) | What's in v1.0, future modules, known technical debt |
