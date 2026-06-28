@@ -301,12 +301,12 @@ class MenuBuilder extends Component
     public function addCustomLink(): void
     {
         match ($this->customLinkType) {
-            'url'    => $this->addCustomUrl(),
-            'route'  => $this->addRoute(),
-            'email'  => $this->addEmail(),
-            'phone'  => $this->addPhone(),
+            'url' => $this->addCustomUrl(),
+            'route' => $this->addRoute(),
+            'email' => $this->addEmail(),
+            'phone' => $this->addPhone(),
             'anchor' => $this->addAnchor(),
-            default  => null,
+            default => null,
         };
     }
 

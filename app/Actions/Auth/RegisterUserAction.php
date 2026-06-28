@@ -17,21 +17,21 @@ final class RegisterUserAction
     public function execute(array $data): User
     {
         return DB::transaction(function () use ($data): User {
-            $fullName = trim(($data['first_name'] ?? '') . ' ' . ($data['last_name'] ?? ''));
+            $fullName = trim(($data['first_name'] ?? '').' '.($data['last_name'] ?? ''));
 
             $user = User::create([
-                'name'       => $fullName ?: $data['first_name'],
+                'name' => $fullName ?: $data['first_name'],
                 'first_name' => $data['first_name'],
-                'last_name'  => $data['last_name'] ?? null,
-                'email'      => strtolower(trim($data['email'])),
-                'password'   => $data['password'], // cast hashes automatically
-                'status'     => User::STATUS_PENDING,
+                'last_name' => $data['last_name'] ?? null,
+                'email' => strtolower(trim($data['email'])),
+                'password' => $data['password'], // cast hashes automatically
+                'status' => User::STATUS_PENDING,
             ]);
 
             // Eager-create profile with phone if provided
             UserProfile::create([
                 'user_id' => $user->id,
-                'phone'   => $data['phone'] ?? null,
+                'phone' => $data['phone'] ?? null,
             ]);
 
             return $user;

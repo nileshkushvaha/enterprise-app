@@ -29,8 +29,8 @@ class NavigationRendererTest extends TestCase
     private function publishedMenu(array $attrs = []): NavigationMenu
     {
         $menu = NavigationMenu::factory()->create(array_merge([
-            'status'      => NavigationStatus::Published->value,
-            'location'    => NavigationLocation::Header->value,
+            'status' => NavigationStatus::Published->value,
+            'location' => NavigationLocation::Header->value,
             'layout_type' => NavigationLayoutType::Standard->value,
         ], $attrs));
 
@@ -42,7 +42,7 @@ class NavigationRendererTest extends TestCase
     {
         return NavigationItem::factory()->create(array_merge([
             'navigation_id' => $menu->id,
-            'is_active'     => true,
+            'is_active' => true,
         ], $attrs));
     }
 
@@ -98,7 +98,7 @@ class NavigationRendererTest extends TestCase
     {
         $menu = $this->publishedMenu();
         $parent = $this->addItem($menu, ['label' => 'Services', 'link_type' => 'url', 'url' => '/services']);
-        $child  = $this->addItem($menu, ['label' => 'Web Design', 'link_type' => 'url', 'url' => '/services/web', 'parent_id' => $parent->id]);
+        $child = $this->addItem($menu, ['label' => 'Web Design', 'link_type' => 'url', 'url' => '/services/web', 'parent_id' => $parent->id]);
 
         $menu = $menu->fresh()->load(['items.linkable', 'items.roles', 'items.permissions']);
         $tree = $this->renderer->render($menu);
@@ -110,9 +110,9 @@ class NavigationRendererTest extends TestCase
 
     public function test_render_sets_correct_depth_on_nested_items(): void
     {
-        $menu   = $this->publishedMenu();
+        $menu = $this->publishedMenu();
         $parent = $this->addItem($menu, ['label' => 'L0', 'link_type' => 'url', 'url' => '/l0']);
-        $child  = $this->addItem($menu, ['label' => 'L1', 'link_type' => 'url', 'url' => '/l1', 'parent_id' => $parent->id]);
+        $child = $this->addItem($menu, ['label' => 'L1', 'link_type' => 'url', 'url' => '/l1', 'parent_id' => $parent->id]);
 
         $menu = $menu->fresh()->load(['items.linkable', 'items.roles', 'items.permissions']);
         $tree = $this->renderer->render($menu);
@@ -137,14 +137,14 @@ class NavigationRendererTest extends TestCase
     {
         $menu = $this->publishedMenu();
         $this->addItem($menu, [
-            'label'      => 'Contact',
-            'link_type'  => 'url',
-            'url'        => '/contact',
-            'icon'       => 'heroicon-o-phone',
-            'css_class'  => 'nav-contact',
-            'css_id'     => 'contact-link',
+            'label' => 'Contact',
+            'link_type' => 'url',
+            'url' => '/contact',
+            'icon' => 'heroicon-o-phone',
+            'css_class' => 'nav-contact',
+            'css_id' => 'contact-link',
             'badge_text' => 'New',
-            'badge_color'=> 'success',
+            'badge_color' => 'success',
         ]);
 
         $menu = $menu->fresh()->load(['items.linkable', 'items.roles', 'items.permissions']);
@@ -160,7 +160,7 @@ class NavigationRendererTest extends TestCase
 
     public function test_render_total_nodes_counts_all_items(): void
     {
-        $menu   = $this->publishedMenu();
+        $menu = $this->publishedMenu();
         $parent = $this->addItem($menu, ['link_type' => 'url', 'url' => '/a']);
         $this->addItem($menu, ['link_type' => 'url', 'url' => '/b', 'parent_id' => $parent->id]);
         $this->addItem($menu, ['link_type' => 'url', 'url' => '/c']);

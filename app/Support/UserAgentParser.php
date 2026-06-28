@@ -13,8 +13,8 @@ final class UserAgentParser
     public static function parse(string $userAgent): array
     {
         return [
-            'browser'     => self::detectBrowser($userAgent),
-            'platform'    => self::detectPlatform($userAgent),
+            'browser' => self::detectBrowser($userAgent),
+            'platform' => self::detectPlatform($userAgent),
             'device_type' => self::detectDeviceType($userAgent),
         ];
     }
@@ -22,14 +22,14 @@ final class UserAgentParser
     private static function detectBrowser(string $ua): string
     {
         $browsers = [
-            'Edg'       => 'Edge',
-            'OPR'       => 'Opera',
-            'Opera'     => 'Opera',
-            'Chrome'    => 'Chrome',
-            'Firefox'   => 'Firefox',
-            'Safari'    => 'Safari',
-            'MSIE'      => 'Internet Explorer',
-            'Trident'   => 'Internet Explorer',
+            'Edg' => 'Edge',
+            'OPR' => 'Opera',
+            'Opera' => 'Opera',
+            'Chrome' => 'Chrome',
+            'Firefox' => 'Firefox',
+            'Safari' => 'Safari',
+            'MSIE' => 'Internet Explorer',
+            'Trident' => 'Internet Explorer',
         ];
 
         foreach ($browsers as $key => $name) {
@@ -43,14 +43,14 @@ final class UserAgentParser
 
     private static function detectPlatform(string $ua): string
     {
-        return match(true) {
+        return match (true) {
             str_contains($ua, 'Windows NT') => 'Windows',
-            str_contains($ua, 'Macintosh')  => 'macOS',
-            str_contains($ua, 'iPhone')     => 'iOS',
-            str_contains($ua, 'iPad')       => 'iPadOS',
-            str_contains($ua, 'Android')    => 'Android',
-            str_contains($ua, 'Linux')      => 'Linux',
-            default                         => 'Unknown',
+            str_contains($ua, 'Macintosh') => 'macOS',
+            str_contains($ua, 'iPhone') => 'iOS',
+            str_contains($ua, 'iPad') => 'iPadOS',
+            str_contains($ua, 'Android') => 'Android',
+            str_contains($ua, 'Linux') => 'Linux',
+            default => 'Unknown',
         };
     }
 

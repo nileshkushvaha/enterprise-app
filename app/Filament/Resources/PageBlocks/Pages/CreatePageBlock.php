@@ -23,14 +23,14 @@ class CreatePageBlock extends CreateRecord
         if ($postId) {
             return [
                 'blockable_type' => (new Post)->getMorphClass(),
-                'post_id'        => $postId,
+                'post_id' => $postId,
             ];
         }
 
         if ($pageId) {
             return [
                 'blockable_type' => (new Page)->getMorphClass(),
-                'page_id'        => $pageId,
+                'page_id' => $pageId,
             ];
         }
 
@@ -64,14 +64,14 @@ class CreatePageBlock extends CreateRecord
                 throw ValidationException::withMessages(['post_id' => 'Please select a post.']);
             }
             $data['blockable_type'] = (new Post)->getMorphClass();
-            $data['blockable_id']   = $ownerId;
+            $data['blockable_id'] = $ownerId;
         } else {
             $ownerId = $data['page_id'] ?? request()->query('page_id');
             if (blank($ownerId)) {
                 throw ValidationException::withMessages(['page_id' => 'Please select a page before creating a block.']);
             }
             $data['blockable_type'] = (new Page)->getMorphClass();
-            $data['blockable_id']   = $ownerId;
+            $data['blockable_id'] = $ownerId;
         }
 
         unset($data['page_id'], $data['post_id']);
@@ -80,7 +80,7 @@ class CreatePageBlock extends CreateRecord
             $blockTypeValue = $data['block_type'] instanceof BlockType ? $data['block_type']->value : $data['block_type'];
             $blockType = BlockType::tryFrom((string) $blockTypeValue);
             if ($blockType) {
-                $data['content']  = BlockContentConverter::convert($blockType, $data);
+                $data['content'] = BlockContentConverter::convert($blockType, $data);
                 $data['settings'] = $data['settings'] ?? [];
 
                 $errors = app(ValidateBlockContentAction::class)->execute($blockType, $data['content']);

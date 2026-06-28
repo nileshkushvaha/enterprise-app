@@ -8,6 +8,7 @@ use App\Enums\PageStatus;
 use App\Enums\PageVisibility;
 use App\Models\Post;
 use App\Services\PostService;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -77,7 +78,7 @@ class PostLifecycleTest extends TestCase
     public function test_archived_post_is_not_publicly_accessible(): void
     {
         $post = Post::factory()->create([
-            'slug'   => 'archived-post',
+            'slug' => 'archived-post',
             'status' => 'archived',
         ]);
 
@@ -89,7 +90,7 @@ class PostLifecycleTest extends TestCase
     public function test_soft_delete_hides_post_from_default_queries(): void
     {
         $post = Post::factory()->create();
-        $id   = $post->id;
+        $id = $post->id;
 
         $post->delete();
 
@@ -109,7 +110,7 @@ class PostLifecycleTest extends TestCase
     public function test_restored_post_is_visible_again(): void
     {
         $post = Post::factory()->create();
-        $id   = $post->id;
+        $id = $post->id;
         $post->delete();
 
         Post::withTrashed()->find($id)->restore();
@@ -141,8 +142,8 @@ class PostLifecycleTest extends TestCase
     public function test_scheduled_scope_only_matches_past_published_at(): void
     {
         $due = Post::factory()->create([
-            'status'       => 'scheduled',
-            'visibility'   => 'public',
+            'status' => 'scheduled',
+            'visibility' => 'public',
             'published_at' => now()->subMinute(),
         ]);
         Post::factory()->scheduled()->create(); // future
@@ -172,7 +173,7 @@ class PostLifecycleTest extends TestCase
     {
         Post::factory()->create(['slug' => 'same-slug']);
 
-        $this->expectException(\Illuminate\Database\QueryException::class);
+        $this->expectException(QueryException::class);
         Post::factory()->create(['slug' => 'same-slug']);
     }
 }

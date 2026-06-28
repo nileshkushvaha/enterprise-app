@@ -7,7 +7,9 @@ namespace App\Listeners\Auth;
 use App\Events\Auth\UserRegistered;
 use App\Notifications\Auth\VerifyEmailNotification;
 use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\URL;
 use Throwable;
 
 final class SendRegistrationNotifications implements ShouldQueue
@@ -26,11 +28,11 @@ final class SendRegistrationNotifications implements ShouldQueue
 
         // Send verification email (queued notification)
         $notification = new VerifyEmailNotification;
-        $notification->verificationUrl = \Illuminate\Support\Facades\URL::temporarySignedRoute(
+        $notification->verificationUrl = URL::temporarySignedRoute(
             'auth.verification.verify',
-            \Illuminate\Support\Carbon::now()->addMinutes(config('auth.verification.expire', 60)),
+            Carbon::now()->addMinutes(config('auth.verification.expire', 60)),
             [
-                'id'   => $user->getKey(),
+                'id' => $user->getKey(),
                 'hash' => sha1($user->getEmailForVerification()),
             ]
         );
@@ -41,7 +43,7 @@ final class SendRegistrationNotifications implements ShouldQueue
             ->causedBy($user)
             ->performedOn($user)
             ->withProperties([
-                'ip'         => $event->ipAddress,
+                'ip' => $event->ipAddress,
                 'user_agent' => $event->userAgent,
             ])
             ->log('User registered');
@@ -50,8 +52,8 @@ final class SendRegistrationNotifications implements ShouldQueue
     public function failed(UserRegistered $event, Throwable $exception): void
     {
         Log::error('SendRegistrationNotifications failed', [
-            'user_id'   => $event->user->id,
-            'email'     => $event->user->email,
+            'user_id' => $event->user->id,
+            'email' => $event->user->email,
             'exception' => $exception->getMessage(),
         ]);
     }

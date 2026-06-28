@@ -18,19 +18,19 @@ class PageBlockCreationTest extends TestCase
 
         $block = ContentBlock::create([
             'blockable_type' => 'page',
-            'blockable_id'   => $page->id,
-            'block_type'     => BlockType::Hero,
-            'content'        => json_encode([
-                'title'        => 'Welcome',
-                'subtitle'     => 'Test',
-                'image'        => null,
-                'button_text'  => 'Click',
-                'button_link'  => '/test',
+            'blockable_id' => $page->id,
+            'block_type' => BlockType::Hero,
+            'content' => json_encode([
+                'title' => 'Welcome',
+                'subtitle' => 'Test',
+                'image' => null,
+                'button_text' => 'Click',
+                'button_link' => '/test',
                 'button_style' => 'primary',
             ]),
-            'settings'   => json_encode([]),
+            'settings' => json_encode([]),
             'sort_order' => 1,
-            'is_active'  => true,
+            'is_active' => true,
         ]);
 
         $this->assertNotNull($block->id);
@@ -45,22 +45,22 @@ class PageBlockCreationTest extends TestCase
 
         ContentBlock::create([
             'blockable_type' => 'page',
-            'blockable_id'   => $page->id,
-            'block_type'     => BlockType::Hero,
-            'content'        => json_encode(['title' => 'Hero']),
-            'settings'       => json_encode([]),
-            'sort_order'     => 1,
-            'is_active'      => true,
+            'blockable_id' => $page->id,
+            'block_type' => BlockType::Hero,
+            'content' => json_encode(['title' => 'Hero']),
+            'settings' => json_encode([]),
+            'sort_order' => 1,
+            'is_active' => true,
         ]);
 
         ContentBlock::create([
             'blockable_type' => 'page',
-            'blockable_id'   => $page->id,
-            'block_type'     => BlockType::RichText,
-            'content'        => json_encode(['text' => '<p>Content</p>']),
-            'settings'       => json_encode([]),
-            'sort_order'     => 2,
-            'is_active'      => true,
+            'blockable_id' => $page->id,
+            'block_type' => BlockType::RichText,
+            'content' => json_encode(['text' => '<p>Content</p>']),
+            'settings' => json_encode([]),
+            'sort_order' => 2,
+            'is_active' => true,
         ]);
 
         $this->assertCount(2, $page->blocks);
@@ -75,12 +75,12 @@ class PageBlockCreationTest extends TestCase
 
         $block = ContentBlock::create([
             'blockable_type' => 'page',
-            'blockable_id'   => $page->id,
-            'block_type'     => BlockType::Image,
-            'content'        => json_encode(['image' => '/old.jpg']),
-            'settings'       => json_encode([]),
-            'sort_order'     => 1,
-            'is_active'      => true,
+            'blockable_id' => $page->id,
+            'block_type' => BlockType::Image,
+            'content' => json_encode(['image' => '/old.jpg']),
+            'settings' => json_encode([]),
+            'sort_order' => 1,
+            'is_active' => true,
         ]);
 
         $block->update([
@@ -99,12 +99,12 @@ class PageBlockCreationTest extends TestCase
 
         $block = ContentBlock::create([
             'blockable_type' => 'page',
-            'blockable_id'   => $page->id,
-            'block_type'     => BlockType::CTA,
-            'content'        => json_encode(['title' => 'CTA']),
-            'settings'       => json_encode([]),
-            'sort_order'     => 1,
-            'is_active'      => true,
+            'blockable_id' => $page->id,
+            'block_type' => BlockType::CTA,
+            'content' => json_encode(['title' => 'CTA']),
+            'settings' => json_encode([]),
+            'sort_order' => 1,
+            'is_active' => true,
         ]);
 
         $blockId = $block->id;
@@ -125,12 +125,12 @@ class PageBlockCreationTest extends TestCase
         ] as [$type, $order]) {
             ContentBlock::create([
                 'blockable_type' => 'page',
-                'blockable_id'   => $page->id,
-                'block_type'     => $type,
-                'content'        => json_encode(['title' => 'x']),
-                'settings'       => json_encode([]),
-                'sort_order'     => $order,
-                'is_active'      => true,
+                'blockable_id' => $page->id,
+                'block_type' => $type,
+                'content' => json_encode(['title' => 'x']),
+                'settings' => json_encode([]),
+                'sort_order' => $order,
+                'is_active' => true,
             ]);
         }
 
@@ -148,22 +148,22 @@ class PageBlockCreationTest extends TestCase
 
         $block1 = ContentBlock::create([
             'blockable_type' => 'page',
-            'blockable_id'   => $page->id,
-            'block_type'     => BlockType::Hero,
-            'content'        => json_encode(['title' => 'Hero']),
-            'settings'       => json_encode([]),
-            'sort_order'     => 1,
-            'is_active'      => true,
+            'blockable_id' => $page->id,
+            'block_type' => BlockType::Hero,
+            'content' => json_encode(['title' => 'Hero']),
+            'settings' => json_encode([]),
+            'sort_order' => 1,
+            'is_active' => true,
         ]);
 
         ContentBlock::create([
             'blockable_type' => 'page',
-            'blockable_id'   => $page->id,
-            'block_type'     => BlockType::CTA,
-            'content'        => json_encode(['title' => 'CTA']),
-            'settings'       => json_encode([]),
-            'sort_order'     => 2,
-            'is_active'      => true,
+            'blockable_id' => $page->id,
+            'block_type' => BlockType::CTA,
+            'content' => json_encode(['title' => 'CTA']),
+            'settings' => json_encode([]),
+            'sort_order' => 2,
+            'is_active' => true,
         ]);
 
         $block1->delete();
@@ -180,12 +180,12 @@ class PageBlockCreationTest extends TestCase
         foreach (BlockType::cases() as $blockType) {
             $block = ContentBlock::create([
                 'blockable_type' => 'page',
-                'blockable_id'   => $page->id,
-                'block_type'     => $blockType,
-                'content'        => json_encode(['test' => 'data']),
-                'settings'       => json_encode([]),
-                'sort_order'     => 1,
-                'is_active'      => true,
+                'blockable_id' => $page->id,
+                'block_type' => $blockType,
+                'content' => json_encode(['test' => 'data']),
+                'settings' => json_encode([]),
+                'sort_order' => 1,
+                'is_active' => true,
             ]);
 
             $this->assertEquals($blockType, $block->block_type);
@@ -206,12 +206,12 @@ class PageBlockCreationTest extends TestCase
 
         $block = ContentBlock::create([
             'blockable_type' => 'page',
-            'blockable_id'   => $page->id,
-            'block_type'     => BlockType::Hero,
-            'content'        => json_encode(['title' => 'Hero']),
-            'settings'       => json_encode([]),
-            'sort_order'     => 1,
-            'is_active'      => true,
+            'blockable_id' => $page->id,
+            'block_type' => BlockType::Hero,
+            'content' => json_encode(['title' => 'Hero']),
+            'settings' => json_encode([]),
+            'sort_order' => 1,
+            'is_active' => true,
         ]);
 
         $this->assertEquals($page->id, $block->page->id);

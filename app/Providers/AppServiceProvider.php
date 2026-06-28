@@ -15,10 +15,11 @@ use App\Observers\PostObserver;
 use App\Observers\TagObserver;
 use App\Policies\ActivityLogPolicy;
 use App\Policies\CacheManagerPolicy;
-use App\Policies\QueueMonitorPolicy;
 use App\Policies\NavigationMenuPolicy;
 use App\Policies\ProfilePolicy;
+use App\Policies\QueueMonitorPolicy;
 use App\Policies\SchedulerMonitorPolicy;
+use App\Policies\Security\SecurityPolicy;
 use Illuminate\Console\Events\ScheduledTaskFailed;
 use Illuminate\Console\Events\ScheduledTaskFinished;
 use Illuminate\Console\Events\ScheduledTaskSkipped;
@@ -71,6 +72,19 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('profile.view', [ProfilePolicy::class, 'view']);
         Gate::define('profile.update', [ProfilePolicy::class, 'update']);
         Gate::define('password.change', [ProfilePolicy::class, 'changePassword']);
+
+        Gate::define('security.authentication.view', [SecurityPolicy::class, 'viewAuthentication']);
+        Gate::define('security.authentication.update', [SecurityPolicy::class, 'updateAuthentication']);
+        Gate::define('security.password_policy.view', [SecurityPolicy::class, 'viewPasswordPolicy']);
+        Gate::define('security.password_policy.update', [SecurityPolicy::class, 'updatePasswordPolicy']);
+        Gate::define('security.login_security.view', [SecurityPolicy::class, 'viewLoginSecurity']);
+        Gate::define('security.login_security.update', [SecurityPolicy::class, 'updateLoginSecurity']);
+        Gate::define('security.session.view', [SecurityPolicy::class, 'viewSession']);
+        Gate::define('security.session.update', [SecurityPolicy::class, 'updateSession']);
+        Gate::define('security.registration.view', [SecurityPolicy::class, 'viewRegistration']);
+        Gate::define('security.registration.update', [SecurityPolicy::class, 'updateRegistration']);
+        Gate::define('security.account_protection.view', [SecurityPolicy::class, 'viewAccountProtection']);
+        Gate::define('security.account_protection.update', [SecurityPolicy::class, 'updateAccountProtection']);
     }
 
     /**
@@ -81,30 +95,30 @@ class AppServiceProvider extends ServiceProvider
     {
         Event::listen(ScheduledTaskFinished::class, function (ScheduledTaskFinished $event): void {
             SchedulerHistory::create([
-                'command'      => $event->task->command ?? 'closure',
+                'command' => $event->task->command ?? 'closure',
                 'triggered_by' => 'scheduler',
-                'status'       => 'success',
-                'duration_ms'  => (int) ($event->runtime * 1000),
-                'ran_at'       => now(),
+                'status' => 'success',
+                'duration_ms' => (int) ($event->runtime * 1000),
+                'ran_at' => now(),
             ]);
         });
 
         Event::listen(ScheduledTaskFailed::class, function (ScheduledTaskFailed $event): void {
             SchedulerHistory::create([
-                'command'      => $event->task->command ?? 'closure',
+                'command' => $event->task->command ?? 'closure',
                 'triggered_by' => 'scheduler',
-                'status'       => 'failed',
-                'output'       => $event->exception->getMessage(),
-                'ran_at'       => now(),
+                'status' => 'failed',
+                'output' => $event->exception->getMessage(),
+                'ran_at' => now(),
             ]);
         });
 
         Event::listen(ScheduledTaskSkipped::class, function (ScheduledTaskSkipped $event): void {
             SchedulerHistory::create([
-                'command'      => $event->task->command ?? 'closure',
+                'command' => $event->task->command ?? 'closure',
                 'triggered_by' => 'scheduler',
-                'status'       => 'skipped',
-                'ran_at'       => now(),
+                'status' => 'skipped',
+                'ran_at' => now(),
             ]);
         });
     }

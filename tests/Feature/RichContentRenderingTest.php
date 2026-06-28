@@ -6,6 +6,7 @@ namespace Tests\Feature;
 
 use App\Content\Models\ContentBlock;
 use App\Content\Rendering\ContentRenderer;
+use App\Content\SEO\SeoManager;
 use App\Enums\BlockType;
 use App\Enums\PageStatus;
 use App\Enums\PageVisibility;
@@ -27,9 +28,9 @@ class RichContentRenderingTest extends TestCase
     private function publishedPage(array $attrs = []): Page
     {
         return Page::factory()->create(array_merge([
-            'status'     => PageStatus::Published,
+            'status' => PageStatus::Published,
             'visibility' => PageVisibility::Public,
-            'template'   => 'default',
+            'template' => 'default',
         ], $attrs));
     }
 
@@ -42,12 +43,12 @@ class RichContentRenderingTest extends TestCase
     {
         return ContentBlock::factory()->create([
             'blockable_type' => $owner->getMorphClass(),
-            'blockable_id'   => $owner->getKey(),
-            'block_type'     => BlockType::RichText,
-            'content'        => ['text' => '<p>Block paragraph.</p>'],
-            'is_active'      => true,
-            'sort_order'     => 0,
-            'position'       => $position,
+            'blockable_id' => $owner->getKey(),
+            'block_type' => BlockType::RichText,
+            'content' => ['text' => '<p>Block paragraph.</p>'],
+            'is_active' => true,
+            'sort_order' => 0,
+            'position' => $position,
         ]);
     }
 
@@ -108,7 +109,7 @@ class RichContentRenderingTest extends TestCase
         $html = app(ContentRenderer::class)->render($page);
 
         $beforePos = strpos($html, 'Block paragraph.');
-        $richPos   = strpos($html, 'Rich');
+        $richPos = strpos($html, 'Rich');
 
         $this->assertNotFalse($beforePos);
         $this->assertNotFalse($richPos);
@@ -123,7 +124,7 @@ class RichContentRenderingTest extends TestCase
         $html = app(ContentRenderer::class)->render($page);
 
         $afterPos = strpos($html, 'Block paragraph.');
-        $richPos  = strpos($html, 'Rich');
+        $richPos = strpos($html, 'Rich');
 
         $this->assertNotFalse($afterPos);
         $this->assertNotFalse($richPos);
@@ -207,8 +208,8 @@ class RichContentRenderingTest extends TestCase
     public function test_page_seo_description_falls_back_to_excerpt(): void
     {
         $page = $this->publishedPage([
-            'excerpt'          => 'Excerpt text',
-            'content'          => '<p>Full content</p>',
+            'excerpt' => 'Excerpt text',
+            'content' => '<p>Full content</p>',
             'meta_description' => null,
         ]);
 
@@ -220,12 +221,12 @@ class RichContentRenderingTest extends TestCase
     public function test_page_seo_description_falls_back_to_content_when_no_excerpt(): void
     {
         $page = $this->publishedPage([
-            'excerpt'          => null,
-            'content'          => '<p>Content used as SEO description.</p>',
+            'excerpt' => null,
+            'content' => '<p>Content used as SEO description.</p>',
             'meta_description' => null,
         ]);
 
-        $seo = app(\App\Content\SEO\SeoManager::class)->getPageMetadata($page);
+        $seo = app(SeoManager::class)->getPageMetadata($page);
 
         $this->assertStringContainsString('Content used as SEO description', $seo['description']);
     }
@@ -233,12 +234,12 @@ class RichContentRenderingTest extends TestCase
     public function test_post_seo_description_falls_back_to_content_when_no_excerpt(): void
     {
         $post = $this->publishedPost([
-            'excerpt'          => null,
-            'content'          => '<p>Post content for SEO.</p>',
+            'excerpt' => null,
+            'content' => '<p>Post content for SEO.</p>',
             'meta_description' => null,
         ]);
 
-        $seo = app(\App\Content\SEO\SeoManager::class)->getPostMetadata($post);
+        $seo = app(SeoManager::class)->getPostMetadata($post);
 
         $this->assertStringContainsString('Post content for SEO', $seo['description']);
     }
@@ -291,17 +292,17 @@ class RichContentRenderingTest extends TestCase
 
         ContentBlock::factory()->create([
             'blockable_type' => $page->getMorphClass(),
-            'blockable_id'   => $page->getKey(),
-            'block_type'     => BlockType::RichText,
-            'content'        => ['text' => '<p>Default positioned block.</p>'],
-            'is_active'      => true,
-            'sort_order'     => 0,
-            'position'       => 'after_content',
+            'blockable_id' => $page->getKey(),
+            'block_type' => BlockType::RichText,
+            'content' => ['text' => '<p>Default positioned block.</p>'],
+            'is_active' => true,
+            'sort_order' => 0,
+            'position' => 'after_content',
         ]);
 
         $html = app(ContentRenderer::class)->render($page);
 
-        $richPos  = strpos($html, 'Rich');
+        $richPos = strpos($html, 'Rich');
         $blockPos = strpos($html, 'Default positioned block.');
 
         $this->assertGreaterThan($richPos, $blockPos, 'Default block must appear after rich content');

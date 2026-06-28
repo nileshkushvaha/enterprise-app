@@ -18,9 +18,13 @@ use Illuminate\Contracts\Support\Htmlable;
 class PaymentAdvancedPage extends PaymentSettingsPage
 {
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedWrenchScrewdriver;
+
     protected static ?string $navigationLabel = 'Advanced';
+
     protected static string|\UnitEnum|null $navigationGroup = 'Payment';
+
     protected static ?int $navigationSort = 4;
+
     protected static ?string $slug = 'payment-settings/advanced';
 
     public static function getLabel(): string
@@ -33,7 +37,7 @@ class PaymentAdvancedPage extends PaymentSettingsPage
         return 'Advanced Payment Settings';
     }
 
-    public function getSubheading(): string|null
+    public function getSubheading(): ?string
     {
         return 'Configure webhook retries, queue processing, and payment logging.';
     }

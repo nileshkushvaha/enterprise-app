@@ -3,9 +3,9 @@
 namespace App\Forms\Blocks;
 
 use Filament\Forms\Components\ColorPicker;
-use Filament\Schemas\Components\Section;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
+use Filament\Schemas\Components\Section;
 
 class DividerBlockForm
 {

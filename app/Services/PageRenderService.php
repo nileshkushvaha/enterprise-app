@@ -11,6 +11,4 @@ use App\Content\Rendering\ContentRenderer;
  * PageRenderService from the container keep working unchanged because
  * this class inherits every public method from ContentRenderer.
  */
-class PageRenderService extends ContentRenderer
-{
-}
+class PageRenderService extends ContentRenderer {}

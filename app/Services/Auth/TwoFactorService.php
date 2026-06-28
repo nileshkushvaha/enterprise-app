@@ -5,6 +5,10 @@ declare(strict_types=1);
 namespace App\Services\Auth;
 
 use App\Models\User;
+use chillerlan\QRCode\Data\QRMatrix;
+use chillerlan\QRCode\Output\QROutputInterface;
+use chillerlan\QRCode\QRCode;
+use chillerlan\QRCode\QROptions;
 use Illuminate\Support\Str;
 use PragmaRX\Google2FA\Google2FA;
 
@@ -25,9 +29,9 @@ final class TwoFactorService
         $secret = $this->google2fa->generateSecretKey();
 
         $user->updateQuietly([
-            'two_factor_secret'           => encrypt($secret),
-            'two_factor_recovery_codes'   => encrypt(json_encode($this->generateRecoveryCodes())),
-            'two_factor_confirmed_at'     => null, // not confirmed yet
+            'two_factor_secret' => encrypt($secret),
+            'two_factor_recovery_codes' => encrypt(json_encode($this->generateRecoveryCodes())),
+            'two_factor_confirmed_at' => null, // not confirmed yet
         ]);
 
         return $secret;
@@ -62,9 +66,9 @@ final class TwoFactorService
     public function disable(User $user): void
     {
         $user->updateQuietly([
-            'two_factor_secret'         => null,
+            'two_factor_secret' => null,
             'two_factor_recovery_codes' => null,
-            'two_factor_confirmed_at'   => null,
+            'two_factor_confirmed_at' => null,
         ]);
 
         activity('security')
@@ -82,6 +86,7 @@ final class TwoFactorService
     public function verifyCode(User $user, string $code): bool
     {
         $secret = decrypt($user->two_factor_secret);
+
         return (bool) $this->google2fa->verifyKey($secret, $code, 1);
     }
 
@@ -102,8 +107,8 @@ final class TwoFactorService
     {
         return $this->google2fa->getQRCodeUrl(
             company: config('app.name'),
-            holder:  $user->email,
-            secret:  $secret,
+            holder: $user->email,
+            secret: $secret,
         );
     }
 
@@ -112,31 +117,31 @@ final class TwoFactorService
      */
     public function qrCodeSvg(string $url): string
     {
-        $options = new \chillerlan\QRCode\QROptions([
-            'outputType'    => \chillerlan\QRCode\Output\QROutputInterface::MARKUP_SVG,
-            'eccLevel'      => \chillerlan\QRCode\QRCode::ECC_H,
-            'imageBase64'   => false,
-            'moduleValues'  => [
+        $options = new QROptions([
+            'outputType' => QROutputInterface::MARKUP_SVG,
+            'eccLevel' => QRCode::ECC_H,
+            'imageBase64' => false,
+            'moduleValues' => [
                 // dark modules
-                \chillerlan\QRCode\Data\QRMatrix::M_DATA_DARK    => '#6366f1',
-                \chillerlan\QRCode\Data\QRMatrix::M_FINDER_DARK  => '#6366f1',
-                \chillerlan\QRCode\Data\QRMatrix::M_FINDER_DOT   => '#4f46e5',
-                \chillerlan\QRCode\Data\QRMatrix::M_ALIGNMENT_DARK => '#6366f1',
-                \chillerlan\QRCode\Data\QRMatrix::M_TIMING_DARK  => '#6366f1',
-                \chillerlan\QRCode\Data\QRMatrix::M_FORMAT_DARK  => '#6366f1',
-                \chillerlan\QRCode\Data\QRMatrix::M_VERSION_DARK => '#6366f1',
+                QRMatrix::M_DATA_DARK => '#6366f1',
+                QRMatrix::M_FINDER_DARK => '#6366f1',
+                QRMatrix::M_FINDER_DOT => '#4f46e5',
+                QRMatrix::M_ALIGNMENT_DARK => '#6366f1',
+                QRMatrix::M_TIMING_DARK => '#6366f1',
+                QRMatrix::M_FORMAT_DARK => '#6366f1',
+                QRMatrix::M_VERSION_DARK => '#6366f1',
                 // light modules (background)
-                \chillerlan\QRCode\Data\QRMatrix::M_DATA         => '#0f0c29',
-                \chillerlan\QRCode\Data\QRMatrix::M_FINDER       => '#0f0c29',
-                \chillerlan\QRCode\Data\QRMatrix::M_ALIGNMENT    => '#0f0c29',
-                \chillerlan\QRCode\Data\QRMatrix::M_SEPARATOR    => '#0f0c29',
-                \chillerlan\QRCode\Data\QRMatrix::M_TIMING       => '#0f0c29',
-                \chillerlan\QRCode\Data\QRMatrix::M_FORMAT       => '#0f0c29',
-                \chillerlan\QRCode\Data\QRMatrix::M_VERSION      => '#0f0c29',
+                QRMatrix::M_DATA => '#0f0c29',
+                QRMatrix::M_FINDER => '#0f0c29',
+                QRMatrix::M_ALIGNMENT => '#0f0c29',
+                QRMatrix::M_SEPARATOR => '#0f0c29',
+                QRMatrix::M_TIMING => '#0f0c29',
+                QRMatrix::M_FORMAT => '#0f0c29',
+                QRMatrix::M_VERSION => '#0f0c29',
             ],
         ]);
 
-        return (new \chillerlan\QRCode\QRCode($options))->render($url);
+        return (new QRCode($options))->render($url);
     }
 
     // ── Recovery codes ────────────────────────────────────────────────
@@ -148,6 +153,7 @@ final class TwoFactorService
         $user->updateQuietly([
             'two_factor_recovery_codes' => encrypt(json_encode($codes)),
         ]);
+
         return $codes;
     }
 
@@ -156,7 +162,7 @@ final class TwoFactorService
     private function generateRecoveryCodes(): array
     {
         return array_map(
-            fn () => Str::random(10) . '-' . Str::random(10),
+            fn () => Str::random(10).'-'.Str::random(10),
             array_fill(0, User::RECOVERY_CODES_COUNT, null)
         );
     }

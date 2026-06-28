@@ -4,13 +4,13 @@ declare(strict_types=1);
 
 namespace App\Filament\Resources\ActivityLog\Schemas;
 
-use Filament\Infolists\Components\KeyValueEntry;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Tabs;
 use Filament\Schemas\Components\Tabs\Tab;
 use Filament\Schemas\Schema;
+use Filament\Support\Enums\FontFamily;
 use Spatie\Activitylog\Models\Activity;
 
 class ActivityLogInfolist
@@ -19,16 +19,16 @@ class ActivityLogInfolist
     private static function eventColor(?string $event): string
     {
         return match ($event) {
-            'created', 'registered'                                    => 'success',
+            'created', 'registered' => 'success',
             'updated', 'roles_updated', 'profile_updated',
             'password_changed', 'photo_updated', 'role_updated',
-            '2fa_enabled', '2fa_disabled', 'account_unlocked'         => 'warning',
-            'deleted', 'login_failed'                                  => 'danger',
+            '2fa_enabled', '2fa_disabled', 'account_unlocked' => 'warning',
+            'deleted', 'login_failed' => 'danger',
             'login', 'logout', 'password_reset', 'auto_published',
             'manually_ran', 'webhook_received', 'role_created',
-            'photo_removed', 'password_reset_requested'               => 'info',
-            'previewed', 'contact_form_submitted', 'media_updated'     => 'gray',
-            default                                                    => 'gray',
+            'photo_removed', 'password_reset_requested' => 'info',
+            'previewed', 'contact_form_submitted', 'media_updated' => 'gray',
+            default => 'gray',
         };
     }
 
@@ -73,13 +73,14 @@ class ActivityLogInfolist
                                 }
                                 $class = $record->subject_type;
                                 if (! class_exists($class)) {
-                                    return class_basename($class) . ' (class not found)';
+                                    return class_basename($class).' (class not found)';
                                 }
                                 try {
                                     $model = (new $class)->find($record->subject_id);
+
                                     return $model
-                                        ? class_basename($class) . ' #' . $record->subject_id . ' (exists)'
-                                        : class_basename($class) . ' #' . $record->subject_id . ' (deleted)';
+                                        ? class_basename($class).' #'.$record->subject_id.' (exists)'
+                                        : class_basename($class).' #'.$record->subject_id.' (deleted)';
                                 } catch (\Throwable) {
                                     return '—';
                                 }
@@ -123,9 +124,10 @@ class ActivityLogInfolist
                                 ->label('')
                                 ->state(function (Activity $record): string {
                                     $old = data_get($record->attribute_changes, 'old');
+
                                     return $old ? json_encode($old, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) : 'No previous values recorded.';
                                 })
-                                ->fontFamily(\Filament\Support\Enums\FontFamily::Mono)
+                                ->fontFamily(FontFamily::Mono)
                                 ->extraAttributes(['class' => 'whitespace-pre-wrap break-all text-xs'])
                                 ->columnSpanFull(),
                         ]),
@@ -137,9 +139,10 @@ class ActivityLogInfolist
                                 ->label('')
                                 ->state(function (Activity $record): string {
                                     $new = data_get($record->attribute_changes, 'attributes');
+
                                     return $new ? json_encode($new, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) : 'No new values recorded.';
                                 })
-                                ->fontFamily(\Filament\Support\Enums\FontFamily::Mono)
+                                ->fontFamily(FontFamily::Mono)
                                 ->extraAttributes(['class' => 'whitespace-pre-wrap break-all text-xs'])
                                 ->columnSpanFull(),
                         ]),
@@ -168,9 +171,10 @@ class ActivityLogInfolist
                                 ->label('Full Properties (JSON)')
                                 ->state(function (Activity $record): string {
                                     $props = $record->properties?->toArray() ?? [];
+
                                     return $props ? json_encode($props, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) : '{}';
                                 })
-                                ->fontFamily(\Filament\Support\Enums\FontFamily::Mono)
+                                ->fontFamily(FontFamily::Mono)
                                 ->extraAttributes(['class' => 'whitespace-pre-wrap break-all text-xs'])
                                 ->columnSpanFull(),
                         ]),

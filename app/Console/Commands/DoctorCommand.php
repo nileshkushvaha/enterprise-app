@@ -7,7 +7,8 @@ use Illuminate\Support\Facades\DB;
 
 class DoctorCommand extends Command
 {
-    protected $signature   = 'app:doctor';
+    protected $signature = 'app:doctor';
+
     protected $description = 'Verify the current environment configuration';
 
     public function handle(): int
@@ -24,9 +25,9 @@ class DoctorCommand extends Command
                 $failed++;
             }
 
-            $icon  = $ok ? '<fg=green>✓</>' : '<fg=red>✗</>';
-            $val   = $ok ? "<fg=green>{$value}</>" : "<fg=red>{$value}</>";
-            $pad   = str_pad($label, 20);
+            $icon = $ok ? '<fg=green>✓</>' : '<fg=red>✗</>';
+            $val = $ok ? "<fg=green>{$value}</>" : "<fg=red>{$value}</>";
+            $pad = str_pad($label, 20);
 
             $this->line("  {$icon}  {$pad} {$val}");
 
@@ -50,22 +51,22 @@ class DoctorCommand extends Command
 
     private function buildChecks(): array
     {
-        $env        = app()->environment();
+        $env = app()->environment();
         $connection = config('database.default');
-        $database   = config("database.connections.{$connection}.database");
-        $dbOk       = $this->canConnectToDatabase();
+        $database = config("database.connections.{$connection}.database");
+        $dbOk = $this->canConnectToDatabase();
 
-        $envOk   = in_array($env, ['local', 'testing'], true);
+        $envOk = in_array($env, ['local', 'testing'], true);
         $envHint = $envOk ? null : "Unexpected environment [{$env}] — expected local or testing";
 
         return [
-            'Environment'  => [$env,        $envOk, $envHint],
-            'Connection'   => [$connection,  true,   null],
-            'Database'     => [$database,    $dbOk,  $dbOk ? null : "Cannot connect to [{$database}] — check credentials"],
-            'Cache'        => [config('cache.default'),   true, null],
-            'Queue'        => [config('queue.default'),   true, null],
-            'Mail'         => [config('mail.default'),    true, null],
-            'Session'      => [config('session.driver'),  true, null],
+            'Environment' => [$env,        $envOk, $envHint],
+            'Connection' => [$connection,  true,   null],
+            'Database' => [$database,    $dbOk,  $dbOk ? null : "Cannot connect to [{$database}] — check credentials"],
+            'Cache' => [config('cache.default'),   true, null],
+            'Queue' => [config('queue.default'),   true, null],
+            'Mail' => [config('mail.default'),    true, null],
+            'Session' => [config('session.driver'),  true, null],
         ];
     }
 
@@ -73,6 +74,7 @@ class DoctorCommand extends Command
     {
         try {
             DB::connection()->getPdo();
+
             return true;
         } catch (\Throwable) {
             return false;

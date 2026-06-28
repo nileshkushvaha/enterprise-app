@@ -43,10 +43,10 @@ class CmsServiceProvider extends ServiceProvider
     private function registerMorphMap(): void
     {
         Relation::morphMap([
-            'page'     => Page::class,
-            'post'     => Post::class,
+            'page' => Page::class,
+            'post' => Post::class,
             'category' => PostCategory::class,
-            'tag'      => Tag::class,
+            'tag' => Tag::class,
         ]);
     }
 

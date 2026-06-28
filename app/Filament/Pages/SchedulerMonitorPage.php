@@ -13,15 +13,21 @@ use Filament\Support\Icons\Heroicon;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
+use Spatie\Permission\Exceptions\PermissionDoesNotExist;
 
 class SchedulerMonitorPage extends Page
 {
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedClock;
-    protected static ?string $navigationLabel               = 'Scheduler';
+
+    protected static ?string $navigationLabel = 'Scheduler';
+
     protected static string|\UnitEnum|null $navigationGroup = 'System';
-    protected static ?int $navigationSort                   = 2;
-    protected static ?string $slug                          = 'system/scheduler';
-    protected string $view                                  = 'filament.pages.scheduler-monitor';
+
+    protected static ?int $navigationSort = 2;
+
+    protected static ?string $slug = 'system/scheduler';
+
+    protected string $view = 'filament.pages.scheduler-monitor';
 
     // ── Authorization ─────────────────────────────────────────────────────
 
@@ -40,7 +46,7 @@ class SchedulerMonitorPage extends Page
         try {
             return method_exists($user, 'hasPermissionTo')
                 && $user->hasPermissionTo('scheduler_monitor.view');
-        } catch (\Spatie\Permission\Exceptions\PermissionDoesNotExist) {
+        } catch (PermissionDoesNotExist) {
             return false;
         }
     }
@@ -65,9 +71,9 @@ class SchedulerMonitorPage extends Page
     public function getBreadcrumbs(): array
     {
         return [
-            '/admin'                 => 'Dashboard',
+            '/admin' => 'Dashboard',
             '/admin/system/scheduler' => 'System',
-            '#'                       => 'Scheduler',
+            '#' => 'Scheduler',
         ];
     }
 
@@ -97,12 +103,13 @@ class SchedulerMonitorPage extends Page
             ->icon('heroicon-o-play')
             ->color('warning')
             ->requiresConfirmation()
-            ->modalHeading(fn(array $arguments) => 'Run task: ' . ($arguments['name'] ?? 'task'))
+            ->modalHeading(fn (array $arguments) => 'Run task: '.($arguments['name'] ?? 'task'))
             ->modalDescription('This will execute the task immediately, outside the normal schedule. The page will refresh with the result.')
             ->modalSubmitActionLabel('Run Now')
             ->action(function (array $arguments): void {
                 if (! $this->canRunTasks()) {
                     Notification::make()->title('Unauthorised')->danger()->send();
+
                     return;
                 }
 
@@ -112,7 +119,7 @@ class SchedulerMonitorPage extends Page
                     if ($result['status'] === 'success') {
                         Notification::make()
                             ->title('Task completed')
-                            ->body('Finished in ' . $this->formatDuration($result['duration_ms']))
+                            ->body('Finished in '.$this->formatDuration($result['duration_ms']))
                             ->success()
                             ->send();
                     } else {
@@ -132,6 +139,6 @@ class SchedulerMonitorPage extends Page
 
     private function formatDuration(int $ms): string
     {
-        return $ms < 1000 ? "{$ms}ms" : round($ms / 1000, 2) . 's';
+        return $ms < 1000 ? "{$ms}ms" : round($ms / 1000, 2).'s';
     }
 }

@@ -42,19 +42,19 @@ class MorphMapTest extends TestCase
 
     public function test_page_blocks_store_alias_in_blockable_type(): void
     {
-        $page  = Page::factory()->create();
+        $page = Page::factory()->create();
         $block = ContentBlock::create([
             'blockable_type' => 'page',
-            'blockable_id'   => $page->id,
-            'block_type'     => BlockType::Hero,
-            'content'        => [],
-            'settings'       => [],
-            'sort_order'     => 0,
-            'is_active'      => true,
+            'blockable_id' => $page->id,
+            'block_type' => BlockType::Hero,
+            'content' => [],
+            'settings' => [],
+            'sort_order' => 0,
+            'is_active' => true,
         ]);
 
         $this->assertDatabaseHas('content_blocks', [
-            'id'             => $block->id,
+            'id' => $block->id,
             'blockable_type' => 'page',
         ]);
 
@@ -65,13 +65,13 @@ class MorphMapTest extends TestCase
 
     public function test_post_blocks_store_alias_in_blockable_type(): void
     {
-        $post  = Post::factory()->create();
+        $post = Post::factory()->create();
         $block = $post->blocks()->create([
             'block_type' => BlockType::RichText,
-            'content'    => ['text' => 'hi'],
-            'settings'   => [],
+            'content' => ['text' => 'hi'],
+            'settings' => [],
             'sort_order' => 0,
-            'is_active'  => true,
+            'is_active' => true,
         ]);
 
         $raw = \DB::table('content_blocks')->where('id', $block->id)->value('blockable_type');
@@ -85,10 +85,10 @@ class MorphMapTest extends TestCase
         $page = Page::factory()->create();
         $page->blocks()->create([
             'block_type' => BlockType::Hero,
-            'content'    => ['title' => 'T'],
-            'settings'   => [],
+            'content' => ['title' => 'T'],
+            'settings' => [],
             'sort_order' => 0,
-            'is_active'  => true,
+            'is_active' => true,
         ]);
 
         $this->assertCount(1, $page->fresh()->blocks);
@@ -99,10 +99,10 @@ class MorphMapTest extends TestCase
         $post = Post::factory()->create();
         $post->blocks()->create([
             'block_type' => BlockType::CTA,
-            'content'    => ['title' => 'C'],
-            'settings'   => [],
+            'content' => ['title' => 'C'],
+            'settings' => [],
             'sort_order' => 0,
-            'is_active'  => true,
+            'is_active' => true,
         ]);
 
         $this->assertCount(1, $post->fresh()->blocks);
@@ -115,10 +115,10 @@ class MorphMapTest extends TestCase
         $page = Page::factory()->create();
         $block = $page->blocks()->create([
             'block_type' => BlockType::Hero,
-            'content'    => [],
-            'settings'   => [],
+            'content' => [],
+            'settings' => [],
             'sort_order' => 0,
-            'is_active'  => true,
+            'is_active' => true,
         ]);
 
         $owner = $block->fresh()->blockable;
@@ -132,10 +132,10 @@ class MorphMapTest extends TestCase
         $post = Post::factory()->create();
         $block = $post->blocks()->create([
             'block_type' => BlockType::RichText,
-            'content'    => ['text' => 'body'],
-            'settings'   => [],
+            'content' => ['text' => 'body'],
+            'settings' => [],
             'sort_order' => 0,
-            'is_active'  => true,
+            'is_active' => true,
         ]);
 
         $owner = $block->fresh()->blockable;

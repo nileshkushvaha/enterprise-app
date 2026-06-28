@@ -27,7 +27,7 @@ class LoginHistory extends Model
     protected function casts(): array
     {
         return [
-            'logged_in_at'  => 'datetime',
+            'logged_in_at' => 'datetime',
             'logged_out_at' => 'datetime',
         ];
     }

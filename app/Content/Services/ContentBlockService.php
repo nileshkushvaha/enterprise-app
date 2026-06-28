@@ -27,18 +27,18 @@ class ContentBlockService
         $sortOrder ??= ((int) $owner->blocks()->max('sort_order')) + 1;
 
         return $owner->blocks()->create([
-            'block_type'  => $blockType,
-            'content'     => $content,
-            'settings'    => $settings,
-            'sort_order'  => $sortOrder,
-            'is_active'   => true,
+            'block_type' => $blockType,
+            'content' => $content,
+            'settings' => $settings,
+            'sort_order' => $sortOrder,
+            'is_active' => true,
         ]);
     }
 
     public function updateBlock(ContentBlock $block, array $content, array $settings = []): bool
     {
         return $block->update([
-            'content'  => $content,
+            'content' => $content,
             'settings' => $settings,
         ]);
     }
@@ -87,11 +87,11 @@ class ContentBlockService
 
     public function duplicateBlock(ContentBlock $block, ?int $sortOrder = null): ContentBlock
     {
-        $owner     = $block->blockable;
+        $owner = $block->blockable;
         $sortOrder ??= ($owner ? ((int) $owner->blocks()->max('sort_order')) + 1 : $block->sort_order + 1);
 
-        $duplicate                = $block->replicate(['id']);
-        $duplicate->sort_order    = $sortOrder;
+        $duplicate = $block->replicate(['id']);
+        $duplicate->sort_order = $sortOrder;
         $duplicate->save();
 
         return $duplicate;
@@ -134,50 +134,50 @@ class ContentBlockService
     {
         return match ($type) {
             BlockType::Hero => [
-                'title'        => 'Enter your title here',
-                'subtitle'     => 'Enter your subtitle here',
-                'image'        => null,
-                'button_text'  => 'Get Started',
-                'button_link'  => '#',
+                'title' => 'Enter your title here',
+                'subtitle' => 'Enter your subtitle here',
+                'image' => null,
+                'button_text' => 'Get Started',
+                'button_link' => '#',
                 'button_style' => 'primary',
             ],
-            BlockType::RichText    => ['text' => '<p>Enter your rich text content here</p>'],
-            BlockType::Image       => ['image' => null, 'caption' => '', 'alt_text' => ''],
-            BlockType::Gallery     => ['images' => [], 'columns' => 3, 'gap' => 'md'],
-            BlockType::Video       => ['video_url' => '', 'caption' => '', 'thumbnail' => null],
-            BlockType::CTA         => [
-                'title'        => 'Call To Action',
-                'description'  => 'Enter your CTA description',
-                'button_text'  => 'Learn More',
-                'button_link'  => '#',
+            BlockType::RichText => ['text' => '<p>Enter your rich text content here</p>'],
+            BlockType::Image => ['image' => null, 'caption' => '', 'alt_text' => ''],
+            BlockType::Gallery => ['images' => [], 'columns' => 3, 'gap' => 'md'],
+            BlockType::Video => ['video_url' => '', 'caption' => '', 'thumbnail' => null],
+            BlockType::CTA => [
+                'title' => 'Call To Action',
+                'description' => 'Enter your CTA description',
+                'button_text' => 'Learn More',
+                'button_link' => '#',
                 'button_style' => 'primary',
-                'image'        => null,
+                'image' => null,
             ],
-            BlockType::FAQ         => ['items' => [['question' => 'Sample question?', 'answer' => 'Sample answer.']]],
-            BlockType::Accordion   => ['items' => [['title' => 'Section 1', 'content' => 'Content for section 1']]],
-            BlockType::Tabs        => ['items' => [['title' => 'Tab 1', 'content' => 'Content for tab 1']]],
-            BlockType::Team        => ['members' => [], 'columns' => 3],
+            BlockType::FAQ => ['items' => [['question' => 'Sample question?', 'answer' => 'Sample answer.']]],
+            BlockType::Accordion => ['items' => [['title' => 'Section 1', 'content' => 'Content for section 1']]],
+            BlockType::Tabs => ['items' => [['title' => 'Tab 1', 'content' => 'Content for tab 1']]],
+            BlockType::Team => ['members' => [], 'columns' => 3],
             BlockType::Testimonials => ['testimonials' => [], 'style' => 'card'],
-            BlockType::Statistics  => ['stats' => [], 'columns' => 3],
-            BlockType::Timeline    => ['items' => [], 'direction' => 'vertical'],
-            BlockType::Button      => ['text' => 'Click Me', 'link' => '#', 'style' => 'primary', 'size' => 'medium'],
-            BlockType::Divider     => ['style' => 'solid', 'color' => '#000000', 'height' => 1],
-            BlockType::Spacer      => ['height' => 40],
-            BlockType::Map         => ['latitude' => '0', 'longitude' => '0', 'zoom' => 13, 'address' => '', 'title' => 'Location'],
+            BlockType::Statistics => ['stats' => [], 'columns' => 3],
+            BlockType::Timeline => ['items' => [], 'direction' => 'vertical'],
+            BlockType::Button => ['text' => 'Click Me', 'link' => '#', 'style' => 'primary', 'size' => 'medium'],
+            BlockType::Divider => ['style' => 'solid', 'color' => '#000000', 'height' => 1],
+            BlockType::Spacer => ['height' => 40],
+            BlockType::Map => ['latitude' => '0', 'longitude' => '0', 'zoom' => 13, 'address' => '', 'title' => 'Location'],
             BlockType::ContactForm => [
-                'fields'          => [
+                'fields' => [
                     ['name' => 'name',    'label' => 'Name',    'type' => 'text',     'required' => true, 'placeholder' => '', 'options' => ''],
                     ['name' => 'email',   'label' => 'Email',   'type' => 'email',    'required' => true, 'placeholder' => '', 'options' => ''],
                     ['name' => 'message', 'label' => 'Message', 'type' => 'textarea', 'required' => true, 'placeholder' => '', 'options' => ''],
                 ],
-                'button_text'     => 'Send Message',
+                'button_text' => 'Send Message',
                 'success_message' => 'Thank you for your message!',
             ],
             BlockType::ContactInfo => [
-                'eyebrow'     => '',
-                'title'       => 'Get In Touch',
+                'eyebrow' => '',
+                'title' => 'Get In Touch',
                 'description' => 'We would love to hear from you.',
-                'items'       => [],
+                'items' => [],
             ],
         };
     }
@@ -186,14 +186,14 @@ class ContentBlockService
     {
         return [
             'background_color' => null,
-            'text_color'       => null,
-            'padding'          => 'medium',
-            'margin'           => 'medium',
-            'text_alignment'   => 'left',
-            'animation'        => 'none',
-            'animation_delay'  => 0,
-            'container_width'  => 'full',
-            'custom_class'     => '',
+            'text_color' => null,
+            'padding' => 'medium',
+            'margin' => 'medium',
+            'text_alignment' => 'left',
+            'animation' => 'none',
+            'animation_delay' => 0,
+            'container_width' => 'full',
+            'custom_class' => '',
         ];
     }
 }

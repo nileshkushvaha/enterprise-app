@@ -27,4 +27,3 @@ class TagObserver
         app(CmsCacheService::class)->bumpDiscoveryVersion();
     }
 }
-

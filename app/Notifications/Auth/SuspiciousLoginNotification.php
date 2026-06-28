@@ -31,19 +31,19 @@ final class SuspiciousLoginNotification extends Notification implements ShouldQu
     public function toMail(object $notifiable): MailMessage
     {
         $appName = config('app.name');
-        $appUrl  = config('app.url');
+        $appUrl = config('app.url');
 
         return (new MailMessage)
             ->subject("New sign-in to your {$appName} account")
             ->view('emails.auth.suspicious-login', [
-                'user'       => $notifiable,
-                'ipAddress'  => $this->ipAddress,
-                'browser'    => $this->browser,
-                'platform'   => $this->platform,
-                'loginAt'    => $this->loginAt,
-                'appName'    => $appName,
-                'appUrl'     => $appUrl,
-                'secureUrl'  => route('auth.password.request'),
+                'user' => $notifiable,
+                'ipAddress' => $this->ipAddress,
+                'browser' => $this->browser,
+                'platform' => $this->platform,
+                'loginAt' => $this->loginAt,
+                'appName' => $appName,
+                'appUrl' => $appUrl,
+                'secureUrl' => route('auth.password.request'),
             ]);
     }
 }

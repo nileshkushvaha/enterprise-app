@@ -8,11 +8,10 @@ use App\Models\Page as PageModel;
 use App\Settings\GeneralSettings;
 use BackedEnum;
 use Filament\Actions\Action;
-use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Select;
-use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
@@ -30,11 +29,15 @@ class GeneralSettingsPage extends Page
 {
     use HasSettingsAccess;
 
-    protected static string|BackedEnum|null $navigationIcon  = Heroicon::OutlinedCog6Tooth;
-    protected static ?string $navigationLabel                = 'General';
-    protected static string|\UnitEnum|null $navigationGroup                = 'Configuration';
-    protected static ?int    $navigationSort                 = 1;
-    protected static ?string $slug                           = 'settings/general';
+    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedCog6Tooth;
+
+    protected static ?string $navigationLabel = 'General';
+
+    protected static string|\UnitEnum|null $navigationGroup = 'Configuration';
+
+    protected static ?int $navigationSort = 1;
+
+    protected static ?string $slug = 'settings/general';
 
     /** @var array<string, mixed>|null */
     public ?array $data = [];
@@ -57,9 +60,9 @@ class GeneralSettingsPage extends Page
     public function getBreadcrumbs(): array
     {
         return [
-            '/admin'        => 'Dashboard',
+            '/admin' => 'Dashboard',
             '/admin/settings/general' => 'Settings',
-            '#'             => 'General',
+            '#' => 'General',
         ];
     }
 
@@ -68,27 +71,27 @@ class GeneralSettingsPage extends Page
         $settings = app(GeneralSettings::class);
 
         $this->form->fill([
-            'app_name'          => $settings->app_name,
-            'app_short_name'    => $settings->app_short_name,
+            'app_name' => $settings->app_name,
+            'app_short_name' => $settings->app_short_name,
             'organization_name' => $settings->organization_name,
-            'support_email'     => $settings->support_email,
-            'support_phone'     => $settings->support_phone,
-            'website_url'       => $settings->website_url,
-            'address'           => $settings->address,
-            'logo'              => $settings->logo,
-            'logo_dark'         => $settings->logo_dark,
-            'favicon'           => $settings->favicon,
-            'default_timezone'  => $settings->default_timezone,
-            'default_language'  => $settings->default_language,
-            'date_format'       => $settings->date_format,
-            'time_format'       => $settings->time_format,
-            'default_currency'  => $settings->default_currency,
+            'support_email' => $settings->support_email,
+            'support_phone' => $settings->support_phone,
+            'website_url' => $settings->website_url,
+            'address' => $settings->address,
+            'logo' => $settings->logo,
+            'logo_dark' => $settings->logo_dark,
+            'favicon' => $settings->favicon,
+            'default_timezone' => $settings->default_timezone,
+            'default_language' => $settings->default_language,
+            'date_format' => $settings->date_format,
+            'time_format' => $settings->time_format,
+            'default_currency' => $settings->default_currency,
             'decimal_precision' => $settings->decimal_precision,
-            'maintenance_mode'  => $settings->maintenance_mode,
-            'footer_copyright'  => $settings->footer_copyright,
-            'footer_text'       => $settings->footer_text,
-            'homepage_display'  => $settings->homepage_display ?? 'template',
-            'homepage_id'       => $settings->homepage_id,
+            'maintenance_mode' => $settings->maintenance_mode,
+            'footer_copyright' => $settings->footer_copyright,
+            'footer_text' => $settings->footer_text,
+            'homepage_display' => $settings->homepage_display ?? 'template',
+            'homepage_id' => $settings->homepage_id,
         ]);
     }
 
@@ -222,7 +225,7 @@ class GeneralSettingsPage extends Page
                                 ->label('Default Timezone')
                                 ->options(
                                     collect(\DateTimeZone::listIdentifiers())
-                                        ->mapWithKeys(fn($tz) => [$tz => $tz])
+                                        ->mapWithKeys(fn ($tz) => [$tz => $tz])
                                         ->all()
                                 )
                                 ->searchable()
@@ -250,12 +253,12 @@ class GeneralSettingsPage extends Page
                             Select::make('date_format')
                                 ->label('Date Format')
                                 ->options([
-                                    'Y-m-d'   => 'YYYY-MM-DD (2025-06-27)',
-                                    'd/m/Y'   => 'DD/MM/YYYY (27/06/2025)',
-                                    'm/d/Y'   => 'MM/DD/YYYY (06/27/2025)',
-                                    'd-m-Y'   => 'DD-MM-YYYY (27-06-2025)',
-                                    'd M Y'   => 'DD Mon YYYY (27 Jun 2025)',
-                                    'F j, Y'  => 'Month D, YYYY (June 27, 2025)',
+                                    'Y-m-d' => 'YYYY-MM-DD (2025-06-27)',
+                                    'd/m/Y' => 'DD/MM/YYYY (27/06/2025)',
+                                    'm/d/Y' => 'MM/DD/YYYY (06/27/2025)',
+                                    'd-m-Y' => 'DD-MM-YYYY (27-06-2025)',
+                                    'd M Y' => 'DD Mon YYYY (27 Jun 2025)',
+                                    'F j, Y' => 'Month D, YYYY (June 27, 2025)',
                                 ])
                                 ->native(false)
                                 ->required(),
@@ -263,7 +266,7 @@ class GeneralSettingsPage extends Page
                             Select::make('time_format')
                                 ->label('Time Format')
                                 ->options([
-                                    'H:i'   => '24-hour (14:30)',
+                                    'H:i' => '24-hour (14:30)',
                                     'h:i A' => '12-hour (02:30 PM)',
                                 ])
                                 ->native(false)
@@ -335,7 +338,7 @@ class GeneralSettingsPage extends Page
                         Select::make('homepage_display')
                             ->label('Your homepage displays')
                             ->options([
-                                'template'    => '🏠  Default template (home.blade.php)',
+                                'template' => '🏠  Default template (home.blade.php)',
                                 'static_page' => '📄  A static page',
                             ])
                             ->native(false)
@@ -374,27 +377,27 @@ class GeneralSettingsPage extends Page
 
         $settings = app(GeneralSettings::class);
 
-        $settings->app_name          = $data['app_name'];
-        $settings->app_short_name    = $data['app_short_name'] ?? null;
+        $settings->app_name = $data['app_name'];
+        $settings->app_short_name = $data['app_short_name'] ?? null;
         $settings->organization_name = $data['organization_name'] ?? null;
-        $settings->support_email     = $data['support_email'];
-        $settings->support_phone     = $data['support_phone'] ?? null;
-        $settings->website_url       = $data['website_url'] ?? null;
-        $settings->address           = $data['address'] ?? null;
-        $settings->logo              = $data['logo'] ?? $settings->logo;
-        $settings->logo_dark         = $data['logo_dark'] ?? $settings->logo_dark;
-        $settings->favicon           = $data['favicon'] ?? $settings->favicon;
-        $settings->default_timezone  = $data['default_timezone'];
-        $settings->default_language  = $data['default_language'];
-        $settings->date_format       = $data['date_format'];
-        $settings->time_format       = $data['time_format'];
-        $settings->default_currency  = $data['default_currency'];
+        $settings->support_email = $data['support_email'];
+        $settings->support_phone = $data['support_phone'] ?? null;
+        $settings->website_url = $data['website_url'] ?? null;
+        $settings->address = $data['address'] ?? null;
+        $settings->logo = $data['logo'] ?? $settings->logo;
+        $settings->logo_dark = $data['logo_dark'] ?? $settings->logo_dark;
+        $settings->favicon = $data['favicon'] ?? $settings->favicon;
+        $settings->default_timezone = $data['default_timezone'];
+        $settings->default_language = $data['default_language'];
+        $settings->date_format = $data['date_format'];
+        $settings->time_format = $data['time_format'];
+        $settings->default_currency = $data['default_currency'];
         $settings->decimal_precision = (int) $data['decimal_precision'];
-        $settings->maintenance_mode  = (bool) ($data['maintenance_mode'] ?? false);
-        $settings->footer_copyright  = $data['footer_copyright'] ?? null;
-        $settings->footer_text       = $data['footer_text'] ?? null;
-        $settings->homepage_display  = $data['homepage_display'] ?? 'template';
-        $settings->homepage_id       = ($data['homepage_display'] ?? 'template') === 'static_page'
+        $settings->maintenance_mode = (bool) ($data['maintenance_mode'] ?? false);
+        $settings->footer_copyright = $data['footer_copyright'] ?? null;
+        $settings->footer_text = $data['footer_text'] ?? null;
+        $settings->homepage_display = $data['homepage_display'] ?? 'template';
+        $settings->homepage_id = ($data['homepage_display'] ?? 'template') === 'static_page'
                                         ? ($data['homepage_id'] ?? null)
                                         : null;
 
@@ -410,15 +413,15 @@ class GeneralSettingsPage extends Page
     {
         $settings = app(GeneralSettings::class);
 
-        $settings->default_timezone  = 'Asia/Kolkata';
-        $settings->default_language  = 'en';
-        $settings->date_format       = 'Y-m-d';
-        $settings->time_format       = 'H:i';
-        $settings->default_currency  = 'INR';
+        $settings->default_timezone = 'Asia/Kolkata';
+        $settings->default_language = 'en';
+        $settings->date_format = 'Y-m-d';
+        $settings->time_format = 'H:i';
+        $settings->default_currency = 'INR';
         $settings->decimal_precision = 2;
-        $settings->maintenance_mode  = false;
-        $settings->homepage_display  = 'template';
-        $settings->homepage_id       = null;
+        $settings->maintenance_mode = false;
+        $settings->homepage_display = 'template';
+        $settings->homepage_id = null;
 
         $settings->save();
 

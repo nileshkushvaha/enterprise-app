@@ -26,8 +26,8 @@ final class SendWelcomeNotification implements ShouldQueue
     public function failed(Verified $event, Throwable $exception): void
     {
         Log::error('SendWelcomeNotification failed', [
-            'user_id'   => $event->user->id,
-            'email'     => $event->user->email,
+            'user_id' => $event->user->id,
+            'email' => $event->user->email,
             'exception' => $exception->getMessage(),
         ]);
     }

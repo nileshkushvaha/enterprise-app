@@ -18,9 +18,13 @@ class PaymentSettingsNavigationPage extends Page
     use HasSettingsAccess;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedCreditCard;
+
     protected static ?string $navigationLabel = 'Payment Settings';
+
     protected static ?int $navigationSort = 13;
+
     protected static ?string $slug = 'payment-settings';
+
     protected static bool $shouldRegisterNavigation = false;
 
     public static function shouldRegisterNavigation(): bool

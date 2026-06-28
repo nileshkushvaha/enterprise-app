@@ -43,4 +43,3 @@ class CmsCacheService
         return sprintf('cms:seo:robots:v%d', $this->getDiscoveryVersion());
     }
 }
-

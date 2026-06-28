@@ -6,18 +6,18 @@ use App\Actions\GeneratePageSlugAction;
 use App\Enums\PageStatus;
 use App\Enums\PageVisibility;
 use App\Models\Post;
-use Illuminate\Support\HtmlString;
 use Filament\Forms\Components\DateTimePicker;
-use Filament\Forms\Components\SpatieMediaLibraryFileUpload;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\RichEditor;
 use Filament\Forms\Components\Select;
-use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\SpatieMediaLibraryFileUpload;
 use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Tabs;
 use Filament\Schemas\Schema;
+use Illuminate\Support\HtmlString;
 
 class PostForm
 {
@@ -133,14 +133,14 @@ class PostForm
                                                     return new HtmlString('Save this post first, then you can add content blocks.');
                                                 }
 
-                                                $createUrl = url('/admin/page-blocks/create?post_id=' . $record->id);
-                                                $listUrl   = url('/admin/page-blocks?tableFilters[blockable_type][value]=App%5CModels%5CPost');
+                                                $createUrl = url('/admin/page-blocks/create?post_id='.$record->id);
+                                                $listUrl = url('/admin/page-blocks?tableFilters[blockable_type][value]=App%5CModels%5CPost');
 
                                                 return new HtmlString(
                                                     '<div style="display:flex;gap:12px;align-items:center;">'
-                                                    . '<a href="' . $createUrl . '" style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;background:#f59e0b;color:#fff;border-radius:6px;font-weight:600;text-decoration:none;">+ Add Block</a>'
-                                                    . '<a href="' . $listUrl . '" style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border:1px solid #d1d5db;border-radius:6px;font-weight:500;text-decoration:none;">View Post Blocks</a>'
-                                                    . '</div>'
+                                                    .'<a href="'.$createUrl.'" style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;background:#f59e0b;color:#fff;border-radius:6px;font-weight:600;text-decoration:none;">+ Add Block</a>'
+                                                    .'<a href="'.$listUrl.'" style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border:1px solid #d1d5db;border-radius:6px;font-weight:500;text-decoration:none;">View Post Blocks</a>'
+                                                    .'</div>'
                                                 );
                                             }),
                                     ]),

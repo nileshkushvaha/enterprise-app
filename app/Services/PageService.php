@@ -13,10 +13,10 @@ class PageService
      * Get all pages with optional filters
      */
     public function getPages(
-        string $status = null,
-        string $visibility = null,
-        string $template = null,
-        string $search = null,
+        ?string $status = null,
+        ?string $visibility = null,
+        ?string $template = null,
+        ?string $search = null,
         int $perPage = 15
     ): Paginator {
         $query = Page::query();
@@ -78,15 +78,15 @@ class PageService
     {
         return DB::transaction(function () use ($page): Page {
             $newPage = $page->replicate();
-            $newPage->slug = $this->generateUniqueSlug($page->slug . '-copy');
-            $newPage->title = $page->title . ' (Copy)';
+            $newPage->slug = $this->generateUniqueSlug($page->slug.'-copy');
+            $newPage->title = $page->title.' (Copy)';
             $newPage->status = 'draft';
             $newPage->visibility = 'private';
             $newPage->published_at = null;
             $newPage->save();
 
             foreach ($page->blocks as $block) {
-                $newBlock               = $block->replicate(['id']);
+                $newBlock = $block->replicate(['id']);
                 $newBlock->blockable_id = $newPage->id;
                 $newBlock->save();
             }

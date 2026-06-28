@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Payments;
 
-use App\Jobs\Payments\ProcessPaymentWebhookJob;
 use App\Http\Controllers\Controller;
+use App\Jobs\Payments\ProcessPaymentWebhookJob;
 use App\Services\Payment\PaymentWebhookProcessor;
 use App\Services\Payment\PaymentWebhookSignatureService;
 use App\Settings\PaymentAdvancedSettings;

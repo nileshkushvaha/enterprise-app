@@ -24,10 +24,10 @@ class NavigationTreeIntegrityTest extends TestCase
     {
         return NavigationItem::factory()->create(array_merge([
             'navigation_id' => $menu->id,
-            'parent_id'     => $parentId,
-            'link_type'     => 'url',
-            'url'           => '/item-' . uniqid(),
-            'is_active'     => true,
+            'parent_id' => $parentId,
+            'link_type' => 'url',
+            'url' => '/item-'.uniqid(),
+            'is_active' => true,
         ], $attrs));
     }
 
@@ -66,9 +66,9 @@ class NavigationTreeIntegrityTest extends TestCase
 
     public function test_child_lft_rgt_is_within_parent_bounds(): void
     {
-        $menu   = $this->menu();
+        $menu = $this->menu();
         $parent = $this->item($menu);
-        $child  = $this->item($menu, $parent->id);
+        $child = $this->item($menu, $parent->id);
 
         $parent->refresh();
         $child->refresh();
@@ -79,9 +79,9 @@ class NavigationTreeIntegrityTest extends TestCase
 
     public function test_siblings_have_non_overlapping_lft_rgt(): void
     {
-        $menu   = $this->menu();
-        $sibA   = $this->item($menu);
-        $sibB   = $this->item($menu);
+        $menu = $this->menu();
+        $sibA = $this->item($menu);
+        $sibB = $this->item($menu);
 
         $sibA->refresh();
         $sibB->refresh();
@@ -89,7 +89,7 @@ class NavigationTreeIntegrityTest extends TestCase
         // Siblings must not overlap
         $this->assertTrue(
             $sibA->_rgt < $sibB->_lft || $sibB->_rgt < $sibA->_lft,
-            "Siblings have overlapping _lft/_rgt ranges.",
+            'Siblings have overlapping _lft/_rgt ranges.',
         );
     }
 
@@ -103,7 +103,7 @@ class NavigationTreeIntegrityTest extends TestCase
         $item->delete();
 
         $this->assertDatabaseMissing('navigation_items', [
-            'id'         => $item->id,
+            'id' => $item->id,
             'deleted_at' => null,
         ]);
 
@@ -144,9 +144,9 @@ class NavigationTreeIntegrityTest extends TestCase
 
     public function test_descendant_as_parent_throws_logic_exception(): void
     {
-        $menu   = $this->menu();
+        $menu = $this->menu();
         $parent = $this->item($menu);
-        $child  = $this->item($menu, $parent->id);
+        $child = $this->item($menu, $parent->id);
 
         $parent->refresh();
         $child->refresh();
@@ -166,8 +166,8 @@ class NavigationTreeIntegrityTest extends TestCase
 
         $this->assertDatabaseHas('activity_log', [
             'subject_type' => NavigationMenu::class,
-            'subject_id'   => $menu->id,
-            'log_name'     => 'navigation',
+            'subject_id' => $menu->id,
+            'log_name' => 'navigation',
         ]);
     }
 
@@ -178,8 +178,8 @@ class NavigationTreeIntegrityTest extends TestCase
 
         $this->assertDatabaseHas('activity_log', [
             'subject_type' => NavigationItem::class,
-            'subject_id'   => $item->id,
-            'log_name'     => 'navigation_item',
+            'subject_id' => $item->id,
+            'log_name' => 'navigation_item',
         ]);
     }
 }

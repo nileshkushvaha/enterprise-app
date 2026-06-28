@@ -11,10 +11,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class UserSession extends Model
 {
     public $incrementing = false;
-    public $timestamps   = false;
+
+    public $timestamps = false;
 
     protected $primaryKey = 'session_id';
-    protected $keyType    = 'string';
+
+    protected $keyType = 'string';
 
     protected $fillable = [
         'session_id',
@@ -30,7 +32,7 @@ class UserSession extends Model
 
     protected $casts = [
         'last_activity_at' => 'datetime',
-        'created_at'       => 'datetime',
+        'created_at' => 'datetime',
     ];
 
     // ── Relationships ─────────────────────────────────────────────────
@@ -64,10 +66,10 @@ class UserSession extends Model
     public function deviceIcon(): string
     {
         return match ($this->device_type) {
-            'mobile'  => 'phone',
-            'tablet'  => 'tablet',
+            'mobile' => 'phone',
+            'tablet' => 'tablet',
             'desktop' => 'desktop',
-            default   => 'globe',
+            default => 'globe',
         };
     }
 }

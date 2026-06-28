@@ -29,10 +29,10 @@ class NavigationMorphMapTest extends TestCase
     {
         return NavigationItem::factory()->create([
             'navigation_id' => $menu->id,
-            'link_type'     => $linkType,
+            'link_type' => $linkType,
             'linkable_type' => $morphType,
-            'linkable_id'   => $morphId,
-            'is_active'     => true,
+            'linkable_id' => $morphId,
+            'is_active' => true,
         ]);
     }
 
@@ -52,7 +52,7 @@ class NavigationMorphMapTest extends TestCase
 
     public function test_navigation_item_linkable_resolves_to_page(): void
     {
-        $page    = Page::factory()->create();
+        $page = Page::factory()->create();
         $navItem = $this->item($this->menu(), NavigationLinkType::Page->value, 'page', $page->id);
 
         $resolved = $navItem->fresh()->linkable;
@@ -63,7 +63,7 @@ class NavigationMorphMapTest extends TestCase
 
     public function test_page_morph_alias_stored_in_db(): void
     {
-        $page    = Page::factory()->create();
+        $page = Page::factory()->create();
         $navItem = $this->item($this->menu(), NavigationLinkType::Page->value, 'page', $page->id);
 
         $raw = \DB::table('navigation_items')->where('id', $navItem->id)->value('linkable_type');
@@ -75,7 +75,7 @@ class NavigationMorphMapTest extends TestCase
 
     public function test_navigation_item_linkable_resolves_to_post(): void
     {
-        $post    = Post::factory()->create();
+        $post = Post::factory()->create();
         $navItem = $this->item($this->menu(), NavigationLinkType::Post->value, 'post', $post->id);
 
         $resolved = $navItem->fresh()->linkable;
@@ -89,7 +89,7 @@ class NavigationMorphMapTest extends TestCase
     public function test_navigation_item_linkable_resolves_to_category(): void
     {
         $category = PostCategory::factory()->create();
-        $navItem  = $this->item($this->menu(), NavigationLinkType::Category->value, 'category', $category->id);
+        $navItem = $this->item($this->menu(), NavigationLinkType::Category->value, 'category', $category->id);
 
         $resolved = $navItem->fresh()->linkable;
 
@@ -100,7 +100,7 @@ class NavigationMorphMapTest extends TestCase
     public function test_category_morph_alias_stored_in_db(): void
     {
         $category = PostCategory::factory()->create();
-        $navItem  = $this->item($this->menu(), NavigationLinkType::Category->value, 'category', $category->id);
+        $navItem = $this->item($this->menu(), NavigationLinkType::Category->value, 'category', $category->id);
 
         $raw = \DB::table('navigation_items')->where('id', $navItem->id)->value('linkable_type');
 
@@ -111,7 +111,7 @@ class NavigationMorphMapTest extends TestCase
 
     public function test_navigation_item_linkable_resolves_to_tag(): void
     {
-        $tag     = Tag::factory()->create();
+        $tag = Tag::factory()->create();
         $navItem = $this->item($this->menu(), NavigationLinkType::Tag->value, 'tag', $tag->id);
 
         $resolved = $navItem->fresh()->linkable;
@@ -122,7 +122,7 @@ class NavigationMorphMapTest extends TestCase
 
     public function test_tag_morph_alias_stored_in_db(): void
     {
-        $tag     = Tag::factory()->create();
+        $tag = Tag::factory()->create();
         $navItem = $this->item($this->menu(), NavigationLinkType::Tag->value, 'tag', $tag->id);
 
         $raw = \DB::table('navigation_items')->where('id', $navItem->id)->value('linkable_type');

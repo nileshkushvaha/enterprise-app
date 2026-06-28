@@ -15,7 +15,7 @@ return new class extends Migration
             $table->foreignId('user_id')->constrained()->cascadeOnDelete();
 
             $table->enum('status', ['success', 'failed', 'locked', 'unverified', 'blocked'])
-                  ->default('success');
+                ->default('success');
 
             $table->string('ip_address', 45)->nullable();
             $table->string('user_agent')->nullable();
@@ -44,4 +44,3 @@ return new class extends Migration
         Schema::dropIfExists('login_histories');
     }
 };
-

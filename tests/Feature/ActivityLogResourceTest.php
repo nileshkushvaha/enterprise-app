@@ -6,7 +6,8 @@ namespace Tests\Feature;
 
 use App\Filament\Resources\ActivityLog\ActivityLogResource;
 use App\Filament\Resources\ActivityLog\Pages\ListActivityLogs;
-use App\Filament\Resources\ActivityLog\Pages\ViewActivityLog;
+use App\Models\Country;
+use App\Models\Page;
 use App\Models\User;
 use App\Policies\ActivityLogPolicy;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -21,7 +22,9 @@ class ActivityLogResourceTest extends TestCase
     use RefreshDatabase;
 
     private User $superAdmin;
+
     private User $logViewer;
+
     private User $regularUser;
 
     protected function setUp(): void
@@ -78,23 +81,23 @@ class ActivityLogResourceTest extends TestCase
 
     // ── Read-only enforcement ─────────────────────────────────────────────
 
-    public function test_canCreate_is_always_false(): void
+    public function test_can_create_is_always_false(): void
     {
         $this->assertFalse(ActivityLogResource::canCreate());
     }
 
-    public function test_canDeleteAny_is_always_false(): void
+    public function test_can_delete_any_is_always_false(): void
     {
         $this->assertFalse(ActivityLogResource::canDeleteAny());
     }
 
-    public function test_canEdit_is_always_false(): void
+    public function test_can_edit_is_always_false(): void
     {
         $activity = $this->makeActivity();
         $this->assertFalse(ActivityLogResource::canEdit($activity));
     }
 
-    public function test_canDelete_is_always_false(): void
+    public function test_can_delete_is_always_false(): void
     {
         $activity = $this->makeActivity();
         $this->assertFalse(ActivityLogResource::canDelete($activity));
@@ -158,7 +161,7 @@ class ActivityLogResourceTest extends TestCase
         $this->actingAs($this->superAdmin);
 
         Livewire::test(ListActivityLogs::class)
-            ->filterTable('subject_type', \App\Models\User::class)
+            ->filterTable('subject_type', User::class)
             ->assertCountTableRecords(1);
     }
 
@@ -184,27 +187,27 @@ class ActivityLogResourceTest extends TestCase
 
     // ── Policy ────────────────────────────────────────────────────────────
 
-    public function test_policy_viewAny_grants_super_admin(): void
+    public function test_policy_view_any_grants_super_admin(): void
     {
-        $policy = new ActivityLogPolicy();
+        $policy = new ActivityLogPolicy;
         $this->assertTrue($policy->viewAny($this->superAdmin));
     }
 
-    public function test_policy_viewAny_grants_user_with_permission(): void
+    public function test_policy_view_any_grants_user_with_permission(): void
     {
-        $policy = new ActivityLogPolicy();
+        $policy = new ActivityLogPolicy;
         $this->assertTrue($policy->viewAny($this->logViewer));
     }
 
-    public function test_policy_viewAny_denies_regular_user(): void
+    public function test_policy_view_any_denies_regular_user(): void
     {
-        $policy = new ActivityLogPolicy();
+        $policy = new ActivityLogPolicy;
         $this->assertFalse($policy->viewAny($this->regularUser));
     }
 
-    public function test_policy_view_mirrors_viewAny(): void
+    public function test_policy_view_mirrors_view_any(): void
     {
-        $policy = new ActivityLogPolicy();
+        $policy = new ActivityLogPolicy;
         $this->assertTrue($policy->view($this->superAdmin));
         $this->assertFalse($policy->view($this->regularUser));
     }
@@ -214,7 +217,7 @@ class ActivityLogResourceTest extends TestCase
         // Create a user with no role/permission and no 'activity_log.view' permission seeded
         Permission::where('name', 'activity_log.view')->delete();
 
-        $policy = new ActivityLogPolicy();
+        $policy = new ActivityLogPolicy;
         $this->assertFalse($policy->viewAny($this->regularUser));
     }
 
@@ -246,7 +249,7 @@ class ActivityLogResourceTest extends TestCase
 
         Livewire::test(ListActivityLogs::class)
             ->filterTable('date_range', [
-                'from'  => now()->subDays(1)->toDateString(),
+                'from' => now()->subDays(1)->toDateString(),
                 'until' => now()->toDateString(),
             ])
             ->assertCountTableRecords(1);
@@ -269,7 +272,7 @@ class ActivityLogResourceTest extends TestCase
 
     public function test_page_model_mutation_creates_activity_log_entry(): void
     {
-        $page = \App\Models\Page::factory()->create(['title' => 'Original Title', 'status' => 'draft']);
+        $page = Page::factory()->create(['title' => 'Original Title', 'status' => 'draft']);
         Activity::query()->delete(); // clear factory-generated activity
 
         $page->update(['title' => 'Updated Title']);
@@ -277,19 +280,19 @@ class ActivityLogResourceTest extends TestCase
         // subject_type is stored via morph map (e.g. 'page'), so match on log_name and event.
         $this->assertDatabaseHas('activity_log', [
             'log_name' => 'pages',
-            'event'    => 'updated',
+            'event' => 'updated',
         ]);
     }
 
     public function test_country_model_mutation_uses_countries_log_name(): void
     {
-        $country = \App\Models\Country::create([
-            'name'        => 'Test Country',
-            'iso2'        => 'TC',
-            'iso3'        => 'TCY',
-            'phone_code'  => '999',
+        $country = Country::create([
+            'name' => 'Test Country',
+            'iso2' => 'TC',
+            'iso3' => 'TCY',
+            'phone_code' => '999',
             'nationality' => 'Testian',
-            'status'      => 'active',
+            'status' => 'active',
         ]);
         Activity::query()->delete();
 
@@ -297,7 +300,7 @@ class ActivityLogResourceTest extends TestCase
 
         $this->assertDatabaseHas('activity_log', [
             'log_name' => 'countries',
-            'event'    => 'updated',
+            'event' => 'updated',
         ]);
     }
 
@@ -309,7 +312,7 @@ class ActivityLogResourceTest extends TestCase
             ->causedBy($this->superAdmin)
             ->event('updated')
             ->withProperties([
-                'ip'         => '127.0.0.1',
+                'ip' => '127.0.0.1',
                 'user_agent' => 'PHPUnit/Test',
             ])
             ->log('Test with attribute changes');
@@ -317,7 +320,7 @@ class ActivityLogResourceTest extends TestCase
         // Manually set attribute_changes to simulate model diff
         $activity->forceFill([
             'attribute_changes' => [
-                'old'        => ['name' => 'Old'],
+                'old' => ['name' => 'Old'],
                 'attributes' => ['name' => 'New'],
             ],
         ])->saveQuietly();
@@ -334,7 +337,7 @@ class ActivityLogResourceTest extends TestCase
 
     public function test_role_creation_is_logged_to_roles_channel(): void
     {
-        \Spatie\Permission\Models\Role::create(['name' => 'test-audited-role', 'guard_name' => 'web']);
+        Role::create(['name' => 'test-audited-role', 'guard_name' => 'web']);
 
         // Simulate what CreateRole::afterCreate() does
         activity('roles')
@@ -345,7 +348,7 @@ class ActivityLogResourceTest extends TestCase
 
         $this->assertDatabaseHas('activity_log', [
             'log_name' => 'roles',
-            'event'    => 'created',
+            'event' => 'created',
         ]);
     }
 

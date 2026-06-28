@@ -7,14 +7,13 @@ use App\Enums\PageStatus;
 use App\Enums\PageVisibility;
 use App\Models\Page;
 use Filament\Forms\Components\DateTimePicker;
-use Filament\Forms\Components\SpatieMediaLibraryFileUpload;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\RichEditor;
 use Filament\Forms\Components\Select;
-use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\SpatieMediaLibraryFileUpload;
 use Filament\Forms\Components\Textarea;
-use Filament\Forms\Components\Toggle;
+use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Tabs;
 use Filament\Schemas\Schema;
@@ -71,12 +70,12 @@ class PageForm
                                             ->options([
                                                 'default' => 'Default',
                                                 'landing' => 'Landing Page',
-                                                'blank'   => 'Blank',
+                                                'blank' => 'Blank',
                                             ])
                                             ->descriptions([
                                                 'default' => 'Global header + footer + page title hero banner. Best for standard content pages.',
                                                 'landing' => 'No header or footer. Full-width clean canvas for sales or promo pages.',
-                                                'blank'   => 'Zero chrome. Raw block output only — for embeds or iframes.',
+                                                'blank' => 'Zero chrome. Raw block output only — for embeds or iframes.',
                                             ])
                                             ->default('default')
                                             ->inline(false),
@@ -85,9 +84,9 @@ class PageForm
                                             ->label('Content Width')
                                             ->helperText('Controls how wide the content area stretches inside the template.')
                                             ->options([
-                                                'default'       => '🖥️  Default (max-w-7xl)',
-                                                'full-width'    => '⬛  Full Width (edge to edge)',
-                                                'sidebar-left'  => '◧  Sidebar Left (coming soon)',
+                                                'default' => '🖥️  Default (max-w-7xl)',
+                                                'full-width' => '⬛  Full Width (edge to edge)',
+                                                'sidebar-left' => '◧  Sidebar Left (coming soon)',
                                                 'sidebar-right' => '◨  Sidebar Right (coming soon)',
                                             ])
                                             ->native(false)
@@ -142,14 +141,14 @@ class PageForm
                                                     return new HtmlString('Save this page first, then you can add content blocks.');
                                                 }
 
-                                                $createUrl = url('/admin/page-blocks/create?page_id=' . $record->id);
-                                                $listUrl   = url('/admin/page-blocks?tableFilters[blockable_type][value]=App%5CModels%5CPage');
+                                                $createUrl = url('/admin/page-blocks/create?page_id='.$record->id);
+                                                $listUrl = url('/admin/page-blocks?tableFilters[blockable_type][value]=App%5CModels%5CPage');
 
                                                 return new HtmlString(
                                                     '<div style="display:flex;gap:12px;align-items:center;">'
-                                                    . '<a href="' . $createUrl . '" style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;background:#f59e0b;color:#fff;border-radius:6px;font-weight:600;text-decoration:none;">+ Add Block</a>'
-                                                    . '<a href="' . $listUrl . '" style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border:1px solid #d1d5db;border-radius:6px;font-weight:500;text-decoration:none;">View Page Blocks</a>'
-                                                    . '</div>'
+                                                    .'<a href="'.$createUrl.'" style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;background:#f59e0b;color:#fff;border-radius:6px;font-weight:600;text-decoration:none;">+ Add Block</a>'
+                                                    .'<a href="'.$listUrl.'" style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border:1px solid #d1d5db;border-radius:6px;font-weight:500;text-decoration:none;">View Page Blocks</a>'
+                                                    .'</div>'
                                                 );
                                             }),
                                     ]),
@@ -197,9 +196,9 @@ class PageForm
                                             ->nullable(),
                                         Select::make('robots')
                                             ->options([
-                                                'index, follow'     => 'Index & Follow',
-                                                'noindex, follow'   => 'No Index, Follow',
-                                                'index, nofollow'   => 'Index, No Follow',
+                                                'index, follow' => 'Index & Follow',
+                                                'noindex, follow' => 'No Index, Follow',
+                                                'index, nofollow' => 'Index, No Follow',
                                                 'noindex, nofollow' => 'No Index, No Follow',
                                             ])
                                             ->default('index, follow')

@@ -54,7 +54,7 @@ class AdminPanelProvider extends PanelProvider
                 Action::make('change_password')
                     ->label('Change Password')
                     ->icon(Heroicon::OutlinedLockClosed)
-                    ->url(fn() => AdminChangePassword::getUrl())
+                    ->url(fn () => AdminChangePassword::getUrl())
                     ->sort(1),
             ])
 
@@ -67,6 +67,7 @@ class AdminPanelProvider extends PanelProvider
                 'Masters',
                 'Configuration',
                 'Payment',
+                'Security',
                 'System',
             ])
             ->pages([

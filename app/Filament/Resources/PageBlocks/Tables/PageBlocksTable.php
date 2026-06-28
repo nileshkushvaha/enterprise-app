@@ -3,10 +3,11 @@
 namespace App\Filament\Resources\PageBlocks\Tables;
 
 use App\Enums\BlockType;
+use App\Services\BlockService;
 use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
-use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\DeleteAction;
+use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\ForceDeleteBulkAction;
 use Filament\Actions\RestoreAction;
@@ -37,8 +38,8 @@ class PageBlocksTable
                 TextColumn::make('blockable_type')
                     ->label('Owner')
                     ->formatStateUsing(fn ($state, $record): string => match ($state) {
-                        'App\Models\Post' => '📝 Post: ' . ($record->post?->title ?? '—'),
-                        default           => '📄 Page: ' . ($record->page?->title ?? '—'),
+                        'App\Models\Post' => '📝 Post: '.($record->post?->title ?? '—'),
+                        default => '📄 Page: '.($record->page?->title ?? '—'),
                     })
                     ->searchable(false),
 
@@ -96,7 +97,7 @@ class PageBlocksTable
                     ->icon('heroicon-o-document-duplicate')
                     ->action(function ($record, $action) {
                         try {
-                            app(\App\Services\BlockService::class)->duplicateBlock($record);
+                            app(BlockService::class)->duplicateBlock($record);
                             Notification::make()
                                 ->title('Block duplicated successfully')
                                 ->success()

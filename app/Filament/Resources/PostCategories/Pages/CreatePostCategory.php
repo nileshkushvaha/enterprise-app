@@ -9,4 +9,3 @@ class CreatePostCategory extends CreateRecord
 {
     protected static string $resource = PostCategoryResource::class;
 }
-

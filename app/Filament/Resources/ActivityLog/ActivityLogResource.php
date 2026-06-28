@@ -8,12 +8,12 @@ use App\Filament\Resources\ActivityLog\Pages\ListActivityLogs;
 use App\Filament\Resources\ActivityLog\Pages\ViewActivityLog;
 use App\Filament\Resources\ActivityLog\Schemas\ActivityLogInfolist;
 use App\Filament\Resources\ActivityLog\Tables\ActivityLogTable;
-use App\Policies\ActivityLogPolicy;
 use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Model;
 use Spatie\Activitylog\Models\Activity;
 
 class ActivityLogResource extends Resource
@@ -41,12 +41,12 @@ class ActivityLogResource extends Resource
         return false;
     }
 
-    public static function canEdit(\Illuminate\Database\Eloquent\Model $record): bool
+    public static function canEdit(Model $record): bool
     {
         return false;
     }
 
-    public static function canDelete(\Illuminate\Database\Eloquent\Model $record): bool
+    public static function canDelete(Model $record): bool
     {
         return false;
     }
@@ -75,7 +75,7 @@ class ActivityLogResource extends Resource
     {
         return [
             'index' => ListActivityLogs::route('/'),
-            'view'  => ViewActivityLog::route('/{record}'),
+            'view' => ViewActivityLog::route('/{record}'),
         ];
     }
 }

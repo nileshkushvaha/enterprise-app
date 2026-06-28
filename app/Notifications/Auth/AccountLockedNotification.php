@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Notifications\Auth;
 
+use App\Settings\LoginSecuritySettings;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
@@ -33,16 +34,16 @@ final class AccountLockedNotification extends Notification implements ShouldQueu
         ]));
 
         $appName = config('app.name');
-        $appUrl  = config('app.url');
+        $appUrl = config('app.url');
 
         return (new MailMessage)
             ->subject("Your {$appName} account has been locked 🔒")
             ->view('emails.auth.account-locked', [
-                'user'      => $notifiable,
+                'user' => $notifiable,
                 'unlockUrl' => $unlockUrl,
-                'appName'   => $appName,
-                'appUrl'    => $appUrl,
-                'minutes'   => \App\Models\User::LOCK_DURATION_MINUTES,
+                'appName' => $appName,
+                'appUrl' => $appUrl,
+                'minutes' => app(LoginSecuritySettings::class)->lockout_duration,
             ]);
     }
 }

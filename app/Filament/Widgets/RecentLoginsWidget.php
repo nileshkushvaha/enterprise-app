@@ -14,7 +14,9 @@ use Filament\Widgets\TableWidget as BaseWidget;
 class RecentLoginsWidget extends BaseWidget
 {
     protected static ?int $sort = 3;
+
     protected int|string|array $columnSpan = 'full';
+
     protected static ?string $heading = 'Recent Login Activity';
 
     public function table(Table $table): Table
@@ -36,7 +38,7 @@ class RecentLoginsWidget extends BaseWidget
                 BadgeColumn::make('status')
                     ->colors([
                         'success' => 'success',
-                        'danger'  => 'failed',
+                        'danger' => 'failed',
                         'warning' => 'suspicious',
                     ])
                     ->formatStateUsing(fn ($state) => ucfirst($state ?? 'unknown')),

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
+use App\Enums\PageStatus;
+use App\Enums\PageVisibility;
 use App\Models\Page;
 use App\Models\Post;
 use App\Services\CmsCacheService;
@@ -65,14 +67,15 @@ class PublishScheduledContent extends Command
                     "scheduled → published (publish_at: {$page->published_at})"
                 );
                 $published++;
+
                 continue;
             }
 
             try {
                 DB::transaction(function () use ($page, $batchUuid): void {
                     $page->update([
-                        'status'     => \App\Enums\PageStatus::Published,
-                        'visibility' => \App\Enums\PageVisibility::Public,
+                        'status' => PageStatus::Published,
+                        'visibility' => PageVisibility::Public,
                     ]);
 
                     $log = activity('cms')
@@ -114,14 +117,15 @@ class PublishScheduledContent extends Command
                     "scheduled → published (publish_at: {$post->published_at})"
                 );
                 $published++;
+
                 continue;
             }
 
             try {
                 DB::transaction(function () use ($post, $batchUuid): void {
                     $post->update([
-                        'status'     => \App\Enums\PageStatus::Published,
-                        'visibility' => \App\Enums\PageVisibility::Public,
+                        'status' => PageStatus::Published,
+                        'visibility' => PageVisibility::Public,
                     ]);
 
                     $log = activity('cms')

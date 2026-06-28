@@ -27,4 +27,3 @@ class PostCategoryObserver
         app(CmsCacheService::class)->bumpDiscoveryVersion();
     }
 }
-

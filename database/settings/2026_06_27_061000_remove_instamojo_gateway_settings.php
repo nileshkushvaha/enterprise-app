@@ -17,4 +17,3 @@ return new class extends SettingsMigration
         $this->migrator->deleteIfExists('payment_gateways.instamojo_webhook_url');
     }
 };
-

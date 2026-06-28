@@ -17,7 +17,9 @@ class CacheManagerPolicyTest extends TestCase
     use RefreshDatabase;
 
     private User $superAdmin;
+
     private User $cacheAdmin;
+
     private User $regularUser;
 
     protected function setUp(): void
@@ -33,10 +35,10 @@ class CacheManagerPolicyTest extends TestCase
         $superAdminRole = Role::firstOrCreate(['name' => 'super_admin', 'guard_name' => 'web']);
 
         // Users
-        $this->superAdmin  = User::factory()->create();
+        $this->superAdmin = User::factory()->create();
         $this->superAdmin->assignRole($superAdminRole);
 
-        $this->cacheAdmin  = User::factory()->create();
+        $this->cacheAdmin = User::factory()->create();
         $this->cacheAdmin->givePermissionTo(['cache_manager.view', 'cache_manager.clear', 'cache_manager.optimize']);
 
         $this->regularUser = User::factory()->create();
@@ -95,27 +97,27 @@ class CacheManagerPolicyTest extends TestCase
 
     // ── policy method coverage ────────────────────────────────────────────
 
-    public function test_policy_viewPage_grants_access_to_super_admin(): void
+    public function test_policy_view_page_grants_access_to_super_admin(): void
     {
-        $policy = new CacheManagerPolicy();
+        $policy = new CacheManagerPolicy;
         $this->assertTrue($policy->viewPage($this->superAdmin));
     }
 
-    public function test_policy_clearApplicationCache_denies_regular_user(): void
+    public function test_policy_clear_application_cache_denies_regular_user(): void
     {
-        $policy = new CacheManagerPolicy();
+        $policy = new CacheManagerPolicy;
         $this->assertFalse($policy->clearApplicationCache($this->regularUser));
     }
 
     public function test_policy_optimize_denies_regular_user(): void
     {
-        $policy = new CacheManagerPolicy();
+        $policy = new CacheManagerPolicy;
         $this->assertFalse($policy->optimize($this->regularUser));
     }
 
     public function test_all_clear_methods_share_same_permission(): void
     {
-        $policy = new CacheManagerPolicy();
+        $policy = new CacheManagerPolicy;
 
         $userWithClear = User::factory()->create();
         $userWithClear->givePermissionTo('cache_manager.clear');

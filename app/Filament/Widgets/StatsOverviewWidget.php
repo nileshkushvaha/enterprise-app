@@ -17,14 +17,14 @@ class StatsOverviewWidget extends BaseWidget
 
     protected function getStats(): array
     {
-        $totalUsers   = User::count();
-        $activeUsers  = User::where('status', User::STATUS_ACTIVE)->count();
+        $totalUsers = User::count();
+        $activeUsers = User::where('status', User::STATUS_ACTIVE)->count();
         $blockedUsers = User::whereIn('status', [User::STATUS_BLOCKED, User::STATUS_SUSPENDED])->count();
         $newUsersThisMonth = User::whereMonth('created_at', now()->month)
             ->whereYear('created_at', now()->year)
             ->count();
 
-        $totalRoles       = Role::count();
+        $totalRoles = Role::count();
         $totalPermissions = Permission::count();
 
         $todayLogins = LoginHistory::whereDate('logged_in_at', today())->count();

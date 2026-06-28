@@ -7,4 +7,3 @@ use Illuminate\Support\Facades\Route;
 
 Route::post('/webhooks/payments/{gateway}', PaymentWebhookController::class)
     ->name('api.payments.webhooks.handle');
-

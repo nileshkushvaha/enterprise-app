@@ -8,6 +8,7 @@ use App\Models\Page;
 use App\Models\Post;
 use App\Settings\GeneralSettings;
 use App\Settings\SeoSettings;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * Centralises all SEO metadata and structured-data generation.
@@ -27,28 +28,28 @@ class SeoManager
 
     public function getPageMetadata(Page $page): array
     {
-        $pageUrl   = $this->pageUrl($page);
-        $appName   = $this->appName();
+        $pageUrl = $this->pageUrl($page);
+        $appName = $this->appName();
         $globalSeo = $this->seoSettings;
 
-        $title       = $page->meta_title       ?: ($globalSeo?->meta_title       ?: ($page->title   ?: $appName));
+        $title = $page->meta_title ?: ($globalSeo?->meta_title ?: ($page->title ?: $appName));
         $description = $page->meta_description ?: ($globalSeo?->meta_description ?: ($page->excerpt ?: $this->firstCharsOfContent($page->content) ?: "Read more on {$appName}."));
-        $keywords    = $page->meta_keywords    ?: ($globalSeo?->meta_keywords    ?? null);
-        $robots      = $this->normaliseRobots($page->robots ?: ($globalSeo?->robots ?? 'index, follow'));
-        $canonical   = $page->canonical_url    ?: ($globalSeo?->canonical_url    ?: $pageUrl);
-        $ogImage     = $this->resolveOgImage((string) $page->featured_image_url);
+        $keywords = $page->meta_keywords ?: ($globalSeo?->meta_keywords ?? null);
+        $robots = $this->normaliseRobots($page->robots ?: ($globalSeo?->robots ?? 'index, follow'));
+        $canonical = $page->canonical_url ?: ($globalSeo?->canonical_url ?: $pageUrl);
+        $ogImage = $this->resolveOgImage((string) $page->featured_image_url);
 
         return [
-            'title'       => $title,
+            'title' => $title,
             'description' => $description,
-            'keywords'    => $keywords,
-            'canonical'   => $canonical,
-            'robots'      => $robots,
-            'og_title'    => $title,
+            'keywords' => $keywords,
+            'canonical' => $canonical,
+            'robots' => $robots,
+            'og_title' => $title,
             'og_description' => $description,
-            'og_image'    => $ogImage,
-            'og_url'      => $pageUrl,
-            'og_type'     => 'website',
+            'og_image' => $ogImage,
+            'og_url' => $pageUrl,
+            'og_type' => 'website',
             'twitter_card' => $globalSeo?->twitter_card ?? 'summary_large_image',
         ];
     }
@@ -58,14 +59,14 @@ class SeoManager
         $seo = $this->getPageMetadata($page);
 
         return [
-            '@context'      => 'https://schema.org',
-            '@type'         => 'WebPage',
-            'name'          => $page->title,
-            'description'   => $page->excerpt ?: ($seo['description'] ?? ''),
-            'url'           => $this->pageUrl($page),
-            'image'         => (string) $page->featured_image_url,
+            '@context' => 'https://schema.org',
+            '@type' => 'WebPage',
+            'name' => $page->title,
+            'description' => $page->excerpt ?: ($seo['description'] ?? ''),
+            'url' => $this->pageUrl($page),
+            'image' => (string) $page->featured_image_url,
             'datePublished' => $page->published_at?->toIso8601String(),
-            'dateModified'  => $page->updated_at->toIso8601String(),
+            'dateModified' => $page->updated_at->toIso8601String(),
         ];
     }
 
@@ -73,29 +74,29 @@ class SeoManager
 
     public function getPostMetadata(Post $post): array
     {
-        $postUrl   = $this->postUrl($post);
-        $appName   = $this->appName();
+        $postUrl = $this->postUrl($post);
+        $appName = $this->appName();
         $globalSeo = $this->seoSettings;
 
-        $title       = $post->meta_title       ?: ($globalSeo?->meta_title       ?: ($post->title   ?: $appName));
+        $title = $post->meta_title ?: ($globalSeo?->meta_title ?: ($post->title ?: $appName));
         $description = $post->meta_description ?: ($globalSeo?->meta_description ?: ($post->excerpt ?: $this->firstCharsOfContent($post->content) ?: "Read more on {$appName}."));
-        $keywords    = $post->meta_keywords    ?: ($globalSeo?->meta_keywords    ?? null);
-        $robots      = $this->normaliseRobots($post->robots ?: ($globalSeo?->robots ?? 'index, follow'));
-        $canonical   = $post->canonical_url    ?: ($globalSeo?->canonical_url    ?: $postUrl);
-        $ogImage     = $this->resolveOgImage((string) $post->featured_image_url);
+        $keywords = $post->meta_keywords ?: ($globalSeo?->meta_keywords ?? null);
+        $robots = $this->normaliseRobots($post->robots ?: ($globalSeo?->robots ?? 'index, follow'));
+        $canonical = $post->canonical_url ?: ($globalSeo?->canonical_url ?: $postUrl);
+        $ogImage = $this->resolveOgImage((string) $post->featured_image_url);
 
         return [
-            'title'          => $title,
-            'description'    => $description,
-            'keywords'       => $keywords,
-            'canonical'      => $canonical,
-            'robots'         => $robots,
-            'og_title'       => $title,
+            'title' => $title,
+            'description' => $description,
+            'keywords' => $keywords,
+            'canonical' => $canonical,
+            'robots' => $robots,
+            'og_title' => $title,
             'og_description' => $description,
-            'og_image'       => $ogImage,
-            'og_url'         => $postUrl,
-            'og_type'        => 'article',
-            'twitter_card'   => $globalSeo?->twitter_card ?? 'summary_large_image',
+            'og_image' => $ogImage,
+            'og_url' => $postUrl,
+            'og_type' => 'article',
+            'twitter_card' => $globalSeo?->twitter_card ?? 'summary_large_image',
         ];
     }
 
@@ -104,17 +105,17 @@ class SeoManager
         $seo = $this->getPostMetadata($post);
 
         return [
-            '@context'      => 'https://schema.org',
-            '@type'         => 'Article',
-            'headline'      => $post->title,
-            'description'   => $post->excerpt ?: ($seo['description'] ?? ''),
-            'url'           => $this->postUrl($post),
-            'image'         => (string) $post->featured_image_url,
+            '@context' => 'https://schema.org',
+            '@type' => 'Article',
+            'headline' => $post->title,
+            'description' => $post->excerpt ?: ($seo['description'] ?? ''),
+            'url' => $this->postUrl($post),
+            'image' => (string) $post->featured_image_url,
             'datePublished' => $post->published_at?->toIso8601String(),
-            'dateModified'  => $post->updated_at->toIso8601String(),
-            'author'        => [
+            'dateModified' => $post->updated_at->toIso8601String(),
+            'author' => [
                 '@type' => 'Person',
-                'name'  => $post->author?->name ?? config('app.name'),
+                'name' => $post->author?->name ?? config('app.name'),
             ],
         ];
     }
@@ -167,6 +168,7 @@ class SeoManager
         if (str_starts_with($path, 'http') || str_starts_with($path, '//')) {
             return $path;
         }
-        return \Illuminate\Support\Facades\Storage::disk('public')->url($path);
+
+        return Storage::disk('public')->url($path);
     }
 }

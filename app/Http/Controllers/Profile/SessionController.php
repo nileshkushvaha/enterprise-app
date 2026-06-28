@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Profile;
 
 use App\Http\Controllers\Controller;
+use App\Models\User;
 use App\Services\Profile\SessionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -21,8 +22,8 @@ final class SessionController extends Controller
      */
     public function revoke(Request $request, string $sessionId): JsonResponse|RedirectResponse
     {
-        /** @var \App\Models\User $user */
-        $user      = $request->user();
+        /** @var User $user */
+        $user = $request->user();
         $currentId = $request->session()->getId();
 
         if ($sessionId === $currentId) {
@@ -47,8 +48,8 @@ final class SessionController extends Controller
      */
     public function revokeAll(Request $request): JsonResponse|RedirectResponse
     {
-        /** @var \App\Models\User $user */
-        $user    = $request->user();
+        /** @var User $user */
+        $user = $request->user();
         $current = $request->session()->getId();
 
         $count = $this->sessionService->revokeAllOtherSessions($user, $current);
@@ -57,7 +58,7 @@ final class SessionController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => $count > 0
-                    ? "Revoked {$count} other " . str('session')->plural($count) . '.'
+                    ? "Revoked {$count} other ".str('session')->plural($count).'.'
                     : 'No other active sessions found.',
                 'count' => $count,
             ]);
@@ -66,7 +67,7 @@ final class SessionController extends Controller
         return redirect()->route('profile.show')
             ->with('active_tab', 'security')
             ->with('success', $count > 0
-                ? "Revoked {$count} other " . str('session')->plural($count) . ' successfully.'
+                ? "Revoked {$count} other ".str('session')->plural($count).' successfully.'
                 : 'No other active sessions to revoke.');
     }
 

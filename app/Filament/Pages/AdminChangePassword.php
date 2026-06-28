@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Pages;
 
+use App\Services\Security\PasswordRuleBuilder;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Facades\Filament;
@@ -19,12 +20,13 @@ use Filament\Support\Exceptions\Halt;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Validation\Rules\Password;
 
 class AdminChangePassword extends Page
 {
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedLockClosed;
+
     protected static ?string $slug = 'change-password';
+
     protected static bool $shouldRegisterNavigation = false;
 
     /** @var array<string, mixed>|null */
@@ -49,7 +51,7 @@ class AdminChangePassword extends Page
     {
         return [
             '/admin' => 'Dashboard',
-            '#'      => 'Change Password',
+            '#' => 'Change Password',
         ];
     }
 
@@ -106,7 +108,7 @@ class AdminChangePassword extends Page
                             ->password()
                             ->revealable(filament()->arePasswordsRevealable())
                             ->required()
-                            ->rule(Password::default())
+                            ->rule(app(PasswordRuleBuilder::class)->build())
                             ->showAllValidationMessages()
                             ->autocomplete('new-password')
                             ->same('password_confirmation'),
@@ -133,14 +135,14 @@ class AdminChangePassword extends Page
         $user = Filament::auth()->user();
 
         $user->update([
-            'password'            => Hash::make($data['password']),
+            'password' => Hash::make($data['password']),
             'password_changed_at' => now(),
         ]);
 
         // Re-hash session so user stays logged in after password change
         if (request()->hasSession()) {
             request()->session()->put([
-                'password_hash_' . Filament::getAuthGuard() => $user->getAuthPassword(),
+                'password_hash_'.Filament::getAuthGuard() => $user->getAuthPassword(),
             ]);
         }
 

@@ -25,10 +25,10 @@ class ProfileController extends Controller
 
     public function show(Request $request): View
     {
-        $user           = auth()->user()->load('profile.country');
-        $countries      = Country::active()->orderBy('name')->get(['id', 'name', 'iso2', 'flag']);
-        $timezones      = \DateTimeZone::listIdentifiers();
-        $loginHistory   = $user->loginHistories()->limit(10)->get();
+        $user = auth()->user()->load('profile.country');
+        $countries = Country::active()->orderBy('name')->get(['id', 'name', 'iso2', 'flag']);
+        $timezones = \DateTimeZone::listIdentifiers();
+        $loginHistory = $user->loginHistories()->limit(10)->get();
         $activeSessions = $this->sessionService->getSessionsForUser($user);
         $currentSessionId = $request->session()->getId();
 
@@ -65,8 +65,8 @@ class ProfileController extends Controller
 
         return response()->json([
             'success' => true,
-            'url'     => asset('storage/' . $path),
-            'path'    => $path,
+            'url' => asset('storage/'.$path),
+            'path' => $path,
         ]);
     }
 

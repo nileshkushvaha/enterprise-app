@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace App\Filament\Widgets;
 
 use App\Models\User;
-use Filament\Support\Enums\FontWeight;
 use Filament\Actions\Action as TableAction;
+use Filament\Support\Enums\FontWeight;
 use Filament\Tables\Columns\BadgeColumn;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\ImageColumn;
@@ -17,7 +17,9 @@ use Filament\Widgets\TableWidget as BaseWidget;
 class RecentUsersWidget extends BaseWidget
 {
     protected static ?int $sort = 2;
+
     protected int|string|array $columnSpan = 'full';
+
     protected static ?string $heading = 'Recent Registrations';
 
     public function table(Table $table): Table
@@ -33,7 +35,7 @@ class RecentUsersWidget extends BaseWidget
                 ImageColumn::make('avatar_url')
                     ->label('')
                     ->circular()
-                    ->defaultImageUrl(fn (User $record) => 'https://ui-avatars.com/api/?name=' . urlencode($record->name) . '&background=6366f1&color=fff&size=40')
+                    ->defaultImageUrl(fn (User $record) => 'https://ui-avatars.com/api/?name='.urlencode($record->name).'&background=6366f1&color=fff&size=40')
                     ->size(36),
 
                 TextColumn::make('name')
@@ -52,14 +54,14 @@ class RecentUsersWidget extends BaseWidget
                     ->colors([
                         'success' => 'active',
                         'warning' => 'pending_verification',
-                        'danger'  => fn ($state) => in_array($state, ['blocked', 'suspended']),
+                        'danger' => fn ($state) => in_array($state, ['blocked', 'suspended']),
                     ])
                     ->formatStateUsing(fn ($state) => match ($state) {
-                        'active'               => 'Active',
+                        'active' => 'Active',
                         'pending_verification' => 'Pending',
-                        'blocked'              => 'Blocked',
-                        'suspended'            => 'Suspended',
-                        default                => ucfirst($state),
+                        'blocked' => 'Blocked',
+                        'suspended' => 'Suspended',
+                        default => ucfirst($state),
                     }),
 
                 IconColumn::make('email_verified_at')

@@ -41,7 +41,7 @@ final class VerifyEmailNotification extends BaseVerifyEmail implements ShouldQue
             'auth.verification.verify',
             Carbon::now()->addMinutes(Config::get('auth.verification.expire', 60)),
             [
-                'id'   => $notifiable->getKey(),
+                'id' => $notifiable->getKey(),
                 'hash' => sha1($notifiable->getEmailForVerification()),
             ]
         );
@@ -50,12 +50,12 @@ final class VerifyEmailNotification extends BaseVerifyEmail implements ShouldQue
     protected function buildMailMessage($url): MailMessage
     {
         return (new MailMessage)
-            ->subject('Verify Your Email Address — ' . config('app.name'))
+            ->subject('Verify Your Email Address — '.config('app.name'))
             ->view('emails.auth.verify-email', [
-                'url'      => $url,
-                'appName'  => config('app.name'),
-                'appUrl'   => config('app.url'),
-                'expiry'   => config('auth.verification.expire', 60),
+                'url' => $url,
+                'appName' => config('app.name'),
+                'appUrl' => config('app.url'),
+                'expiry' => config('auth.verification.expire', 60),
             ]);
     }
 
@@ -64,13 +64,13 @@ final class VerifyEmailNotification extends BaseVerifyEmail implements ShouldQue
         $url = $this->verificationUrl($notifiable);
 
         return (new MailMessage)
-            ->subject('Verify Your Email Address — ' . config('app.name'))
+            ->subject('Verify Your Email Address — '.config('app.name'))
             ->view('emails.auth.verify-email', [
-                'url'        => $url,
+                'url' => $url,
                 'notifiable' => $notifiable,
-                'appName'    => config('app.name'),
-                'appUrl'     => config('app.url'),
-                'expiry'     => config('auth.verification.expire', 60),
+                'appName' => config('app.name'),
+                'appUrl' => config('app.url'),
+                'expiry' => config('auth.verification.expire', 60),
             ]);
     }
 }

@@ -18,17 +18,17 @@ final class UploadAvatarAction
 
         // Generate a unique path: avatars/{user_id}/{uuid}.webp-or-original-ext
         $extension = $file->getClientOriginalExtension() ?: 'jpg';
-        $filename  = Str::uuid() . '.' . $extension;
-        $path      = 'avatars/' . $user->id . '/' . $filename;
+        $filename = Str::uuid().'.'.$extension;
+        $path = 'avatars/'.$user->id.'/'.$filename;
 
         // Store to public disk
-        $file->storeAs('avatars/' . $user->id, $filename, 'public');
+        $file->storeAs('avatars/'.$user->id, $filename, 'public');
 
         // Update both user and profile rows
         $user->update(['avatar' => $path]);
         $user->profile()->updateOrCreate(
             ['user_id' => $user->id],
-            ['avatar'  => $path]
+            ['avatar' => $path]
         );
 
         return $path;

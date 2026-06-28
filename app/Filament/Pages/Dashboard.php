@@ -16,8 +16,11 @@ use Illuminate\Contracts\Support\Htmlable;
 class Dashboard extends BaseDashboard
 {
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedHome;
+
     protected static ?string $navigationLabel = 'Dashboard';
+
     protected static ?string $title = 'Dashboard';
+
     protected static ?int $navigationSort = -2;
 
     public function getHeading(): string|Htmlable
@@ -26,7 +29,7 @@ class Dashboard extends BaseDashboard
         $greeting = match (true) {
             $hour < 12 => 'Good morning',
             $hour < 17 => 'Good afternoon',
-            default    => 'Good evening',
+            default => 'Good evening',
         };
 
         $name = auth()->user()?->first_name ?? auth()->user()?->name ?? 'Admin';
@@ -36,7 +39,7 @@ class Dashboard extends BaseDashboard
 
     public function getSubheading(): string|Htmlable|null
     {
-        return "Here's what's happening with your platform today — " . now()->format('l, F j, Y');
+        return "Here's what's happening with your platform today — ".now()->format('l, F j, Y');
     }
 
     public function getBreadcrumbs(): array

@@ -98,16 +98,18 @@ class BlockContentConverter
     private static function faqToJson(array $data): array
     {
         $items = $data['items'] ?? [];
+
         return [
-            'items' => array_values(array_filter($items, fn ($item) => !empty($item['question'] ?? null))),
+            'items' => array_values(array_filter($items, fn ($item) => ! empty($item['question'] ?? null))),
         ];
     }
 
     private static function accordionToJson(array $data): array
     {
         $items = $data['items'] ?? [];
+
         return [
-            'items' => array_values(array_filter($items, fn ($item) => !empty($item['title'] ?? null))),
+            'items' => array_values(array_filter($items, fn ($item) => ! empty($item['title'] ?? null))),
             'single_open' => (bool) ($data['single_open'] ?? true),
         ];
     }
@@ -124,7 +126,7 @@ class BlockContentConverter
                 ];
             },
             $items
-        ), static fn (array $item): bool => !empty($item['title'])));
+        ), static fn (array $item): bool => ! empty($item['title'])));
 
         return [
             'items' => $normalizedItems,
@@ -134,10 +136,11 @@ class BlockContentConverter
     private static function teamToJson(array $data): array
     {
         $members = $data['members'] ?? [];
+
         return [
             'title' => $data['title'] ?? '',
             'description' => $data['description'] ?? '',
-            'members' => array_values(array_filter($members, fn ($member) => !empty($member['name'] ?? null))),
+            'members' => array_values(array_filter($members, fn ($member) => ! empty($member['name'] ?? null))),
             'columns' => (int) ($data['columns'] ?? 3),
         ];
     }
@@ -145,8 +148,9 @@ class BlockContentConverter
     private static function testimonialsToJson(array $data): array
     {
         $testimonials = $data['testimonials'] ?? [];
+
         return [
-            'testimonials' => array_values(array_filter($testimonials, fn ($t) => !empty($t['text'] ?? null))),
+            'testimonials' => array_values(array_filter($testimonials, fn ($t) => ! empty($t['text'] ?? null))),
             'columns' => (int) ($data['columns'] ?? 3),
         ];
     }
@@ -154,8 +158,9 @@ class BlockContentConverter
     private static function statisticsToJson(array $data): array
     {
         $stats = $data['stats'] ?? [];
+
         return [
-            'stats' => array_values(array_filter($stats, fn ($s) => !empty($s['number'] ?? null))),
+            'stats' => array_values(array_filter($stats, fn ($s) => ! empty($s['number'] ?? null))),
             'columns' => (int) ($data['columns'] ?? 4),
         ];
     }
@@ -163,8 +168,9 @@ class BlockContentConverter
     private static function timelineToJson(array $data): array
     {
         $items = $data['items'] ?? [];
+
         return [
-            'items' => array_values(array_filter($items, fn ($item) => !empty($item['title'] ?? null))),
+            'items' => array_values(array_filter($items, fn ($item) => ! empty($item['title'] ?? null))),
         ];
     }
 
@@ -242,10 +248,10 @@ class BlockContentConverter
         $items = $data['items'] ?? [];
 
         return [
-            'eyebrow'     => $data['eyebrow'] ?? '',
-            'title'       => $data['title'] ?? '',
+            'eyebrow' => $data['eyebrow'] ?? '',
+            'title' => $data['title'] ?? '',
             'description' => $data['description'] ?? '',
-            'items'       => array_values(array_filter($items, fn ($i) => !empty($i['value'] ?? null))),
+            'items' => array_values(array_filter($items, fn ($i) => ! empty($i['value'] ?? null))),
         ];
     }
 }

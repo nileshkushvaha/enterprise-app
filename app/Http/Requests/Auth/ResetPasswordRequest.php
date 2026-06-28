@@ -17,8 +17,8 @@ class ResetPasswordRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'token'    => ['required', 'string'],
-            'email'    => ['required', 'string', 'email:rfc'],
+            'token' => ['required', 'string'],
+            'email' => ['required', 'string', 'email:rfc'],
             'password' => [
                 'required',
                 'string',
@@ -26,7 +26,7 @@ class ResetPasswordRequest extends FormRequest
                 Password::min(8)
                     ->mixedCase()
                     ->numbers()
-                    ->symbols()
+                    ->symbols(),
             ],
         ];
     }
@@ -34,11 +34,11 @@ class ResetPasswordRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'token.required'    => 'Invalid or missing reset token.',
-            'email.required'    => 'Email address is required.',
+            'token.required' => 'Invalid or missing reset token.',
+            'email.required' => 'Email address is required.',
             'password.required' => 'Please enter your new password.',
-            'password.confirmed'=> 'Password confirmation does not match.',
-            'password.min'      => 'Password must be at least 8 characters.',
+            'password.confirmed' => 'Password confirmation does not match.',
+            'password.min' => 'Password must be at least 8 characters.',
         ];
     }
 }

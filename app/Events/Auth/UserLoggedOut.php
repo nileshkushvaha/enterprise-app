@@ -13,7 +13,7 @@ final class UserLoggedOut
     use Dispatchable, SerializesModels;
 
     public function __construct(
-        public readonly User   $user,
+        public readonly User $user,
         public readonly string $ipAddress,
         public readonly string $userAgent,
     ) {}

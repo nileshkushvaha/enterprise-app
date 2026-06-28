@@ -16,8 +16,7 @@ class SearchController extends Controller
         CmsCacheService $cacheService,
         PageService $pageService,
         PostService $postService
-    ): View
-    {
+    ): View {
         $validated = $request->validate([
             'q' => ['nullable', 'string', 'max:120'],
         ]);

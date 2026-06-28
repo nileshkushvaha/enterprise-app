@@ -14,7 +14,7 @@ final class ProfileService
 {
     public function __construct(
         private readonly UpdateProfileAction $updateProfile,
-        private readonly UploadAvatarAction  $uploadAvatar,
+        private readonly UploadAvatarAction $uploadAvatar,
     ) {}
 
     public function update(User $user, array $data): User
@@ -33,7 +33,7 @@ final class ProfileService
     public function changePassword(User $user, string $newPassword): void
     {
         $user->update([
-            'password'            => Hash::make($newPassword),
+            'password' => Hash::make($newPassword),
             'password_changed_at' => now(),
         ]);
 

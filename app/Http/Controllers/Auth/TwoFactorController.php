@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Models\User;
 use App\Services\Auth\TwoFactorService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -20,7 +21,7 @@ final class TwoFactorController extends Controller
 
     public function setup(Request $request): View|RedirectResponse
     {
-        /** @var \App\Models\User $user */
+        /** @var User $user */
         $user = $request->user();
 
         if ($user->hasTwoFactorEnabled()) {
@@ -34,9 +35,9 @@ final class TwoFactorController extends Controller
             ? decrypt($user->two_factor_secret)
             : $this->twoFactor->enableSetup($user);
 
-        $qrUrl  = $this->twoFactor->qrCodeUrl($user, $secret);
-        $qrSvg  = $this->twoFactor->qrCodeSvg($qrUrl);
-        $codes  = $user->twoFactorRecoveryCodes();
+        $qrUrl = $this->twoFactor->qrCodeUrl($user, $secret);
+        $qrSvg = $this->twoFactor->qrCodeSvg($qrUrl);
+        $codes = $user->twoFactorRecoveryCodes();
 
         return view('auth.two-factor.setup', compact('secret', 'qrSvg', 'codes'));
     }
@@ -47,7 +48,7 @@ final class TwoFactorController extends Controller
     {
         $request->validate(['code' => ['required', 'string', 'digits:6']]);
 
-        /** @var \App\Models\User $user */
+        /** @var User $user */
         $user = $request->user();
 
         if (! $this->twoFactor->confirm($user, $request->input('code'))) {
@@ -65,7 +66,7 @@ final class TwoFactorController extends Controller
     {
         $request->validate(['password' => ['required', 'current_password']]);
 
-        /** @var \App\Models\User $user */
+        /** @var User $user */
         $user = $request->user();
 
         $this->twoFactor->disable($user);
@@ -81,8 +82,8 @@ final class TwoFactorController extends Controller
     {
         $request->validate(['password' => ['required', 'current_password']]);
 
-        /** @var \App\Models\User $user */
-        $user  = $request->user();
+        /** @var User $user */
+        $user = $request->user();
         $codes = $this->twoFactor->regenerateRecoveryCodes($user);
 
         return redirect()->route('profile.show')
@@ -109,12 +110,12 @@ final class TwoFactorController extends Controller
         }
 
         $request->validate([
-            'code'          => ['nullable', 'string'],
+            'code' => ['nullable', 'string'],
             'recovery_code' => ['nullable', 'string'],
         ]);
 
         $userId = $request->session()->get('auth.2fa.user_id');
-        $user   = \App\Models\User::findOrFail($userId);
+        $user = User::findOrFail($userId);
 
         // Try TOTP code
         if ($code = $request->input('code')) {

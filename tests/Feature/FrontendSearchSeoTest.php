@@ -101,7 +101,7 @@ class FrontendSearchSeoTest extends TestCase
         $response->assertOk();
         $response->assertHeader('Content-Type', 'text/plain; charset=UTF-8');
         $response->assertSee('Disallow: /admin', false);
-        $response->assertSee('Sitemap: ' . route('seo.sitemap'), false);
+        $response->assertSee('Sitemap: '.route('seo.sitemap'), false);
     }
 
     public function test_search_cache_is_invalidated_when_new_page_is_created(): void

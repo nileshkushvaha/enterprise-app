@@ -49,15 +49,15 @@ class PageController extends Controller
             ->get();
 
         return response()->view('home', [
-            'appName'         => $settings->app_name ?? config('app.name'),
-            'appShortName'    => $settings->app_short_name ?? null,
-            'logo'            => $settings->logo ?? null,
-            'supportEmail'    => $settings->support_email ?? null,
-            'supportPhone'    => $settings->support_phone ?? null,
-            'address'         => $settings->address ?? null,
-            'footerText'      => $settings->footer_text ?? null,
+            'appName' => $settings->app_name ?? config('app.name'),
+            'appShortName' => $settings->app_short_name ?? null,
+            'logo' => $settings->logo ?? null,
+            'supportEmail' => $settings->support_email ?? null,
+            'supportPhone' => $settings->support_phone ?? null,
+            'address' => $settings->address ?? null,
+            'footerText' => $settings->footer_text ?? null,
             'footerCopyright' => $settings->footer_copyright ?? null,
-            'recentPosts'     => $recentPosts,
+            'recentPosts' => $recentPosts,
         ]);
     }
 }

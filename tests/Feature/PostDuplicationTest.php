@@ -87,7 +87,7 @@ class PostDuplicationTest extends TestCase
     {
         $original = Post::factory()->create();
         ContentBlock::create(['blockable_type' => 'post', 'blockable_id' => $original->id, 'block_type' => BlockType::Hero,    'content' => ['title' => 'H'], 'settings' => [], 'sort_order' => 0, 'is_active' => true]);
-        ContentBlock::create(['blockable_type' => 'post', 'blockable_id' => $original->id, 'block_type' => BlockType::RichText, 'content' => ['text'  => 'T'], 'settings' => [], 'sort_order' => 1, 'is_active' => true]);
+        ContentBlock::create(['blockable_type' => 'post', 'blockable_id' => $original->id, 'block_type' => BlockType::RichText, 'content' => ['text' => 'T'], 'settings' => [], 'sort_order' => 1, 'is_active' => true]);
 
         $copy = $this->service->duplicatePost($original);
 
@@ -125,7 +125,7 @@ class PostDuplicationTest extends TestCase
     public function test_duplicate_post_copies_categories(): void
     {
         $original = Post::factory()->create();
-        $cat      = PostCategory::factory()->create();
+        $cat = PostCategory::factory()->create();
         $original->categories()->sync([$cat->id]);
 
         $copy = $this->service->duplicatePost($original);
@@ -136,7 +136,7 @@ class PostDuplicationTest extends TestCase
     public function test_duplicate_post_copies_tags(): void
     {
         $original = Post::factory()->create();
-        $tag      = Tag::factory()->create();
+        $tag = Tag::factory()->create();
         $original->tags()->sync([$tag->id]);
 
         $copy = $this->service->duplicatePost($original);
@@ -147,7 +147,7 @@ class PostDuplicationTest extends TestCase
     public function test_duplicate_post_copies_related_posts(): void
     {
         $original = Post::factory()->published()->create();
-        $related  = Post::factory()->published()->create();
+        $related = Post::factory()->published()->create();
         $original->relatedPosts()->sync([$related->id]);
 
         $copy = $this->service->duplicatePost($original);
@@ -159,8 +159,8 @@ class PostDuplicationTest extends TestCase
 
     public function test_duplicate_post_recalculates_reading_time(): void
     {
-        $original  = Post::factory()->create(['reading_time' => 99]);
-        $longText  = implode(' ', array_fill(0, 600, 'word'));
+        $original = Post::factory()->create(['reading_time' => 99]);
+        $longText = implode(' ', array_fill(0, 600, 'word'));
         ContentBlock::create(['blockable_type' => 'post', 'blockable_id' => $original->id, 'block_type' => BlockType::RichText, 'content' => ['text' => $longText], 'settings' => [], 'sort_order' => 0, 'is_active' => true]);
 
         $copy = $this->service->duplicatePost($original);

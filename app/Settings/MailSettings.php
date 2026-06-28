@@ -10,21 +10,28 @@ class MailSettings extends Settings
 {
     // Sender
     public string $from_name;
+
     public string $from_email;
 
     // SMTP
-    public string  $driver;
-    public string  $host;
-    public int     $port;
+    public string $driver;
+
+    public string $host;
+
+    public int $port;
+
     public ?string $username;
+
     public ?string $password;  // stored encrypted
-    public string  $encryption;
+
+    public string $encryption;
 
     // Queue
     public bool $queue_emails;
 
     // Advanced
     public int $connection_timeout;
+
     public int $retry_attempts;
 
     public static function group(): string

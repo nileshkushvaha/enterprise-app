@@ -72,4 +72,3 @@ class TagResource extends Resource
         return auth()->user()?->can('create', Tag::class) ?? false;
     }
 }
-

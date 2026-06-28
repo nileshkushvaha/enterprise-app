@@ -33,8 +33,8 @@ class EditRole extends EditRecord
                         ->causedBy(auth()->user())
                         ->event('deleted')
                         ->withProperties([
-                            'name'               => $role->name,
-                            'permissions_count'  => $role->permissions->count(),
+                            'name' => $role->name,
+                            'permissions_count' => $role->permissions->count(),
                         ])
                         ->log('Role deleted');
                 }),
@@ -45,6 +45,7 @@ class EditRole extends EditRecord
     {
         // Pre-populate selectedPermissions so Alpine matrix reads correct state
         $this->selectedPermissions = $this->record->permissions->pluck('name')->toArray();
+
         return $data;
     }
 
@@ -67,15 +68,15 @@ class EditRole extends EditRecord
 
         // Set extra columns directly
         $role->description = $data['description'] ?? null;
-        $role->status      = $data['status'] ?? 'active';
-        $role->remarks     = $data['remarks'] ?? null;
+        $role->status = $data['status'] ?? 'active';
+        $role->remarks = $data['remarks'] ?? null;
         $role->saveQuietly();
 
         // Sync permissions from the matrix state
         $role->syncPermissions($this->selectedPermissions);
 
         // Activity log with diff
-        $added   = array_diff($this->selectedPermissions, $oldPermissions);
+        $added = array_diff($this->selectedPermissions, $oldPermissions);
         $removed = array_diff($oldPermissions, $this->selectedPermissions);
 
         activity('roles')
@@ -83,15 +84,15 @@ class EditRole extends EditRecord
             ->causedBy(auth()->user())
             ->event('updated')
             ->withProperties([
-                'permissions_added'   => array_values($added),
+                'permissions_added' => array_values($added),
                 'permissions_removed' => array_values($removed),
-                'total_permissions'   => count($this->selectedPermissions),
+                'total_permissions' => count($this->selectedPermissions),
             ])
             ->log('Role updated');
 
         Notification::make()
             ->title('Role saved')
-            ->body("Role \"{$role->name}\" updated with " . count($this->selectedPermissions) . ' permissions.')
+            ->body("Role \"{$role->name}\" updated with ".count($this->selectedPermissions).' permissions.')
             ->success()
             ->send();
     }

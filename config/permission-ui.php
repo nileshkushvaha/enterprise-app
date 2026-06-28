@@ -16,45 +16,45 @@ return [
     // ── Core Access Control ───────────────────────────────────────────────
     'User' => [
         'title' => 'User Management',
-        'icon'  => 'heroicon-o-users',
+        'icon' => 'heroicon-o-users',
         'order' => 1,
     ],
 
     'Role' => [
         'title' => 'Role Management',
-        'icon'  => 'heroicon-o-shield-check',
+        'icon' => 'heroicon-o-shield-check',
         'order' => 2,
     ],
 
     'Permission' => [
         'title' => 'Permission Management',
-        'icon'  => 'heroicon-o-key',
+        'icon' => 'heroicon-o-key',
         'order' => 3,
     ],
 
     // ── Geography ────────────────────────────────────────────────────────
     'Country' => [
         'title' => 'Countries',
-        'icon'  => 'heroicon-o-globe-alt',
+        'icon' => 'heroicon-o-globe-alt',
         'order' => 10,
     ],
 
     // ── Assessment (future) ───────────────────────────────────────────────
     'assessment' => [
         'title' => 'Assessment',
-        'icon'  => 'heroicon-o-clipboard-document-check',
+        'icon' => 'heroicon-o-clipboard-document-check',
         'order' => 20,
     ],
 
     'users' => [
         'title' => 'User Management',
-        'icon'  => 'heroicon-o-users',
+        'icon' => 'heroicon-o-users',
         'order' => 21,
     ],
 
     'roles' => [
         'title' => 'Role Management',
-        'icon'  => 'heroicon-o-shield-check',
+        'icon' => 'heroicon-o-shield-check',
         'order' => 22,
     ],
 

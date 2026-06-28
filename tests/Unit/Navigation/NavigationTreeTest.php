@@ -31,7 +31,7 @@ class NavigationTreeTest extends TestCase
     private function makeNode(bool $isActive = false, bool $isAncestorActive = false, array $children = []): NavigationNode
     {
         return new NavigationNode(
-            id: 'n-' . uniqid(),
+            id: 'n-'.uniqid(),
             navigationId: 'tree-1',
             label: 'Item',
             link: new ResolvedLink('/', '_self', null, []),
@@ -88,8 +88,8 @@ class NavigationTreeTest extends TestCase
     public function test_has_active_node_recurses_into_children(): void
     {
         $activeChild = $this->makeNode(true);
-        $parent      = $this->makeNode(false, false, [$activeChild]);
-        $tree        = $this->makeTree([$parent]);
+        $parent = $this->makeNode(false, false, [$activeChild]);
+        $tree = $this->makeTree([$parent]);
 
         $this->assertTrue($tree->hasActiveNode());
     }
@@ -97,7 +97,7 @@ class NavigationTreeTest extends TestCase
     public function test_with_nodes_returns_new_tree_instance(): void
     {
         $original = $this->makeTree();
-        $updated  = $original->withNodes([$this->makeNode()]);
+        $updated = $original->withNodes([$this->makeNode()]);
 
         $this->assertNotSame($original, $updated);
         $this->assertCount(0, $original->nodes);
@@ -106,7 +106,7 @@ class NavigationTreeTest extends TestCase
 
     public function test_with_nodes_updates_total_nodes_count(): void
     {
-        $tree    = $this->makeTree();
+        $tree = $this->makeTree();
         $updated = $tree->withNodes([$this->makeNode(), $this->makeNode()]);
 
         $this->assertSame(2, $updated->totalNodes);
@@ -114,7 +114,7 @@ class NavigationTreeTest extends TestCase
 
     public function test_with_nodes_preserves_metadata(): void
     {
-        $tree    = $this->makeTree();
+        $tree = $this->makeTree();
         $updated = $tree->withNodes([]);
 
         $this->assertSame('tree-1', $updated->id);

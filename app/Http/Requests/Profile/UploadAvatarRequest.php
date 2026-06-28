@@ -24,9 +24,9 @@ class UploadAvatarRequest extends FormRequest
     {
         return [
             'avatar.required' => 'Please select an image to upload.',
-            'avatar.image'    => 'The file must be an image.',
-            'avatar.mimes'    => 'Accepted formats: JPEG, PNG, JPG, WebP.',
-            'avatar.max'      => 'Image size must not exceed 2 MB.',
+            'avatar.image' => 'The file must be an image.',
+            'avatar.mimes' => 'Accepted formats: JPEG, PNG, JPG, WebP.',
+            'avatar.max' => 'Image size must not exceed 2 MB.',
         ];
     }
 }

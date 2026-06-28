@@ -20,10 +20,10 @@ class AdminPagePreviewTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        
+
         Permission::firstOrCreate(['name' => 'pages.view', 'guard_name' => 'web']);
         Permission::firstOrCreate(['name' => 'pages.list', 'guard_name' => 'web']);
-        
+
         $this->user = User::factory()->create();
         $this->user->givePermissionTo(['pages.view', 'pages.list']);
     }
@@ -45,12 +45,12 @@ class AdminPagePreviewTest extends TestCase
 
         ContentBlock::create(array_merge([
             'blockable_type' => 'page',
-            'blockable_id'   => $page->id,
-            'block_type'     => 'hero',
-            'content'        => json_encode(['heading' => 'Test']),
-            'settings'       => json_encode([]),
-            'sort_order'     => 1,
-            'is_active'      => true,
+            'blockable_id' => $page->id,
+            'block_type' => 'hero',
+            'content' => json_encode(['heading' => 'Test']),
+            'settings' => json_encode([]),
+            'sort_order' => 1,
+            'is_active' => true,
         ], $blockData));
 
         return $page->fresh();
@@ -60,7 +60,7 @@ class AdminPagePreviewTest extends TestCase
     {
         $page = $this->createPageWithBlock();
         $response = $this->get(route('admin.pages.preview', $page));
-        
+
         $this->assertTrue($response->isRedirect() || $response->status() === 401);
     }
 
@@ -137,22 +137,22 @@ class AdminPagePreviewTest extends TestCase
 
         ContentBlock::create([
             'blockable_type' => 'page',
-            'blockable_id'   => $page->id,
-            'block_type'     => 'hero',
-            'content'        => json_encode(['heading' => 'Hero']),
-            'settings'       => json_encode([]),
-            'sort_order'     => 1,
-            'is_active'      => true,
+            'blockable_id' => $page->id,
+            'block_type' => 'hero',
+            'content' => json_encode(['heading' => 'Hero']),
+            'settings' => json_encode([]),
+            'sort_order' => 1,
+            'is_active' => true,
         ]);
 
         ContentBlock::create([
             'blockable_type' => 'page',
-            'blockable_id'   => $page->id,
-            'block_type'     => 'rich_text',
-            'content'        => json_encode(['content' => '<p>Rich text</p>']),
-            'settings'       => json_encode([]),
-            'sort_order'     => 2,
-            'is_active'      => true,
+            'blockable_id' => $page->id,
+            'block_type' => 'rich_text',
+            'content' => json_encode(['content' => '<p>Rich text</p>']),
+            'settings' => json_encode([]),
+            'sort_order' => 2,
+            'is_active' => true,
         ]);
 
         $response = $this->actingAs($this->user)

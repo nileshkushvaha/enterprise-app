@@ -9,8 +9,8 @@ use BackedEnum;
 use Filament\Auth\Pages\EditProfile;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
-use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Components\Component;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
@@ -42,7 +42,7 @@ class AdminProfile extends EditProfile
     {
         return [
             '/admin' => 'Dashboard',
-            '#'      => 'My Profile',
+            '#' => 'My Profile',
         ];
     }
 
@@ -77,20 +77,20 @@ class AdminProfile extends EditProfile
     // ── Fill form: merge user + profile data ─────────────────────────
     protected function mutateFormDataBeforeFill(array $data): array
     {
-        $user    = $this->getUser();
+        $user = $this->getUser();
         $profile = $user->profile;
 
         if ($profile) {
-            $data['phone']         = $profile->phone;
-            $data['gender']        = $profile->gender;
+            $data['phone'] = $profile->phone;
+            $data['gender'] = $profile->gender;
             $data['date_of_birth'] = $profile->date_of_birth?->format('Y-m-d');
-            $data['address']       = $profile->address;
-            $data['city']          = $profile->city;
-            $data['state']         = $profile->state;
-            $data['country_id']    = $profile->country_id;
-            $data['postal_code']   = $profile->postal_code;
-            $data['timezone']      = $profile->timezone;
-            $data['language']      = $profile->language;
+            $data['address'] = $profile->address;
+            $data['city'] = $profile->city;
+            $data['state'] = $profile->state;
+            $data['country_id'] = $profile->country_id;
+            $data['postal_code'] = $profile->postal_code;
+            $data['timezone'] = $profile->timezone;
+            $data['language'] = $profile->language;
         }
 
         return $data;
@@ -115,7 +115,7 @@ class AdminProfile extends EditProfile
             }
         }
 
-        $data['name'] = trim(($data['first_name'] ?? $record->first_name ?? '') . ' ' . ($data['last_name'] ?? $record->last_name ?? ''));
+        $data['name'] = trim(($data['first_name'] ?? $record->first_name ?? '').' '.($data['last_name'] ?? $record->last_name ?? ''));
 
         $record->update($data);
 
@@ -168,9 +168,9 @@ class AdminProfile extends EditProfile
                                 Select::make('gender')
                                     ->label('Gender')
                                     ->options([
-                                        'male'              => 'Male',
-                                        'female'            => 'Female',
-                                        'other'             => 'Other',
+                                        'male' => 'Male',
+                                        'female' => 'Female',
+                                        'other' => 'Other',
                                         'prefer_not_to_say' => 'Prefer not to say',
                                     ])
                                     ->native(false),

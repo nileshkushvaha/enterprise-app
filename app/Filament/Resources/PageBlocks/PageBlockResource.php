@@ -2,18 +2,19 @@
 
 namespace App\Filament\Resources\PageBlocks;
 
+use App\Content\Models\ContentBlock;
 use App\Filament\Resources\PageBlocks\Pages\CreatePageBlock;
 use App\Filament\Resources\PageBlocks\Pages\EditPageBlock;
 use App\Filament\Resources\PageBlocks\Pages\ListPageBlocks;
 use App\Filament\Resources\PageBlocks\Schemas\PageBlockForm;
 use App\Filament\Resources\PageBlocks\Tables\PageBlocksTable;
-use App\Content\Models\ContentBlock;
 use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
 
 class PageBlockResource extends Resource
@@ -81,12 +82,12 @@ class PageBlockResource extends Resource
         return auth()->user()?->can('create', ContentBlock::class) ?? false;
     }
 
-    public static function canEdit(\Illuminate\Database\Eloquent\Model $record): bool
+    public static function canEdit(Model $record): bool
     {
         return auth()->user()?->can('update', $record) ?? false;
     }
 
-    public static function canDelete(\Illuminate\Database\Eloquent\Model $record): bool
+    public static function canDelete(Model $record): bool
     {
         return auth()->user()?->can('delete', $record) ?? false;
     }

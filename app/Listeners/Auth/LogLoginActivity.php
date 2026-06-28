@@ -15,22 +15,24 @@ use Throwable;
 
 class LogLoginActivity implements ShouldQueue
 {
-    public string $queue   = 'default';
-    public int    $tries   = 3;
-    public array  $backoff = [30, 60, 120];
+    public string $queue = 'default';
+
+    public int $tries = 3;
+
+    public array $backoff = [30, 60, 120];
 
     public function handleUserLoggedIn(UserLoggedIn $event): void
     {
         $ua = UserAgentParser::parse($event->userAgent);
 
         LoginHistory::create([
-            'user_id'      => $event->user->id,
-            'status'       => 'success',
-            'ip_address'   => $event->ipAddress,
-            'user_agent'   => mb_substr($event->userAgent, 0, 500),
-            'browser'      => $ua['browser'],
-            'platform'     => $ua['platform'],
-            'device_type'  => $ua['device_type'],
+            'user_id' => $event->user->id,
+            'status' => 'success',
+            'ip_address' => $event->ipAddress,
+            'user_agent' => mb_substr($event->userAgent, 0, 500),
+            'browser' => $ua['browser'],
+            'platform' => $ua['platform'],
+            'device_type' => $ua['device_type'],
             'logged_in_at' => now(),
         ]);
 
@@ -59,23 +61,23 @@ class LogLoginActivity implements ShouldQueue
         $ua = UserAgentParser::parse($event->userAgent);
 
         $data = [
-            'status'       => 'failed',
-            'ip_address'   => $event->ipAddress,
-            'user_agent'   => mb_substr($event->userAgent, 0, 500),
-            'browser'      => $ua['browser'],
-            'platform'     => $ua['platform'],
-            'device_type'  => $ua['device_type'],
+            'status' => 'failed',
+            'ip_address' => $event->ipAddress,
+            'user_agent' => mb_substr($event->userAgent, 0, 500),
+            'browser' => $ua['browser'],
+            'platform' => $ua['platform'],
+            'device_type' => $ua['device_type'],
             'logged_in_at' => now(),
         ];
 
         if ($event->user) {
             $data['user_id'] = $event->user->id;
-            $data['status']  = $event->reason;
+            $data['status'] = $event->reason;
 
             activity('auth')
                 ->causedBy($event->user)
                 ->withProperties(['ip' => $event->ipAddress, 'reason' => $event->reason])
-                ->log('Login attempt failed: ' . $event->reason);
+                ->log('Login attempt failed: '.$event->reason);
         }
 
         LoginHistory::create($data);
@@ -84,7 +86,7 @@ class LogLoginActivity implements ShouldQueue
     public function failed(mixed $event, Throwable $exception): void
     {
         Log::error('LogLoginActivity failed permanently after all retries', [
-            'event'     => get_class($event),
+            'event' => get_class($event),
             'exception' => $exception->getMessage(),
         ]);
     }

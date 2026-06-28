@@ -20,8 +20,8 @@ class PublishScheduledContentTest extends TestCase
     public function test_publishes_scheduled_page_whose_time_has_arrived(): void
     {
         $page = Page::factory()->create([
-            'status'       => PageStatus::Scheduled,
-            'visibility'   => PageVisibility::Public,
+            'status' => PageStatus::Scheduled,
+            'visibility' => PageVisibility::Public,
             'published_at' => now()->subMinute(),
         ]);
 
@@ -35,7 +35,7 @@ class PublishScheduledContentTest extends TestCase
     public function test_does_not_publish_scheduled_page_in_the_future(): void
     {
         $page = Page::factory()->create([
-            'status'       => PageStatus::Scheduled,
+            'status' => PageStatus::Scheduled,
             'published_at' => now()->addHour(),
         ]);
 
@@ -49,8 +49,8 @@ class PublishScheduledContentTest extends TestCase
     public function test_publishes_scheduled_post_whose_time_has_arrived(): void
     {
         $post = Post::factory()->create([
-            'status'       => PageStatus::Scheduled,
-            'visibility'   => PageVisibility::Public,
+            'status' => PageStatus::Scheduled,
+            'visibility' => PageVisibility::Public,
             'published_at' => now()->subMinute(),
         ]);
 
@@ -74,12 +74,12 @@ class PublishScheduledContentTest extends TestCase
     public function test_dry_run_does_not_publish(): void
     {
         Page::factory()->create([
-            'status'       => PageStatus::Scheduled,
+            'status' => PageStatus::Scheduled,
             'published_at' => now()->subMinute(),
         ]);
         Post::factory()->create([
-            'status'       => PageStatus::Scheduled,
-            'visibility'   => PageVisibility::Public,
+            'status' => PageStatus::Scheduled,
+            'visibility' => PageVisibility::Public,
             'published_at' => now()->subMinute(),
         ]);
 
@@ -95,14 +95,14 @@ class PublishScheduledContentTest extends TestCase
     {
         // Create two pages that are due for publication.
         $good = Page::factory()->create([
-            'status'       => PageStatus::Scheduled,
-            'visibility'   => PageVisibility::Public,
+            'status' => PageStatus::Scheduled,
+            'visibility' => PageVisibility::Public,
             'published_at' => now()->subMinute(),
         ]);
 
         $bad = Page::factory()->create([
-            'status'       => PageStatus::Scheduled,
-            'visibility'   => PageVisibility::Public,
+            'status' => PageStatus::Scheduled,
+            'visibility' => PageVisibility::Public,
             'published_at' => now()->subMinute(),
         ]);
 
@@ -130,8 +130,8 @@ class PublishScheduledContentTest extends TestCase
     public function test_publish_command_logs_auto_published_event(): void
     {
         $page = Page::factory()->create([
-            'status'       => PageStatus::Scheduled,
-            'visibility'   => PageVisibility::Public,
+            'status' => PageStatus::Scheduled,
+            'visibility' => PageVisibility::Public,
             'published_at' => now()->subMinute(),
         ]);
 
@@ -139,16 +139,16 @@ class PublishScheduledContentTest extends TestCase
 
         $this->assertDatabaseHas('activity_log', [
             'subject_type' => 'page',
-            'subject_id'   => $page->id,
-            'event'        => 'auto_published',
+            'subject_id' => $page->id,
+            'event' => 'auto_published',
         ]);
     }
 
     public function test_publish_command_logs_auto_published_event_for_posts(): void
     {
         $post = Post::factory()->create([
-            'status'       => PageStatus::Scheduled,
-            'visibility'   => PageVisibility::Public,
+            'status' => PageStatus::Scheduled,
+            'visibility' => PageVisibility::Public,
             'published_at' => now()->subMinute(),
         ]);
 
@@ -156,8 +156,8 @@ class PublishScheduledContentTest extends TestCase
 
         $this->assertDatabaseHas('activity_log', [
             'subject_type' => 'post',
-            'subject_id'   => $post->id,
-            'event'        => 'auto_published',
+            'subject_id' => $post->id,
+            'event' => 'auto_published',
         ]);
     }
 }

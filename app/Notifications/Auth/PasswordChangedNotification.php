@@ -28,13 +28,13 @@ final class PasswordChangedNotification extends Notification implements ShouldQu
     public function toMail(mixed $notifiable): MailMessage
     {
         return (new MailMessage)
-            ->subject('Your Password Has Been Changed — ' . config('app.name'))
+            ->subject('Your Password Has Been Changed — '.config('app.name'))
             ->view('emails.auth.password-changed', [
-                'user'      => $notifiable,
+                'user' => $notifiable,
                 'ipAddress' => $this->ipAddress,
                 'changedAt' => $this->changedAt,
-                'appName'   => config('app.name'),
-                'appUrl'    => config('app.url'),
+                'appName' => config('app.name'),
+                'appUrl' => config('app.url'),
             ]);
     }
 }

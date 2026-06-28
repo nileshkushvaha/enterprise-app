@@ -19,8 +19,7 @@ class EditUser extends EditRecord
         return [
             ViewAction::make(),
             DeleteAction::make()
-                ->hidden(fn (): bool =>
-                    $this->record->id === auth()->id()
+                ->hidden(fn (): bool => $this->record->id === auth()->id()
                     || $this->record->hasRole('super_admin')
                 ),
         ];
@@ -49,7 +48,7 @@ class EditUser extends EditRecord
     {
         $newRoles = $this->record->fresh()->roles->pluck('name')->toArray();
 
-        $added   = array_values(array_diff($newRoles, $this->oldRoles));
+        $added = array_values(array_diff($newRoles, $this->oldRoles));
         $removed = array_values(array_diff($this->oldRoles, $newRoles));
 
         if ($added || $removed) {
@@ -58,7 +57,7 @@ class EditUser extends EditRecord
                 ->causedBy(auth()->user())
                 ->event('roles_updated')
                 ->withProperties([
-                    'roles_added'   => $added,
+                    'roles_added' => $added,
                     'roles_removed' => $removed,
                     'current_roles' => $newRoles,
                 ])

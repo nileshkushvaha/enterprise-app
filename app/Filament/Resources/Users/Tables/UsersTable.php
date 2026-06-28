@@ -8,14 +8,16 @@ use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\ExportBulkAction;
 use Filament\Actions\ViewAction;
+use Filament\Notifications\Notification;
+use Filament\Support\Enums\FontWeight;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\ImageColumn;
 use Filament\Tables\Columns\TextColumn;
-use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Collection;
 
 class UsersTable
 {
@@ -27,14 +29,14 @@ class UsersTable
                     ->label('')
                     ->circular()
                     ->disk('public')
-                    ->defaultImageUrl(fn ($record) => 'https://ui-avatars.com/api/?name=' . urlencode($record->name) . '&color=ffffff&background=6366f1')
+                    ->defaultImageUrl(fn ($record) => 'https://ui-avatars.com/api/?name='.urlencode($record->name).'&color=ffffff&background=6366f1')
                     ->size(40),
 
                 TextColumn::make('name')
                     ->label('Name')
                     ->searchable()
                     ->sortable()
-                    ->weight(\Filament\Support\Enums\FontWeight::Medium),
+                    ->weight(FontWeight::Medium),
 
                 TextColumn::make('email')
                     ->label('Email')
@@ -58,9 +60,9 @@ class UsersTable
                     ->label('Status')
                     ->badge()
                     ->color(fn (string $state): string => match ($state) {
-                        'active'   => 'success',
+                        'active' => 'success',
                         'inactive' => 'danger',
-                        default    => 'gray',
+                        default => 'gray',
                     })
                     ->sortable(),
 
@@ -94,7 +96,7 @@ class UsersTable
                 SelectFilter::make('status')
                     ->label('Status')
                     ->options([
-                        'active'   => 'Active',
+                        'active' => 'Active',
                         'inactive' => 'Inactive',
                     ]),
 
@@ -114,8 +116,7 @@ class UsersTable
                 ViewAction::make(),
                 EditAction::make(),
                 DeleteAction::make()
-                    ->hidden(fn ($record): bool =>
-                        $record->id === auth()->id()
+                    ->hidden(fn ($record): bool => $record->id === auth()->id()
                         || $record->hasRole('super_admin')
                     ),
             ])
@@ -123,15 +124,14 @@ class UsersTable
             ->toolbarActions([
                 BulkActionGroup::make([
                     DeleteBulkAction::make()
-                        ->action(function (DeleteBulkAction $action, \Illuminate\Support\Collection $records): void {
+                        ->action(function (DeleteBulkAction $action, Collection $records): void {
                             $records
-                                ->reject(fn ($record) =>
-                                    $record->id === auth()->id()
+                                ->reject(fn ($record) => $record->id === auth()->id()
                                     || $record->hasRole('super_admin')
                                 )
                                 ->each->delete();
 
-                            \Filament\Notifications\Notification::make()
+                            Notification::make()
                                 ->title('Deleted')
                                 ->body('Selected users have been deleted. Super admin accounts were skipped.')
                                 ->success()

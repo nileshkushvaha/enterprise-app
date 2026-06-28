@@ -3,8 +3,8 @@
 namespace App\Forms\Blocks;
 
 use Filament\Forms\Components\FileUpload;
-use Filament\Schemas\Components\Section;
 use Filament\Forms\Components\Select;
+use Filament\Schemas\Components\Section;
 
 class GalleryBlockForm
 {

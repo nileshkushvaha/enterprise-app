@@ -12,7 +12,7 @@ use Throwable;
 final class PaymentGatewayConnectionService
 {
     /**
-     * @param array<string, mixed> $runtimeData
+     * @param  array<string, mixed>  $runtimeData
      */
     public function test(string $gateway, array $runtimeData, PaymentGatewaySettings $settings): GatewayConnectionResult
     {
@@ -29,7 +29,7 @@ final class PaymentGatewayConnectionService
     }
 
     /**
-     * @param array<string, mixed> $runtimeData
+     * @param  array<string, mixed>  $runtimeData
      */
     private function testStripe(array $runtimeData, PaymentGatewaySettings $settings): GatewayConnectionResult
     {
@@ -62,7 +62,7 @@ final class PaymentGatewayConnectionService
     }
 
     /**
-     * @param array<string, mixed> $runtimeData
+     * @param  array<string, mixed>  $runtimeData
      */
     private function testRazorpay(array $runtimeData, PaymentGatewaySettings $settings): GatewayConnectionResult
     {
@@ -93,7 +93,7 @@ final class PaymentGatewayConnectionService
     }
 
     /**
-     * @param array<string, mixed> $runtimeData
+     * @param  array<string, mixed>  $runtimeData
      */
     private function testPayPal(array $runtimeData, PaymentGatewaySettings $settings): GatewayConnectionResult
     {
@@ -134,7 +134,7 @@ final class PaymentGatewayConnectionService
     }
 
     /**
-     * @param array<string, mixed> $runtimeData
+     * @param  array<string, mixed>  $runtimeData
      */
     private function testCashfree(array $runtimeData, PaymentGatewaySettings $settings): GatewayConnectionResult
     {
@@ -174,7 +174,7 @@ final class PaymentGatewayConnectionService
     }
 
     /**
-     * @param array<string, mixed> $runtimeData
+     * @param  array<string, mixed>  $runtimeData
      */
     private function testPayU(array $runtimeData, PaymentGatewaySettings $settings): GatewayConnectionResult
     {
@@ -204,7 +204,7 @@ final class PaymentGatewayConnectionService
     }
 
     /**
-     * @param array<string, mixed> $runtimeData
+     * @param  array<string, mixed>  $runtimeData
      */
     private function testPhonePe(array $runtimeData, PaymentGatewaySettings $settings): GatewayConnectionResult
     {

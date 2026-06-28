@@ -109,8 +109,8 @@ class PermissionEvaluatorTest extends TestCase
     {
         $role = Role::create(['name' => 'editor', 'guard_name' => 'web']);
         $node = $this->makeNode([
-            'visibility'     => NavigationVisibility::Roles,
-            'requiredRoleIds'=> [(int) $role->id],
+            'visibility' => NavigationVisibility::Roles,
+            'requiredRoleIds' => [(int) $role->id],
         ]);
 
         $this->assertFalse($this->evaluator->isVisible($node, null));
@@ -121,8 +121,8 @@ class PermissionEvaluatorTest extends TestCase
         $role = Role::create(['name' => 'editor', 'guard_name' => 'web']);
         $user = User::factory()->create();
         $node = $this->makeNode([
-            'visibility'     => NavigationVisibility::Roles,
-            'requiredRoleIds'=> [(int) $role->id],
+            'visibility' => NavigationVisibility::Roles,
+            'requiredRoleIds' => [(int) $role->id],
         ]);
 
         $this->assertFalse($this->evaluator->isVisible($node, $user));
@@ -135,8 +135,8 @@ class PermissionEvaluatorTest extends TestCase
         $user->assignRole($role);
 
         $node = $this->makeNode([
-            'visibility'     => NavigationVisibility::Roles,
-            'requiredRoleIds'=> [(int) $role->id],
+            'visibility' => NavigationVisibility::Roles,
+            'requiredRoleIds' => [(int) $role->id],
         ]);
 
         // Refresh permissions cache
@@ -149,8 +149,8 @@ class PermissionEvaluatorTest extends TestCase
     {
         $user = User::factory()->create();
         $node = $this->makeNode([
-            'visibility'     => NavigationVisibility::Roles,
-            'requiredRoleIds'=> [],
+            'visibility' => NavigationVisibility::Roles,
+            'requiredRoleIds' => [],
         ]);
 
         $this->assertFalse($this->evaluator->isVisible($node, $user));
@@ -162,8 +162,8 @@ class PermissionEvaluatorTest extends TestCase
     {
         $perm = Permission::create(['name' => 'view reports', 'guard_name' => 'web']);
         $node = $this->makeNode([
-            'visibility'          => NavigationVisibility::Permissions,
-            'requiredPermissionIds'=> [(int) $perm->id],
+            'visibility' => NavigationVisibility::Permissions,
+            'requiredPermissionIds' => [(int) $perm->id],
         ]);
 
         $this->assertFalse($this->evaluator->isVisible($node, null));
@@ -174,8 +174,8 @@ class PermissionEvaluatorTest extends TestCase
         $perm = Permission::create(['name' => 'view reports', 'guard_name' => 'web']);
         $user = User::factory()->create();
         $node = $this->makeNode([
-            'visibility'          => NavigationVisibility::Permissions,
-            'requiredPermissionIds'=> [(int) $perm->id],
+            'visibility' => NavigationVisibility::Permissions,
+            'requiredPermissionIds' => [(int) $perm->id],
         ]);
 
         $this->assertFalse($this->evaluator->isVisible($node, $user));
@@ -188,8 +188,8 @@ class PermissionEvaluatorTest extends TestCase
         $user->givePermissionTo($perm);
 
         $node = $this->makeNode([
-            'visibility'          => NavigationVisibility::Permissions,
-            'requiredPermissionIds'=> [(int) $perm->id],
+            'visibility' => NavigationVisibility::Permissions,
+            'requiredPermissionIds' => [(int) $perm->id],
         ]);
 
         $user = $user->fresh();
@@ -207,8 +207,8 @@ class PermissionEvaluatorTest extends TestCase
         $user->assignRole($role);
 
         $node = $this->makeNode([
-            'visibility'          => NavigationVisibility::Permissions,
-            'requiredPermissionIds'=> [(int) $perm->id],
+            'visibility' => NavigationVisibility::Permissions,
+            'requiredPermissionIds' => [(int) $perm->id],
         ]);
 
         $user = $user->fresh();
@@ -221,8 +221,8 @@ class PermissionEvaluatorTest extends TestCase
     public function test_expired_publish_window_hides_all_visibility(): void
     {
         $node = $this->makeNode([
-            'visibility'   => NavigationVisibility::All,
-            'publishWindow'=> new PublishWindow(null, Carbon::now()->subHour()),
+            'visibility' => NavigationVisibility::All,
+            'publishWindow' => new PublishWindow(null, Carbon::now()->subHour()),
         ]);
 
         $this->assertFalse($this->evaluator->isVisible($node, null));
@@ -232,8 +232,8 @@ class PermissionEvaluatorTest extends TestCase
     public function test_future_publish_window_hides_item(): void
     {
         $node = $this->makeNode([
-            'visibility'   => NavigationVisibility::All,
-            'publishWindow'=> new PublishWindow(Carbon::now()->addHour(), null),
+            'visibility' => NavigationVisibility::All,
+            'publishWindow' => new PublishWindow(Carbon::now()->addHour(), null),
         ]);
 
         $this->assertFalse($this->evaluator->isVisible($node, null));
@@ -242,8 +242,8 @@ class PermissionEvaluatorTest extends TestCase
     public function test_active_publish_window_shows_item(): void
     {
         $node = $this->makeNode([
-            'visibility'   => NavigationVisibility::All,
-            'publishWindow'=> new PublishWindow(Carbon::now()->subHour(), Carbon::now()->addHour()),
+            'visibility' => NavigationVisibility::All,
+            'publishWindow' => new PublishWindow(Carbon::now()->subHour(), Carbon::now()->addHour()),
         ]);
 
         $this->assertTrue($this->evaluator->isVisible($node, null));

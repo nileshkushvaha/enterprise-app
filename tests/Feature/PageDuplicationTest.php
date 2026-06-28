@@ -49,7 +49,7 @@ class PageDuplicationTest extends TestCase
     public function test_duplicate_page_starts_as_draft_private(): void
     {
         $original = Page::factory()->create([
-            'status'     => 'published',
+            'status' => 'published',
             'visibility' => 'public',
         ]);
 
@@ -98,7 +98,7 @@ class PageDuplicationTest extends TestCase
     {
         $original = Page::factory()->create();
         $b1 = ContentBlock::create(['blockable_type' => 'page', 'blockable_id' => $original->id, 'block_type' => BlockType::Hero,    'content' => ['title' => 'H'], 'settings' => [], 'sort_order' => 0, 'is_active' => true]);
-        $b2 = ContentBlock::create(['blockable_type' => 'page', 'blockable_id' => $original->id, 'block_type' => BlockType::RichText, 'content' => ['text'  => 'T'], 'settings' => [], 'sort_order' => 1, 'is_active' => true]);
+        $b2 = ContentBlock::create(['blockable_type' => 'page', 'blockable_id' => $original->id, 'block_type' => BlockType::RichText, 'content' => ['text' => 'T'], 'settings' => [], 'sort_order' => 1, 'is_active' => true]);
 
         $copy = $this->service->duplicatePage($original);
 
@@ -113,7 +113,7 @@ class PageDuplicationTest extends TestCase
         $copy = $this->service->duplicatePage($original);
 
         $originalBlockId = $original->blocks->first()->id;
-        $copiedBlockId   = $copy->blocks->first()->id;
+        $copiedBlockId = $copy->blocks->first()->id;
 
         $this->assertNotSame($originalBlockId, $copiedBlockId);
     }
@@ -145,7 +145,7 @@ class PageDuplicationTest extends TestCase
     public function test_original_page_is_unchanged_after_duplication(): void
     {
         $original = Page::factory()->create([
-            'title'  => 'Original',
+            'title' => 'Original',
             'status' => 'published',
         ]);
         ContentBlock::create(['blockable_type' => 'page', 'blockable_id' => $original->id, 'block_type' => BlockType::Hero, 'content' => [], 'settings' => [], 'sort_order' => 0, 'is_active' => true]);

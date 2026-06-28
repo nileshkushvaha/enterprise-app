@@ -14,4 +14,3 @@ return new class extends SettingsMigration
         $this->migrator->add('payment_advanced.max_retry_count', 5);
     }
 };
-

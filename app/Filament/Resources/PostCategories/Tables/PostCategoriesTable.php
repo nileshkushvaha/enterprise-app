@@ -2,10 +2,9 @@
 
 namespace App\Filament\Resources\PostCategories\Tables;
 
-use App\Models\PostCategory;
 use Filament\Actions\BulkActionGroup;
-use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\DeleteAction;
+use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\ForceDeleteBulkAction;
 use Filament\Actions\RestoreAction;
@@ -68,4 +67,3 @@ class PostCategoriesTable
             ->modifyQueryUsing(fn ($query) => $query->withCount('posts'));
     }
 }
-

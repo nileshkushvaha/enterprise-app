@@ -3,8 +3,8 @@
 namespace App\Filament\Resources\Tags\Tables;
 
 use Filament\Actions\BulkActionGroup;
-use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\DeleteAction;
+use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\ForceDeleteBulkAction;
 use Filament\Actions\RestoreAction;
@@ -57,4 +57,3 @@ class TagsTable
             ->modifyQueryUsing(fn ($query) => $query->withCount('posts'));
     }
 }
-

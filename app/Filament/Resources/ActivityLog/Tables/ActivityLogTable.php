@@ -6,7 +6,7 @@ namespace App\Filament\Resources\ActivityLog\Tables;
 
 use App\Models\User;
 use Filament\Actions\ViewAction;
-use Filament\Tables\Columns\BadgeColumn;
+use Filament\Forms\Components\DatePicker;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
@@ -21,16 +21,16 @@ class ActivityLogTable
     private static function eventColor(?string $event): string
     {
         return match ($event) {
-            'created', 'registered'                                    => 'success',
+            'created', 'registered' => 'success',
             'updated', 'roles_updated', 'profile_updated',
             'password_changed', 'photo_updated', 'role_updated',
-            '2fa_enabled', '2fa_disabled', 'account_unlocked'         => 'warning',
-            'deleted', 'login_failed'                                  => 'danger',
+            '2fa_enabled', '2fa_disabled', 'account_unlocked' => 'warning',
+            'deleted', 'login_failed' => 'danger',
             'login', 'logout', 'password_reset', 'auto_published',
             'manually_ran', 'webhook_received', 'role_created',
-            'photo_removed', 'password_reset_requested'               => 'info',
-            'previewed', 'contact_form_submitted', 'media_updated'     => 'gray',
-            default                                                    => 'gray',
+            'photo_removed', 'password_reset_requested' => 'info',
+            'previewed', 'contact_form_submitted', 'media_updated' => 'gray',
+            default => 'gray',
         };
     }
 
@@ -62,7 +62,7 @@ class ActivityLogTable
                 TextColumn::make('subject_type')
                     ->label('Subject')
                     ->formatStateUsing(fn (?string $state, Activity $record): string => $state
-                        ? class_basename($state) . ' #' . ($record->subject_id ?? '—')
+                        ? class_basename($state).' #'.($record->subject_id ?? '—')
                         : '—'
                     )
                     ->searchable()
@@ -145,18 +145,23 @@ class ActivityLogTable
                 Filter::make('date_range')
                     ->label('Date Range')
                     ->form([
-                        \Filament\Forms\Components\DatePicker::make('from')->label('From')->native(false),
-                        \Filament\Forms\Components\DatePicker::make('until')->label('Until')->native(false),
+                        DatePicker::make('from')->label('From')->native(false),
+                        DatePicker::make('until')->label('Until')->native(false),
                     ])
                     ->query(function (Builder $query, array $data): Builder {
                         return $query
-                            ->when($data['from'],  fn (Builder $q) => $q->whereDate('created_at', '>=', $data['from']))
+                            ->when($data['from'], fn (Builder $q) => $q->whereDate('created_at', '>=', $data['from']))
                             ->when($data['until'], fn (Builder $q) => $q->whereDate('created_at', '<=', $data['until']));
                     })
                     ->indicateUsing(function (array $data): array {
                         $indicators = [];
-                        if ($data['from'])  $indicators[] = 'From: '  . $data['from'];
-                        if ($data['until']) $indicators[] = 'Until: ' . $data['until'];
+                        if ($data['from']) {
+                            $indicators[] = 'From: '.$data['from'];
+                        }
+                        if ($data['until']) {
+                            $indicators[] = 'Until: '.$data['until'];
+                        }
+
                         return $indicators;
                     }),
             ])

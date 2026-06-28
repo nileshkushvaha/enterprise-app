@@ -8,6 +8,7 @@ use App\Enums\PageStatus;
 use App\Enums\PageVisibility;
 use App\Models\Page;
 use App\Services\PageService;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -41,8 +42,8 @@ class PageLifecycleTest extends TestCase
     public function test_published_page_is_accessible_publicly(): void
     {
         $page = Page::factory()->create([
-            'slug'       => 'live-page',
-            'status'     => 'published',
+            'slug' => 'live-page',
+            'status' => 'published',
             'visibility' => 'public',
         ]);
 
@@ -83,7 +84,7 @@ class PageLifecycleTest extends TestCase
     public function test_archived_page_is_not_publicly_accessible(): void
     {
         $page = Page::factory()->create([
-            'slug'   => 'old-page',
+            'slug' => 'old-page',
             'status' => 'archived',
         ]);
 
@@ -95,7 +96,7 @@ class PageLifecycleTest extends TestCase
     public function test_soft_delete_hides_page_from_default_queries(): void
     {
         $page = Page::factory()->create();
-        $id   = $page->id;
+        $id = $page->id;
 
         $page->delete();
 
@@ -107,8 +108,8 @@ class PageLifecycleTest extends TestCase
     public function test_soft_deleted_page_returns_404(): void
     {
         $page = Page::factory()->create([
-            'slug'       => 'deleted-page',
-            'status'     => 'published',
+            'slug' => 'deleted-page',
+            'status' => 'published',
             'visibility' => 'public',
         ]);
         $page->delete();
@@ -119,7 +120,7 @@ class PageLifecycleTest extends TestCase
     public function test_restored_page_is_visible_again(): void
     {
         $page = Page::factory()->create(['status' => 'draft']);
-        $id   = $page->id;
+        $id = $page->id;
         $page->delete();
 
         Page::withTrashed()->find($id)->restore();
@@ -132,8 +133,8 @@ class PageLifecycleTest extends TestCase
     public function test_scheduled_page_with_future_date_returns_404(): void
     {
         $page = Page::factory()->create([
-            'slug'         => 'coming-soon',
-            'status'       => 'scheduled',
+            'slug' => 'coming-soon',
+            'status' => 'scheduled',
             'published_at' => now()->addDays(7),
         ]);
 
@@ -146,7 +147,7 @@ class PageLifecycleTest extends TestCase
     {
         Page::factory()->create(['slug' => 'my-page']);
 
-        $this->expectException(\Illuminate\Database\QueryException::class);
+        $this->expectException(QueryException::class);
         Page::factory()->create(['slug' => 'my-page']);
     }
 
@@ -169,7 +170,7 @@ class PageLifecycleTest extends TestCase
     public function test_published_scope_includes_public_published(): void
     {
         $page = Page::factory()->create([
-            'status'     => 'published',
+            'status' => 'published',
             'visibility' => 'public',
         ]);
 

@@ -7,11 +7,11 @@ use App\Enums\BlockType;
 use App\Notifications\Cms\ContactFormSubmissionNotification;
 use App\Settings\GeneralSettings;
 use App\Settings\MailSettings;
-use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Notification;
-use RuntimeException;
 use Illuminate\Validation\ValidationException;
+use RuntimeException;
 
 class ContactFormController extends Controller
 {
@@ -58,7 +58,7 @@ class ContactFormController extends Controller
             if ($type === 'select') {
                 $options = array_filter(array_map('trim', explode(',', (string) ($field['options'] ?? ''))));
                 if ($options !== []) {
-                    $fieldRules[] = 'in:' . implode(',', $options);
+                    $fieldRules[] = 'in:'.implode(',', $options);
                 }
             }
 

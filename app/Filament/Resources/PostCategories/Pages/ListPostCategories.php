@@ -17,4 +17,3 @@ class ListPostCategories extends ListRecords
         ];
     }
 }
-

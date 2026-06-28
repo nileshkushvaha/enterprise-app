@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Database\Factories\TagFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -13,10 +14,11 @@ use Spatie\Activitylog\Support\LogOptions;
 
 class Tag extends Model
 {
-    /** @use HasFactory<\Database\Factories\TagFactory> */
-    use HasFactory, HasUuids, SoftDeletes, LogsActivity;
+    /** @use HasFactory<TagFactory> */
+    use HasFactory, HasUuids, LogsActivity, SoftDeletes;
 
     protected $keyType = 'string';
+
     public $incrementing = false;
 
     protected $fillable = [
@@ -63,4 +65,3 @@ class Tag extends Model
             ->dontLogIfAttributesChangedOnly(['updated_at']);
     }
 }
-

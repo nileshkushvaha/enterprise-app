@@ -31,18 +31,18 @@ use Spatie\Activitylog\Support\LogOptions;
  * $block->page and $block->post without changes, as long as the resource
  * is correctly scoped to one blockable_type.
  *
- * @property string      $id
- * @property string      $blockable_type
- * @property string      $blockable_id
- * @property BlockType   $block_type
- * @property array|null  $content
- * @property array|null  $settings
- * @property int         $sort_order
- * @property bool        $is_active
+ * @property string $id
+ * @property string $blockable_type
+ * @property string $blockable_id
+ * @property BlockType $block_type
+ * @property array|null $content
+ * @property array|null $settings
+ * @property int $sort_order
+ * @property bool $is_active
  */
 class ContentBlock extends Model
 {
-    use HasFactory, HasUuids, SoftDeletes, LogsActivity;
+    use HasFactory, HasUuids, LogsActivity, SoftDeletes;
 
     protected $table = 'content_blocks';
 
@@ -68,13 +68,13 @@ class ContentBlock extends Model
     ];
 
     protected $casts = [
-        'block_type'  => BlockType::class,
-        'content'     => 'array',
-        'settings'    => 'array',
-        'is_active'   => 'boolean',
-        'sort_order'  => 'integer',
-        'created_at'  => 'datetime',
-        'updated_at'  => 'datetime',
+        'block_type' => BlockType::class,
+        'content' => 'array',
+        'settings' => 'array',
+        'is_active' => 'boolean',
+        'sort_order' => 'integer',
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime',
     ];
 
     // ── Relationships ────────────────────────────────────────────────────

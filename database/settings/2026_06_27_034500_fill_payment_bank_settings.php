@@ -22,4 +22,3 @@ return new class extends SettingsMigration
         $this->migrator->add('payment_bank.display_on_payment_page', true);
     }
 };
-

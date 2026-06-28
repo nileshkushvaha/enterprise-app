@@ -19,11 +19,11 @@ final class LoginService
     ) {}
 
     public function attempt(
-        string  $email,
-        string  $password,
-        bool    $remember,
-        string  $ipAddress,
-        string  $userAgent,
+        string $email,
+        string $password,
+        bool $remember,
+        string $ipAddress,
+        string $userAgent,
     ): LoginResult {
         $user = User::where('email', strtolower($email))->first();
 
@@ -36,16 +36,19 @@ final class LoginService
 
             if ($user->isLocked()) {
                 LoginFailed::dispatch($user, $email, $ipAddress, $userAgent, LoginResult::AccountLocked->value);
+
                 return LoginResult::AccountLocked;
             }
 
             if ($user->isBlocked()) {
                 LoginFailed::dispatch($user, $email, $ipAddress, $userAgent, LoginResult::AccountBlocked->value);
+
                 return LoginResult::AccountBlocked;
             }
 
             if (! $user->isActive()) {
                 LoginFailed::dispatch($user, $email, $ipAddress, $userAgent, LoginResult::AccountInactive->value);
+
                 return LoginResult::AccountInactive;
             }
         }
@@ -55,6 +58,7 @@ final class LoginService
 
         if (! $result->isSuccessful()) {
             LoginFailed::dispatch($user, $email, $ipAddress, $userAgent, $result->value);
+
             return $result;
         }
 
@@ -65,6 +69,7 @@ final class LoginService
         if (! $authenticated->hasVerifiedEmail()) {
             auth()->logout();
             LoginFailed::dispatch($authenticated, $email, $ipAddress, $userAgent, LoginResult::EmailUnverified->value);
+
             return LoginResult::EmailUnverified;
         }
 
@@ -100,7 +105,7 @@ final class LoginService
             return;
         }
 
-        $parsed  = UserAgentParser::parse($ua);
+        $parsed = UserAgentParser::parse($ua);
         $loginAt = now()->format('d M Y, h:i A T');
 
         $user->notify(new SuspiciousLoginNotification($ip, $parsed['browser'], $parsed['platform'], $loginAt));

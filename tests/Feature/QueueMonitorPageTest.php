@@ -8,7 +8,6 @@ use App\Filament\Pages\QueueMonitorPage;
 use App\Models\User;
 use App\Policies\QueueMonitorPolicy;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\DB;
 use Livewire\Livewire;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
@@ -19,6 +18,7 @@ class QueueMonitorPageTest extends TestCase
     use RefreshDatabase;
 
     private User $superAdmin;
+
     private User $regularUser;
 
     protected function setUp(): void
@@ -29,7 +29,7 @@ class QueueMonitorPageTest extends TestCase
 
         $superAdminRole = Role::firstOrCreate(['name' => 'super_admin', 'guard_name' => 'web']);
 
-        $this->superAdmin  = User::factory()->create(['status' => 'active']);
+        $this->superAdmin = User::factory()->create(['status' => 'active']);
         $this->superAdmin->assignRole($superAdminRole);
 
         $this->regularUser = User::factory()->create(['status' => 'active']);
@@ -124,7 +124,7 @@ class QueueMonitorPageTest extends TestCase
 
     public function test_get_queue_depths_returns_array(): void
     {
-        $page   = app(QueueMonitorPage::class);
+        $page = app(QueueMonitorPage::class);
         $depths = $page->getQueueDepths();
 
         $this->assertIsArray($depths);
@@ -133,7 +133,7 @@ class QueueMonitorPageTest extends TestCase
     public function test_get_queue_depths_returns_empty_when_no_jobs(): void
     {
         // In testing, QUEUE_CONNECTION=sync so depths should be empty (non-database driver)
-        $page   = app(QueueMonitorPage::class);
+        $page = app(QueueMonitorPage::class);
         $depths = $page->getQueueDepths();
 
         // With sync driver, getQueueDepths returns [] immediately
@@ -144,7 +144,7 @@ class QueueMonitorPageTest extends TestCase
 
     public function test_get_failed_job_stats_returns_expected_keys(): void
     {
-        $page  = app(QueueMonitorPage::class);
+        $page = app(QueueMonitorPage::class);
         $stats = $page->getFailedJobStats();
 
         $this->assertArrayHasKey('count', $stats);
@@ -154,7 +154,7 @@ class QueueMonitorPageTest extends TestCase
 
     public function test_get_failed_job_stats_count_is_integer(): void
     {
-        $page  = app(QueueMonitorPage::class);
+        $page = app(QueueMonitorPage::class);
         $stats = $page->getFailedJobStats();
 
         $this->assertIsInt($stats['count']);

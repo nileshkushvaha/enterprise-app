@@ -22,7 +22,7 @@ class EditPageBlock extends EditRecord
     protected function mutateFormDataBeforeFill(array $data): array
     {
         $blockTypeRaw = $data['block_type'] ?? null;
-        $blockType    = $blockTypeRaw instanceof BlockType
+        $blockType = $blockTypeRaw instanceof BlockType
             ? $blockTypeRaw
             : BlockType::tryFrom((string) $blockTypeRaw);
 
@@ -44,11 +44,11 @@ class EditPageBlock extends EditRecord
         if ($blockableType === (new Post)->getMorphClass()) {
             $ownerId = $data['post_id'] ?? $this->record->blockable_id;
             $data['blockable_type'] = (new Post)->getMorphClass();
-            $data['blockable_id']   = $ownerId;
+            $data['blockable_id'] = $ownerId;
         } else {
             $ownerId = $data['page_id'] ?? $this->record->blockable_id;
             $data['blockable_type'] = (new Page)->getMorphClass();
-            $data['blockable_id']   = $ownerId;
+            $data['blockable_id'] = $ownerId;
         }
 
         unset($data['page_id'], $data['post_id']);
@@ -59,7 +59,7 @@ class EditPageBlock extends EditRecord
                 : BlockType::tryFrom($data['block_type']);
 
             if ($blockType) {
-                $data['content']  = BlockContentConverter::convert($blockType, $data);
+                $data['content'] = BlockContentConverter::convert($blockType, $data);
                 $data['settings'] = $data['settings'] ?? [];
 
                 $errors = app(ValidateBlockContentAction::class)->execute($blockType, $data['content']);

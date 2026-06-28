@@ -15,7 +15,7 @@ final class PasswordResetNotification extends Notification implements ShouldQueu
 
     public function __construct(
         public readonly string $resetUrl,
-        public readonly int    $expireMinutes = 60,
+        public readonly int $expireMinutes = 60,
     ) {
         $this->queue = 'notifications';
         $this->afterCommit();
@@ -29,12 +29,12 @@ final class PasswordResetNotification extends Notification implements ShouldQueu
     public function toMail(mixed $notifiable): MailMessage
     {
         return (new MailMessage)
-            ->subject('Reset Your Password — ' . config('app.name'))
+            ->subject('Reset Your Password — '.config('app.name'))
             ->view('emails.auth.password-reset', [
-                'url'           => $this->resetUrl,
+                'url' => $this->resetUrl,
                 'expireMinutes' => $this->expireMinutes,
-                'appName'       => config('app.name'),
-                'appUrl'        => config('app.url'),
+                'appName' => config('app.name'),
+                'appUrl' => config('app.url'),
             ]);
     }
 }

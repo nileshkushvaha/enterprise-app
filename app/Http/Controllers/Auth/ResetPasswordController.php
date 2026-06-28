@@ -16,7 +16,7 @@ class ResetPasswordController extends Controller
 {
     public function __construct(
         private readonly PasswordResetService $passwordResetService,
-        private readonly LoginService         $loginService,
+        private readonly LoginService $loginService,
     ) {}
 
     public function showForm(Request $request, string $token): View|RedirectResponse
@@ -34,9 +34,9 @@ class ResetPasswordController extends Controller
     public function store(ResetPasswordRequest $request): RedirectResponse
     {
         $error = $this->passwordResetService->resetPassword(
-            email:     $request->input('email'),
-            token:     $request->input('token'),
-            password:  $request->input('password'),
+            email: $request->input('email'),
+            token: $request->input('token'),
+            password: $request->input('password'),
             ipAddress: $request->ip() ?? '127.0.0.1',
         );
 
@@ -48,9 +48,9 @@ class ResetPasswordController extends Controller
 
         // Auto-login after reset
         $this->loginService->attempt(
-            email:     $request->input('email'),
-            password:  $request->input('password'),
-            remember:  false,
+            email: $request->input('email'),
+            password: $request->input('password'),
+            remember: false,
             ipAddress: $request->ip() ?? '127.0.0.1',
             userAgent: $request->userAgent() ?? '',
         );

@@ -10,8 +10,8 @@ use Illuminate\Support\Facades\Log;
 final class PaymentWebhookProcessor
 {
     /**
-     * @param array<string, mixed> $payload
-     * @param array<string, string> $headers
+     * @param  array<string, mixed>  $payload
+     * @param  array<string, string>  $headers
      */
     public function process(string $gateway, array $payload, array $headers): void
     {
@@ -39,4 +39,3 @@ final class PaymentWebhookProcessor
         // Hook point: domain-specific payment reconciliation can be added here.
     }
 }
-

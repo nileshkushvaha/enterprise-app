@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Database\Factories\PostCategoryFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -15,10 +16,11 @@ use Spatie\Activitylog\Support\LogOptions;
 
 class PostCategory extends Model
 {
-    /** @use HasFactory<\Database\Factories\PostCategoryFactory> */
-    use HasFactory, HasUuids, SoftDeletes, LogsActivity;
+    /** @use HasFactory<PostCategoryFactory> */
+    use HasFactory, HasUuids, LogsActivity, SoftDeletes;
 
     protected $keyType = 'string';
+
     public $incrementing = false;
 
     protected $fillable = [
@@ -81,4 +83,3 @@ class PostCategory extends Model
             ->dontLogIfAttributesChangedOnly(['updated_at']);
     }
 }
-

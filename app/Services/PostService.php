@@ -80,8 +80,8 @@ class PostService
     {
         return DB::transaction(function () use ($post): Post {
             $newPost = $post->replicate();
-            $newPost->slug = $this->generateUniqueSlug($post->slug . '-copy');
-            $newPost->title = $post->title . ' (Copy)';
+            $newPost->slug = $this->generateUniqueSlug($post->slug.'-copy');
+            $newPost->title = $post->title.' (Copy)';
             $newPost->status = 'draft';
             $newPost->visibility = 'private';
             $newPost->published_at = null;
@@ -89,7 +89,7 @@ class PostService
             $newPost->save();
 
             foreach ($post->blocks as $block) {
-                $newBlock               = $block->replicate(['id']);
+                $newBlock = $block->replicate(['id']);
                 $newBlock->blockable_id = $newPost->id;
                 $newBlock->save();
             }

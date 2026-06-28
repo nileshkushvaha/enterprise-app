@@ -18,7 +18,7 @@ class BlockRendererTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->renderer = new BlockRenderer();
+        $this->renderer = new BlockRenderer;
     }
 
     public function test_render_hero_block(): void
@@ -313,12 +313,12 @@ class BlockRendererTest extends TestCase
 
         return ContentBlock::create([
             'blockable_type' => 'page',
-            'blockable_id'   => $page->id,
-            'block_type'     => $type,
-            'content'        => json_encode($content),
-            'settings'       => json_encode([]),
-            'sort_order'     => 1,
-            'is_active'      => true,
+            'blockable_id' => $page->id,
+            'block_type' => $type,
+            'content' => json_encode($content),
+            'settings' => json_encode([]),
+            'sort_order' => 1,
+            'is_active' => true,
         ]);
     }
 }

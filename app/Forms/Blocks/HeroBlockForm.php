@@ -3,10 +3,10 @@
 namespace App\Forms\Blocks;
 
 use Filament\Forms\Components\FileUpload;
-use Filament\Schemas\Components\Section;
 use Filament\Forms\Components\Select;
-use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
+use Filament\Schemas\Components\Section;
 
 class HeroBlockForm
 {
@@ -32,7 +32,7 @@ class HeroBlockForm
                     FileUpload::make('image')
                         ->label('Background Image')
                         ->image()
-                        
+
                         ->directory('blocks/hero')
                         ->maxSize(5120),
 

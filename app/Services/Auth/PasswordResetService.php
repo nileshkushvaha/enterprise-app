@@ -60,14 +60,14 @@ final class PasswordResetService
     ): ?string {
         $status = Password::reset(
             [
-                'email'                 => strtolower($email),
-                'password'              => $password,
+                'email' => strtolower($email),
+                'password' => $password,
                 'password_confirmation' => $password,
-                'token'                 => $token,
+                'token' => $token,
             ],
             function (User $user, string $password) use ($ipAddress): void {
                 $user->forceFill([
-                    'password'            => Hash::make($password),
+                    'password' => Hash::make($password),
                     'password_changed_at' => now(),
                 ])->save();
 

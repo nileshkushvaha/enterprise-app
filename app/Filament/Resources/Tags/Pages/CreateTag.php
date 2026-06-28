@@ -9,4 +9,3 @@ class CreateTag extends CreateRecord
 {
     protected static string $resource = TagResource::class;
 }
-

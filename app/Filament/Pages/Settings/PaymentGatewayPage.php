@@ -6,23 +6,27 @@ namespace App\Filament\Pages\Settings;
 
 use BackedEnum;
 use Filament\Actions\Action;
+use Filament\Forms\Components\Select;
 use Filament\Notifications\Notification;
 use Filament\Schemas\Components\Actions as ActionsComponent;
 use Filament\Schemas\Components\EmbeddedSchema;
 use Filament\Schemas\Components\Form as FormComponent;
-use Filament\Forms\Components\Select;
 use Filament\Schemas\Schema;
 use Filament\Support\Exceptions\Halt;
 use Filament\Support\Icons\Heroicon;
-use Illuminate\Support\Str;
 use Illuminate\Contracts\Support\Htmlable;
+use Illuminate\Support\Str;
 
 class PaymentGatewayPage extends PaymentSettingsPage
 {
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedWallet;
+
     protected static ?string $navigationLabel = 'Payment Gateways';
+
     protected static string|\UnitEnum|null $navigationGroup = 'Payment';
+
     protected static ?int $navigationSort = 2;
+
     protected static ?string $slug = 'payment-settings/gateways';
 
     public static function getLabel(): string
@@ -35,7 +39,7 @@ class PaymentGatewayPage extends PaymentSettingsPage
         return 'Payment Gateway Settings';
     }
 
-    public function getSubheading(): string|null
+    public function getSubheading(): ?string
     {
         return 'Configure and secure online payment gateway credentials.';
     }

@@ -27,20 +27,20 @@ abstract class TestCase extends BaseTestCase
     {
         if (! app()->environment('testing')) {
             $this->fail(
-                "SAFETY ABORT: APP_ENV is [" . app()->environment() . "], not [testing].\n" .
-                ".env.testing was not loaded — RefreshDatabase could wipe the wrong database.\n" .
-                "Run tests via: composer test   (php artisan test --env=testing)"
+                'SAFETY ABORT: APP_ENV is ['.app()->environment()."], not [testing].\n".
+                ".env.testing was not loaded — RefreshDatabase could wipe the wrong database.\n".
+                'Run tests via: composer test   (php artisan test --env=testing)'
             );
         }
 
         $connection = config('database.default');
-        $database   = config("database.connections.{$connection}.database");
+        $database = config("database.connections.{$connection}.database");
 
         if ($database === 'enterprise_app') {
             $this->fail(
-                "SAFETY ABORT: tests are pointed at the development database [enterprise_app].\n" .
-                "APP_ENV=testing was set but DB_DATABASE was not overridden.\n" .
-                "Check .env.testing — it must set DB_DATABASE=enterprise_app_testing."
+                "SAFETY ABORT: tests are pointed at the development database [enterprise_app].\n".
+                "APP_ENV=testing was set but DB_DATABASE was not overridden.\n".
+                'Check .env.testing — it must set DB_DATABASE=enterprise_app_testing.'
             );
         }
     }

@@ -10,15 +10,21 @@ use Filament\Support\Icons\Heroicon;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Spatie\Permission\Exceptions\PermissionDoesNotExist;
 
 class QueueMonitorPage extends Page
 {
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedQueueList;
-    protected static ?string $navigationLabel               = 'Queue Monitor';
+
+    protected static ?string $navigationLabel = 'Queue Monitor';
+
     protected static string|\UnitEnum|null $navigationGroup = 'System';
-    protected static ?int $navigationSort                   = 3;
-    protected static ?string $slug                          = 'system/queue-monitor';
-    protected string $view                                  = 'filament.pages.queue-monitor';
+
+    protected static ?int $navigationSort = 3;
+
+    protected static ?string $slug = 'system/queue-monitor';
+
+    protected string $view = 'filament.pages.queue-monitor';
 
     // ── Authorization ─────────────────────────────────────────────────────
 
@@ -37,7 +43,7 @@ class QueueMonitorPage extends Page
         try {
             return method_exists($user, 'hasPermissionTo')
                 && $user->hasPermissionTo('queue_monitor.view');
-        } catch (\Spatie\Permission\Exceptions\PermissionDoesNotExist) {
+        } catch (PermissionDoesNotExist) {
             return false;
         }
     }
@@ -62,9 +68,9 @@ class QueueMonitorPage extends Page
     public function getBreadcrumbs(): array
     {
         return [
-            '/admin'                     => 'Dashboard',
+            '/admin' => 'Dashboard',
             '/admin/system/queue-monitor' => 'System',
-            '#'                           => 'Queue Monitor',
+            '#' => 'Queue Monitor',
         ];
     }
 
@@ -72,13 +78,13 @@ class QueueMonitorPage extends Page
 
     public function getQueueInfo(): array
     {
-        $driver     = config('queue.default', 'sync');
+        $driver = config('queue.default', 'sync');
         $connection = config("queue.connections.{$driver}", []);
 
         return [
-            'driver'     => strtoupper($driver),
+            'driver' => strtoupper($driver),
             'connection' => $connection['driver'] ?? $driver,
-            'table'      => $connection['table'] ?? ($driver === 'database' ? 'jobs' : null),
+            'table' => $connection['table'] ?? ($driver === 'database' ? 'jobs' : null),
         ];
     }
 
@@ -98,14 +104,14 @@ class QueueMonitorPage extends Page
             ->get();
 
         return $rows->map(function ($row) {
-            $oldest    = $row->oldest ? Carbon::createFromTimestamp($row->oldest) : null;
+            $oldest = $row->oldest ? Carbon::createFromTimestamp($row->oldest) : null;
             $ageMinutes = $oldest ? $oldest->diffInMinutes(now()) : null;
 
             return [
-                'queue'      => $row->queue,
-                'pending'    => (int) $row->pending,
+                'queue' => $row->queue,
+                'pending' => (int) $row->pending,
                 'oldest_age' => $ageMinutes !== null ? $this->formatAge($ageMinutes) : null,
-                'stalled'    => $ageMinutes !== null && $ageMinutes > 5,
+                'stalled' => $ageMinutes !== null && $ageMinutes > 5,
             ];
         })->all();
     }
@@ -125,7 +131,7 @@ class QueueMonitorPage extends Page
             ->groupBy('queue')
             ->orderByDesc('total')
             ->get()
-            ->map(fn($r) => ['queue' => $r->queue, 'count' => (int) $r->total])
+            ->map(fn ($r) => ['queue' => $r->queue, 'count' => (int) $r->total])
             ->all();
 
         $recent = DB::table('failed_jobs')
@@ -136,8 +142,8 @@ class QueueMonitorPage extends Page
                 $firstLine = str($r->exception)->before("\n")->limit(120)->toString();
 
                 return [
-                    'uuid'      => $r->uuid,
-                    'queue'     => $r->queue,
+                    'uuid' => $r->uuid,
+                    'queue' => $r->queue,
                     'failed_at' => Carbon::parse($r->failed_at)->diffForHumans(),
                     'exception' => $firstLine,
                 ];
@@ -179,7 +185,7 @@ class QueueMonitorPage extends Page
         }
 
         $hours = intdiv($minutes, 60);
-        $rem   = $minutes % 60;
+        $rem = $minutes % 60;
 
         return $rem > 0 ? "{$hours}h {$rem}m" : "{$hours}h";
     }

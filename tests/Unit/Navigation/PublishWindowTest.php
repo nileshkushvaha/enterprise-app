@@ -22,7 +22,7 @@ class PublishWindowTest extends TestCase
     {
         $window = new PublishWindow(
             startsAt: Carbon::now()->subHour(),
-            endsAt:   Carbon::now()->addHour(),
+            endsAt: Carbon::now()->addHour(),
         );
 
         $this->assertTrue($window->isActive());
@@ -32,7 +32,7 @@ class PublishWindowTest extends TestCase
     {
         $window = new PublishWindow(
             startsAt: Carbon::now()->addHour(),
-            endsAt:   null,
+            endsAt: null,
         );
 
         $this->assertFalse($window->isActive());
@@ -42,7 +42,7 @@ class PublishWindowTest extends TestCase
     {
         $window = new PublishWindow(
             startsAt: null,
-            endsAt:   Carbon::now()->subHour(),
+            endsAt: Carbon::now()->subHour(),
         );
 
         $this->assertFalse($window->isActive());
@@ -52,7 +52,7 @@ class PublishWindowTest extends TestCase
     {
         $window = new PublishWindow(
             startsAt: Carbon::now()->subDay(),
-            endsAt:   null,
+            endsAt: null,
         );
 
         $this->assertTrue($window->isActive());
@@ -62,7 +62,7 @@ class PublishWindowTest extends TestCase
     {
         $window = new PublishWindow(
             startsAt: null,
-            endsAt:   Carbon::now()->addDay(),
+            endsAt: Carbon::now()->addDay(),
         );
 
         $this->assertTrue($window->isActive());
@@ -79,8 +79,8 @@ class PublishWindowTest extends TestCase
 
     public function test_from_factory_method(): void
     {
-        $start  = Carbon::now()->subHour();
-        $end    = Carbon::now()->addHour();
+        $start = Carbon::now()->subHour();
+        $end = Carbon::now()->addHour();
         $window = PublishWindow::from($start, $end);
 
         $this->assertSame($start, $window->startsAt);
@@ -91,7 +91,7 @@ class PublishWindowTest extends TestCase
     {
         $window = new PublishWindow(
             startsAt: Carbon::parse('2030-01-01'),
-            endsAt:   Carbon::parse('2030-12-31'),
+            endsAt: Carbon::parse('2030-12-31'),
         );
 
         $this->assertTrue($window->isActive(Carbon::parse('2030-06-15')));

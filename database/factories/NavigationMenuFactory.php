@@ -15,18 +15,18 @@ class NavigationMenuFactory extends Factory
 {
     public function definition(): array
     {
-        $name = fake()->words(2, true) . ' Menu';
+        $name = fake()->words(2, true).' Menu';
         $slug = str($name)->slug('-')->toString();
 
         return [
-            'name'        => $name,
-            'slug'        => $slug,
-            'location'    => fake()->randomElement(NavigationLocation::cases())->value,
+            'name' => $name,
+            'slug' => $slug,
+            'location' => fake()->randomElement(NavigationLocation::cases())->value,
             'layout_type' => fake()->randomElement(NavigationLayoutType::cases())->value,
-            'status'      => NavigationStatus::Draft->value,
+            'status' => NavigationStatus::Draft->value,
             'description' => fake()->optional(0.5)->sentence(),
-            'locale'      => null,
-            'settings'    => null,
+            'locale' => null,
+            'settings' => null,
         ];
     }
 

@@ -4,11 +4,12 @@ namespace App\Filament\Resources\Pages\Tables;
 
 use App\Enums\PageStatus;
 use App\Enums\PageVisibility;
+use App\Models\Page;
 use App\Services\PageService;
 use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
-use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\DeleteAction;
+use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\ForceDeleteBulkAction;
 use Filament\Actions\RestoreAction;
@@ -116,7 +117,7 @@ class PagesTable
                 Action::make('duplicate')
                     ->label('Duplicate')
                     ->icon('heroicon-m-document-duplicate')
-                    ->authorize(fn () => auth()->user()?->can('create', \App\Models\Page::class) ?? false)
+                    ->authorize(fn () => auth()->user()?->can('create', Page::class) ?? false)
                     ->action(function ($record) {
                         $newPage = app(PageService::class)->duplicatePage($record);
                         Notification::make()

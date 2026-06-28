@@ -2,15 +2,14 @@
 
 namespace App\Filament\Resources\PageBlocks\Schemas;
 
-use Filament\Schemas\Components\Utilities\Get;
-use Filament\Schemas\Components\Section;
-use Filament\Forms\Components\Select;
-use Filament\Schemas\Components\Tabs;
-use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\Toggle;
-
 use App\Enums\BlockType;
 use App\Forms\BlockFormSchemaFactory;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
+use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Tabs;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 
 class PageBlockForm
@@ -94,7 +93,7 @@ class PageBlockForm
                                             ->label('Position')
                                             ->options([
                                                 'before_content' => 'Before Main Content',
-                                                'after_content'  => 'After Main Content',
+                                                'after_content' => 'After Main Content',
                                             ])
                                             ->default('after_content')
                                             ->native(false)

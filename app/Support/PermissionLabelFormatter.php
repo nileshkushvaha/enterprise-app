@@ -79,6 +79,7 @@ final class PermissionLabelFormatter
         }
 
         $parts = explode('.', $permissionName, 2);
+
         return trim($parts[1] ?? $parts[0] ?? $permissionName);
     }
 

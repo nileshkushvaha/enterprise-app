@@ -10,4 +10,3 @@ return [
         'robots_ttl' => (int) env('CMS_ROBOTS_CACHE_TTL', 3600),
     ],
 ];
-

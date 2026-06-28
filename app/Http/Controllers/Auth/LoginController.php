@@ -30,15 +30,16 @@ class LoginController extends Controller
     public function store(LoginRequest $request): RedirectResponse
     {
         $result = $this->loginService->attempt(
-            email:     $request->input('email'),
-            password:  $request->input('password'),
-            remember:  (bool) $request->input('remember', false),
+            email: $request->input('email'),
+            password: $request->input('password'),
+            remember: (bool) $request->input('remember', false),
             ipAddress: $request->ip() ?? '127.0.0.1',
             userAgent: $request->userAgent() ?? '',
         );
 
         if ($result->isSuccessful()) {
             $request->session()->regenerate();
+
             return redirect()->intended(route('dashboard'));
         }
 

@@ -3,12 +3,13 @@
 namespace App\Actions;
 
 use App\Models\Page;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
 
 class GeneratePageSlugAction
 {
     /**
-     * @param  class-string<\Illuminate\Database\Eloquent\Model>  $modelClass
+     * @param  class-string<Model>  $modelClass
      */
     public function execute(string $title, ?string $excludeId = null, string $modelClass = Page::class): string
     {
@@ -25,7 +26,7 @@ class GeneratePageSlugAction
     }
 
     /**
-     * @param  class-string<\Illuminate\Database\Eloquent\Model>  $modelClass
+     * @param  class-string<Model>  $modelClass
      */
     private function slugExists(string $slug, ?string $excludeId = null, string $modelClass = Page::class): bool
     {

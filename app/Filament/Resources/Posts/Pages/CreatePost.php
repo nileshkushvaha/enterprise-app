@@ -15,4 +15,3 @@ class CreatePost extends CreateRecord
         app(PostService::class)->refreshReadingTime($this->record);
     }
 }
-

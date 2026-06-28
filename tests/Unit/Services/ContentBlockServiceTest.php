@@ -17,13 +17,14 @@ class ContentBlockServiceTest extends TestCase
     use RefreshDatabase;
 
     private ContentBlockService $service;
+
     private Page $page;
 
     protected function setUp(): void
     {
         parent::setUp();
-        $this->service = new ContentBlockService();
-        $this->page    = Page::factory()->create();
+        $this->service = new ContentBlockService;
+        $this->page = Page::factory()->create();
     }
 
     // ── createBlock ──────────────────────────────────────────────────────
@@ -33,16 +34,16 @@ class ContentBlockServiceTest extends TestCase
         $block = $this->service->createBlock($this->page, BlockType::Hero, ['title' => 'Hello']);
 
         $this->assertDatabaseHas('content_blocks', [
-            'id'             => $block->id,
+            'id' => $block->id,
             'blockable_type' => 'page',
-            'blockable_id'   => $this->page->id,
-            'block_type'     => BlockType::Hero->value,
+            'blockable_id' => $this->page->id,
+            'block_type' => BlockType::Hero->value,
         ]);
     }
 
     public function test_create_block_auto_increments_sort_order(): void
     {
-        $first  = $this->service->createBlock($this->page, BlockType::Hero, []);
+        $first = $this->service->createBlock($this->page, BlockType::Hero, []);
         $second = $this->service->createBlock($this->page, BlockType::RichText, []);
 
         // First block: max(null)+1 = 1. Second block: max(1)+1 = 2.
@@ -73,12 +74,12 @@ class ContentBlockServiceTest extends TestCase
 
     public function test_create_block_works_for_post_owner(): void
     {
-        $post  = Post::factory()->create();
+        $post = Post::factory()->create();
         $block = $this->service->createBlock($post, BlockType::RichText, ['text' => '<p>hi</p>']);
 
         $this->assertDatabaseHas('content_blocks', [
             'blockable_type' => 'post',
-            'blockable_id'   => $post->id,
+            'blockable_id' => $post->id,
         ]);
     }
 
@@ -175,7 +176,7 @@ class ContentBlockServiceTest extends TestCase
     public function test_delete_block_soft_deletes(): void
     {
         $block = $this->service->createBlock($this->page, BlockType::Hero, []);
-        $id    = $block->id;
+        $id = $block->id;
 
         $this->assertTrue($this->service->deleteBlock($block));
 
@@ -198,7 +199,7 @@ class ContentBlockServiceTest extends TestCase
     public function test_force_delete_removes_permanently(): void
     {
         $block = $this->service->createBlock($this->page, BlockType::Hero, []);
-        $id    = $block->id;
+        $id = $block->id;
 
         $this->service->forceDeleteBlock($block);
 

@@ -12,15 +12,21 @@ use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Contracts\Support\Htmlable;
+use Spatie\Permission\Exceptions\PermissionDoesNotExist;
 
 class CacheManagerPage extends Page
 {
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedCircleStack;
-    protected static ?string $navigationLabel               = 'Cache Manager';
+
+    protected static ?string $navigationLabel = 'Cache Manager';
+
     protected static string|\UnitEnum|null $navigationGroup = 'System';
-    protected static ?int $navigationSort                   = 1;
-    protected static ?string $slug                          = 'system/cache-manager';
-    protected string $view                                  = 'filament.pages.cache-manager';
+
+    protected static ?int $navigationSort = 1;
+
+    protected static ?string $slug = 'system/cache-manager';
+
+    protected string $view = 'filament.pages.cache-manager';
 
     // ── State ─────────────────────────────────────────────────────────────
 
@@ -45,7 +51,7 @@ class CacheManagerPage extends Page
 
         try {
             return method_exists($user, 'hasPermissionTo') && $user->hasPermissionTo('cache_manager.view');
-        } catch (\Spatie\Permission\Exceptions\PermissionDoesNotExist) {
+        } catch (PermissionDoesNotExist) {
             return false;
         }
     }
@@ -70,9 +76,9 @@ class CacheManagerPage extends Page
     public function getBreadcrumbs(): array
     {
         return [
-            '/admin'                      => 'Dashboard',
+            '/admin' => 'Dashboard',
             '/admin/system/cache-manager' => 'System',
-            '#'                           => 'Cache Manager',
+            '#' => 'Cache Manager',
         ];
     }
 
@@ -85,62 +91,62 @@ class CacheManagerPage extends Page
 
         return [
             [
-                'label'  => 'Cache Driver',
-                'value'  => $service->getCacheDriver(),
-                'icon'   => 'heroicon-o-circle-stack',
-                'group'  => 'infrastructure',
+                'label' => 'Cache Driver',
+                'value' => $service->getCacheDriver(),
+                'icon' => 'heroicon-o-circle-stack',
+                'group' => 'infrastructure',
             ],
             [
-                'label'  => 'Cache Store',
-                'value'  => $service->getCacheStore(),
-                'icon'   => 'heroicon-o-server-stack',
-                'group'  => 'infrastructure',
+                'label' => 'Cache Store',
+                'value' => $service->getCacheStore(),
+                'icon' => 'heroicon-o-server-stack',
+                'group' => 'infrastructure',
             ],
             [
-                'label'  => 'Environment',
-                'value'  => ucfirst($service->getEnvironment()),
-                'icon'   => 'heroicon-o-globe-alt',
-                'group'  => 'infrastructure',
+                'label' => 'Environment',
+                'value' => ucfirst($service->getEnvironment()),
+                'icon' => 'heroicon-o-globe-alt',
+                'group' => 'infrastructure',
             ],
             [
-                'label'  => 'Laravel Version',
-                'value'  => 'v' . $service->getLaravelVersion(),
-                'icon'   => 'heroicon-o-code-bracket',
-                'group'  => 'infrastructure',
+                'label' => 'Laravel Version',
+                'value' => 'v'.$service->getLaravelVersion(),
+                'icon' => 'heroicon-o-code-bracket',
+                'group' => 'infrastructure',
             ],
             [
-                'label'  => 'PHP Version',
-                'value'  => 'PHP ' . $service->getPhpVersion(),
-                'icon'   => 'heroicon-o-cpu-chip',
-                'group'  => 'infrastructure',
+                'label' => 'PHP Version',
+                'value' => 'PHP '.$service->getPhpVersion(),
+                'icon' => 'heroicon-o-cpu-chip',
+                'group' => 'infrastructure',
             ],
             [
-                'label'  => 'Config Cache',
-                'value'  => $service->isConfigCached() ? 'Cached' : 'Not cached',
+                'label' => 'Config Cache',
+                'value' => $service->isConfigCached() ? 'Cached' : 'Not cached',
                 'cached' => $service->isConfigCached(),
-                'icon'   => 'heroicon-o-cog-6-tooth',
-                'group'  => 'cache',
+                'icon' => 'heroicon-o-cog-6-tooth',
+                'group' => 'cache',
             ],
             [
-                'label'  => 'Route Cache',
-                'value'  => $service->isRouteCached() ? 'Cached' : 'Not cached',
+                'label' => 'Route Cache',
+                'value' => $service->isRouteCached() ? 'Cached' : 'Not cached',
                 'cached' => $service->isRouteCached(),
-                'icon'   => 'heroicon-o-map',
-                'group'  => 'cache',
+                'icon' => 'heroicon-o-map',
+                'group' => 'cache',
             ],
             [
-                'label'  => 'View Cache',
-                'value'  => $service->isViewCached() ? 'Cached' : 'Not cached',
+                'label' => 'View Cache',
+                'value' => $service->isViewCached() ? 'Cached' : 'Not cached',
                 'cached' => $service->isViewCached(),
-                'icon'   => 'heroicon-o-eye',
-                'group'  => 'cache',
+                'icon' => 'heroicon-o-eye',
+                'group' => 'cache',
             ],
             [
-                'label'  => 'Event Cache',
-                'value'  => $service->isEventCached() ? 'Cached' : 'Not cached',
+                'label' => 'Event Cache',
+                'value' => $service->isEventCached() ? 'Cached' : 'Not cached',
                 'cached' => $service->isEventCached(),
-                'icon'   => 'heroicon-o-bolt',
-                'group'  => 'cache',
+                'icon' => 'heroicon-o-bolt',
+                'group' => 'cache',
             ],
         ];
     }
@@ -151,11 +157,11 @@ class CacheManagerPage extends Page
     {
         return [
             ActionGroup::make([
-                $this->makeAction('clear_app_cache',    'Clear Cache Store', 'clearApplicationCache', 'cache:clear',    'heroicon-o-trash',       'danger',  'cache_manager.clear'),
-                $this->makeAction('clear_view_cache',   'Clear View Cache',  'clearViewCache',        'view:clear',     'heroicon-o-eye-slash',   'warning', 'cache_manager.clear'),
-                $this->makeAction('clear_route_cache',  'Clear Route Cache', 'clearRouteCache',       'route:clear',    'heroicon-o-map',         'warning', 'cache_manager.clear'),
-                $this->makeAction('clear_config_cache', 'Clear Config Cache','clearConfigCache',      'config:clear',   'heroicon-o-cog-6-tooth', 'warning', 'cache_manager.clear'),
-                $this->makeAction('clear_event_cache',  'Clear Event Cache', 'clearEventCache',       'event:clear',    'heroicon-o-bolt-slash',  'warning', 'cache_manager.clear'),
+                $this->makeAction('clear_app_cache', 'Clear Cache Store', 'clearApplicationCache', 'cache:clear', 'heroicon-o-trash', 'danger', 'cache_manager.clear'),
+                $this->makeAction('clear_view_cache', 'Clear View Cache', 'clearViewCache', 'view:clear', 'heroicon-o-eye-slash', 'warning', 'cache_manager.clear'),
+                $this->makeAction('clear_route_cache', 'Clear Route Cache', 'clearRouteCache', 'route:clear', 'heroicon-o-map', 'warning', 'cache_manager.clear'),
+                $this->makeAction('clear_config_cache', 'Clear Config Cache', 'clearConfigCache', 'config:clear', 'heroicon-o-cog-6-tooth', 'warning', 'cache_manager.clear'),
+                $this->makeAction('clear_event_cache', 'Clear Event Cache', 'clearEventCache', 'event:clear', 'heroicon-o-bolt-slash', 'warning', 'cache_manager.clear'),
             ])
                 ->label('Clear Caches')
                 ->icon('heroicon-o-trash')
@@ -163,8 +169,8 @@ class CacheManagerPage extends Page
                 ->button(),
 
             ActionGroup::make([
-                $this->makeAction('optimize',       'Optimize',       'optimize',      'optimize',       'heroicon-o-rocket-launch', 'success', 'cache_manager.optimize'),
-                $this->makeAction('optimize_clear', 'Optimize Clear', 'optimizeClear', 'optimize:clear', 'heroicon-o-arrow-path',    'gray',    'cache_manager.optimize'),
+                $this->makeAction('optimize', 'Optimize', 'optimize', 'optimize', 'heroicon-o-rocket-launch', 'success', 'cache_manager.optimize'),
+                $this->makeAction('optimize_clear', 'Optimize Clear', 'optimizeClear', 'optimize:clear', 'heroicon-o-arrow-path', 'gray', 'cache_manager.optimize'),
             ])
                 ->label('Optimize')
                 ->icon('heroicon-o-rocket-launch')
@@ -189,7 +195,7 @@ class CacheManagerPage extends Page
 
         try {
             return method_exists($user, 'hasPermissionTo') && $user->hasPermissionTo($permission);
-        } catch (\Spatie\Permission\Exceptions\PermissionDoesNotExist) {
+        } catch (PermissionDoesNotExist) {
             return false;
         }
     }
@@ -207,7 +213,7 @@ class CacheManagerPage extends Page
             ->label($label)
             ->icon($icon)
             ->color($color)
-            ->disabled(fn() => $this->processing || ! $this->userHasPermission($permission))
+            ->disabled(fn () => $this->processing || ! $this->userHasPermission($permission))
             ->requiresConfirmation()
             ->modalHeading("Confirm: {$label}")
             ->modalDescription("This will run artisan {$artisanCommand}. Are you sure you want to continue?")
@@ -217,8 +223,8 @@ class CacheManagerPage extends Page
 
                 try {
                     /** @var CacheManagerService $service */
-                    $service          = app(CacheManagerService::class);
-                    $result           = $service->{$serviceMethod}();
+                    $service = app(CacheManagerService::class);
+                    $result = $service->{$serviceMethod}();
                     $this->lastResult = $result;
 
                     if ($result['success']) {
@@ -228,10 +234,10 @@ class CacheManagerPage extends Page
                     }
                 } catch (\Throwable $e) {
                     $this->lastResult = [
-                        'success'   => false,
-                        'message'   => 'An unexpected error occurred.',
-                        'output'    => $e->getMessage(),
-                        'exitCode'  => -1,
+                        'success' => false,
+                        'message' => 'An unexpected error occurred.',
+                        'output' => $e->getMessage(),
+                        'exitCode' => -1,
                         'timestamp' => now()->toDateTimeString(),
                     ];
 

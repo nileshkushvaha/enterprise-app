@@ -4,8 +4,8 @@ namespace App\Filament\Resources\Tags\Schemas;
 
 use App\Actions\GeneratePageSlugAction;
 use App\Models\Tag;
-use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
@@ -46,4 +46,3 @@ class TagForm
         ]);
     }
 }
-

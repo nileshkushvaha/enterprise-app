@@ -13,9 +13,9 @@ final class UserLoggedIn
     use Dispatchable, SerializesModels;
 
     public function __construct(
-        public readonly User   $user,
+        public readonly User $user,
         public readonly string $ipAddress,
         public readonly string $userAgent,
-        public readonly bool   $remember,
+        public readonly bool $remember,
     ) {}
 }

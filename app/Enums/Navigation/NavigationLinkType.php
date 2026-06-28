@@ -4,32 +4,32 @@ namespace App\Enums\Navigation;
 
 enum NavigationLinkType: string
 {
-    case Page     = 'page';
-    case Post     = 'post';
+    case Page = 'page';
+    case Post = 'post';
     case Category = 'category';
-    case Tag      = 'tag';
-    case Route    = 'route';
-    case Url      = 'url';
+    case Tag = 'tag';
+    case Route = 'route';
+    case Url = 'url';
     case External = 'external';
-    case Email    = 'email';
-    case Phone    = 'phone';
-    case Anchor   = 'anchor';
-    case Custom   = 'custom';
+    case Email = 'email';
+    case Phone = 'phone';
+    case Anchor = 'anchor';
+    case Custom = 'custom';
 
     public function label(): string
     {
         return match ($this) {
-            self::Page     => 'Page',
-            self::Post     => 'Post',
+            self::Page => 'Page',
+            self::Post => 'Post',
             self::Category => 'Category',
-            self::Tag      => 'Tag',
-            self::Route    => 'Named Route',
-            self::Url      => 'URL',
+            self::Tag => 'Tag',
+            self::Route => 'Named Route',
+            self::Url => 'URL',
             self::External => 'External URL',
-            self::Email    => 'Email Address',
-            self::Phone    => 'Phone Number',
-            self::Anchor   => 'Anchor',
-            self::Custom   => 'Custom',
+            self::Email => 'Email Address',
+            self::Phone => 'Phone Number',
+            self::Anchor => 'Anchor',
+            self::Custom => 'Custom',
         };
     }
 

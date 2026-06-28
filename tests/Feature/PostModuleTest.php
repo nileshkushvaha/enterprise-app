@@ -21,12 +21,12 @@ class PostModuleTest extends TestCase
 
         ContentBlock::create([
             'blockable_type' => 'post',
-            'blockable_id'   => $post->id,
-            'block_type'     => BlockType::Hero,
-            'content'        => ['title' => 'Published Post Hero'],
-            'settings'       => [],
-            'sort_order'     => 1,
-            'is_active'      => true,
+            'blockable_id' => $post->id,
+            'block_type' => BlockType::Hero,
+            'content' => ['title' => 'Published Post Hero'],
+            'settings' => [],
+            'sort_order' => 1,
+            'is_active' => true,
         ]);
 
         $response = $this->get(route('blog.show', $post->slug));
@@ -67,12 +67,12 @@ class PostModuleTest extends TestCase
 
         ContentBlock::create([
             'blockable_type' => 'post',
-            'blockable_id'   => $post->id,
-            'block_type'     => BlockType::RichText,
-            'content'        => ['text' => $longText],
-            'settings'       => [],
-            'sort_order'     => 1,
-            'is_active'      => true,
+            'blockable_id' => $post->id,
+            'block_type' => BlockType::RichText,
+            'content' => ['text' => $longText],
+            'settings' => [],
+            'sort_order' => 1,
+            'is_active' => true,
         ]);
 
         $this->assertGreaterThanOrEqual(2, $post->fresh()->reading_time);

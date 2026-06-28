@@ -30,7 +30,7 @@ class SuperAdminSeeder extends Seeder
 
         // 3. Assign super_admin role to the first user (ID 1) if not already assigned
         $user = User::find(1);
-        if ($user && !$user->hasRole('super_admin')) {
+        if ($user && ! $user->hasRole('super_admin')) {
             $user->assignRole('super_admin');
             $this->command->info("✓ Assigned super_admin role to: {$user->name}");
         } elseif ($user) {

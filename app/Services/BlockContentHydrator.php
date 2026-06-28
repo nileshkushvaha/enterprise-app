@@ -228,10 +228,10 @@ class BlockContentHydrator
     private static function hydrateContactInfo(array $content): array
     {
         return [
-            'eyebrow'     => $content['eyebrow'] ?? '',
-            'title'       => $content['title'] ?? '',
+            'eyebrow' => $content['eyebrow'] ?? '',
+            'title' => $content['title'] ?? '',
             'description' => $content['description'] ?? '',
-            'items'       => $content['items'] ?? [],
+            'items' => $content['items'] ?? [],
         ];
     }
 }

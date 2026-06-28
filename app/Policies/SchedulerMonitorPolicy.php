@@ -6,6 +6,7 @@ namespace App\Policies;
 
 use Illuminate\Auth\Access\HandlesAuthorization;
 use Illuminate\Foundation\Auth\User as AuthUser;
+use Spatie\Permission\Exceptions\PermissionDoesNotExist;
 
 class SchedulerMonitorPolicy
 {
@@ -30,7 +31,7 @@ class SchedulerMonitorPolicy
     {
         try {
             return method_exists($user, 'hasPermissionTo') && $user->hasPermissionTo($permission);
-        } catch (\Spatie\Permission\Exceptions\PermissionDoesNotExist) {
+        } catch (PermissionDoesNotExist) {
             return false;
         }
     }

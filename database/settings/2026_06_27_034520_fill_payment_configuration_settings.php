@@ -19,4 +19,3 @@ return new class extends SettingsMigration
         $this->migrator->add('payment_configuration.refund_enabled', true);
     }
 };
-

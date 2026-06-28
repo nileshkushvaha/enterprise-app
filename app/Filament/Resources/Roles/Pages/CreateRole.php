@@ -34,8 +34,8 @@ class CreateRole extends CreateRecord
         // Set extra columns directly (bypasses fillable)
         $data = $this->data;
         $role->description = $data['description'] ?? null;
-        $role->status      = $data['status'] ?? 'active';
-        $role->remarks     = $data['remarks'] ?? null;
+        $role->status = $data['status'] ?? 'active';
+        $role->remarks = $data['remarks'] ?? null;
         $role->saveQuietly();
 
         // Sync permissions
@@ -53,7 +53,7 @@ class CreateRole extends CreateRecord
 
         Notification::make()
             ->title('Role created')
-            ->body("Role \"{$role->name}\" was created with " . count($this->selectedPermissions) . ' permissions.')
+            ->body("Role \"{$role->name}\" was created with ".count($this->selectedPermissions).' permissions.')
             ->success()
             ->send();
     }

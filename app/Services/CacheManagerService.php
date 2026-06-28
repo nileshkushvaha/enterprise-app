@@ -19,16 +19,16 @@ class CacheManagerService
     public function getCacheStore(): string
     {
         $driver = $this->getCacheDriver();
-        $store  = config("cache.stores.{$driver}", []);
+        $store = config("cache.stores.{$driver}", []);
 
         return match ($driver) {
-            'redis'      => 'Redis — ' . ($store['connection'] ?? 'default'),
-            'memcached'  => 'Memcached',
-            'database'   => 'Database — ' . ($store['table'] ?? 'cache'),
-            'file'       => 'File — ' . ($store['path'] ?? storage_path('framework/cache')),
-            'array'      => 'Array (in-memory)',
-            'null'       => 'Null (disabled)',
-            default      => ucfirst($driver),
+            'redis' => 'Redis — '.($store['connection'] ?? 'default'),
+            'memcached' => 'Memcached',
+            'database' => 'Database — '.($store['table'] ?? 'cache'),
+            'file' => 'File — '.($store['path'] ?? storage_path('framework/cache')),
+            'array' => 'Array (in-memory)',
+            'null' => 'Null (disabled)',
+            default => ucfirst($driver),
         };
     }
 
@@ -115,19 +115,19 @@ class CacheManagerService
 
     private function run(string $command, string $successMessage): array
     {
-        $buffer   = new BufferedOutput();
+        $buffer = new BufferedOutput;
         $exitCode = Artisan::call($command, [], $buffer);
-        $output   = trim($buffer->fetch());
+        $output = trim($buffer->fetch());
 
         $this->logActivity($command, $output, $exitCode);
 
         $success = $exitCode === 0;
 
         return [
-            'success'   => $success,
-            'message'   => $success ? $successMessage : 'Command failed.',
-            'output'    => $output ?: ($success ? $successMessage : 'Command returned a non-zero exit code.'),
-            'exitCode'  => $exitCode,
+            'success' => $success,
+            'message' => $success ? $successMessage : 'Command failed.',
+            'output' => $output ?: ($success ? $successMessage : 'Command returned a non-zero exit code.'),
+            'exitCode' => $exitCode,
             'timestamp' => now()->toDateTimeString(),
         ];
     }
@@ -136,9 +136,9 @@ class CacheManagerService
     {
         $logger = activity('cache_manager')
             ->withProperties([
-                'command'   => $command,
+                'command' => $command,
                 'exit_code' => $exitCode,
-                'output'    => $output,
+                'output' => $output,
             ]);
 
         if ($user = auth()->user()) {

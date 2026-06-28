@@ -26,7 +26,7 @@ final class WelcomeNotification extends Notification implements ShouldQueue
     public function toMail(object $notifiable): MailMessage
     {
         return (new MailMessage)
-            ->subject('Welcome to ' . config('app.name') . '! 🎉')
+            ->subject('Welcome to '.config('app.name').'! 🎉')
             ->view('emails.auth.welcome', [
                 'user' => $notifiable,
                 'appName' => config('app.name'),

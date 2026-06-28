@@ -29,10 +29,10 @@ class FrontendIntegrationTest extends TestCase
     public function test_published_public_page_is_accessible(): void
     {
         $page = Page::factory()->create([
-            'status'     => PageStatus::Published,
+            'status' => PageStatus::Published,
             'visibility' => PageVisibility::Public,
-            'slug'       => 'about-us',
-            'title'      => 'About Us',
+            'slug' => 'about-us',
+            'title' => 'About Us',
         ]);
 
         $this->get(route('page.show', $page->slug))->assertOk();
@@ -42,7 +42,7 @@ class FrontendIntegrationTest extends TestCase
     {
         $page = Page::factory()->create([
             'status' => PageStatus::Draft,
-            'slug'   => 'hidden-draft',
+            'slug' => 'hidden-draft',
         ]);
 
         $this->get(route('page.show', $page->slug))->assertNotFound();
@@ -51,9 +51,9 @@ class FrontendIntegrationTest extends TestCase
     public function test_private_page_returns_404_for_guests(): void
     {
         $page = Page::factory()->create([
-            'status'     => PageStatus::Published,
+            'status' => PageStatus::Published,
             'visibility' => PageVisibility::Private,
-            'slug'       => 'private-page',
+            'slug' => 'private-page',
         ]);
 
         $this->get(route('page.show', $page->slug))->assertNotFound();
@@ -121,7 +121,7 @@ class FrontendIntegrationTest extends TestCase
 
     public function test_category_archive_shows_published_posts(): void
     {
-        $cat  = PostCategory::factory()->create(['is_active' => true]);
+        $cat = PostCategory::factory()->create(['is_active' => true]);
         $post = Post::factory()->published()->create(['title' => 'Categorised Post']);
         $post->categories()->attach($cat);
 
@@ -132,7 +132,7 @@ class FrontendIntegrationTest extends TestCase
 
     public function test_category_archive_hides_draft_posts(): void
     {
-        $cat  = PostCategory::factory()->create(['is_active' => true]);
+        $cat = PostCategory::factory()->create(['is_active' => true]);
         $post = Post::factory()->draft()->create(['title' => 'Draft Categorised']);
         $post->categories()->attach($cat);
 
@@ -159,7 +159,7 @@ class FrontendIntegrationTest extends TestCase
 
     public function test_tag_archive_shows_published_posts(): void
     {
-        $tag  = Tag::factory()->create(['is_active' => true]);
+        $tag = Tag::factory()->create(['is_active' => true]);
         $post = Post::factory()->published()->create(['title' => 'Tagged Post']);
         $post->tags()->attach($tag);
 
@@ -178,8 +178,8 @@ class FrontendIntegrationTest extends TestCase
     public function test_search_returns_published_content(): void
     {
         $page = Page::factory()->create([
-            'title'      => 'Uniqueterm Page',
-            'status'     => PageStatus::Published,
+            'title' => 'Uniqueterm Page',
+            'status' => PageStatus::Published,
             'visibility' => PageVisibility::Public,
         ]);
 

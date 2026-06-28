@@ -16,7 +16,8 @@ class LinkTypeRegistryTest extends TestCase
 {
     private function makeDriver(NavigationLinkType ...$types): LinkTypeDriverInterface
     {
-        return new class($types) implements LinkTypeDriverInterface {
+        return new class($types) implements LinkTypeDriverInterface
+        {
             public function __construct(private readonly array $types) {}
 
             public function resolve(NavigationItem $item): ResolvedLink
@@ -33,8 +34,8 @@ class LinkTypeRegistryTest extends TestCase
 
     public function test_register_maps_driver_to_its_supported_types(): void
     {
-        $registry = new LinkTypeRegistry();
-        $driver   = $this->makeDriver(NavigationLinkType::Url, NavigationLinkType::External);
+        $registry = new LinkTypeRegistry;
+        $driver = $this->makeDriver(NavigationLinkType::Url, NavigationLinkType::External);
 
         $registry->register($driver);
 
@@ -45,9 +46,9 @@ class LinkTypeRegistryTest extends TestCase
 
     public function test_register_for_overwrites_specific_type(): void
     {
-        $registry = new LinkTypeRegistry();
-        $first    = $this->makeDriver(NavigationLinkType::Url);
-        $second   = $this->makeDriver(NavigationLinkType::Url);
+        $registry = new LinkTypeRegistry;
+        $first = $this->makeDriver(NavigationLinkType::Url);
+        $second = $this->makeDriver(NavigationLinkType::Url);
 
         $registry->register($first);
         $registry->registerFor(NavigationLinkType::Url, $second);
@@ -57,8 +58,8 @@ class LinkTypeRegistryTest extends TestCase
 
     public function test_resolve_returns_correct_driver(): void
     {
-        $registry = new LinkTypeRegistry();
-        $driver   = $this->makeDriver(NavigationLinkType::Email);
+        $registry = new LinkTypeRegistry;
+        $driver = $this->makeDriver(NavigationLinkType::Email);
         $registry->register($driver);
 
         $resolved = $registry->resolve(NavigationLinkType::Email);
@@ -68,7 +69,7 @@ class LinkTypeRegistryTest extends TestCase
 
     public function test_resolve_throws_for_unregistered_type(): void
     {
-        $registry = new LinkTypeRegistry();
+        $registry = new LinkTypeRegistry;
 
         $this->expectException(InvalidArgumentException::class);
         $this->expectExceptionMessageMatches('/page/');
@@ -78,7 +79,7 @@ class LinkTypeRegistryTest extends TestCase
 
     public function test_registered_types_returns_all_registered_values(): void
     {
-        $registry = new LinkTypeRegistry();
+        $registry = new LinkTypeRegistry;
         $registry->register($this->makeDriver(NavigationLinkType::Url, NavigationLinkType::External));
 
         $types = $registry->registeredTypes();
@@ -90,7 +91,7 @@ class LinkTypeRegistryTest extends TestCase
 
     public function test_has_returns_false_for_empty_registry(): void
     {
-        $registry = new LinkTypeRegistry();
+        $registry = new LinkTypeRegistry;
 
         $this->assertFalse($registry->has(NavigationLinkType::Page));
     }

@@ -27,4 +27,3 @@ class EditPost extends EditRecord
         ];
     }
 }
-

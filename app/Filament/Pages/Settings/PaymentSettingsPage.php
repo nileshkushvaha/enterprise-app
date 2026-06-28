@@ -18,6 +18,7 @@ use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\Actions as ActionsComponent;
+use Filament\Schemas\Components\Component;
 use Filament\Schemas\Components\EmbeddedSchema;
 use Filament\Schemas\Components\Form as FormComponent;
 use Filament\Schemas\Components\Grid;
@@ -37,13 +38,18 @@ abstract class PaymentSettingsPage extends Page
     use HasSettingsAccess;
 
     protected static string|BackedEnum|null $navigationIcon = null;
+
     protected static ?string $navigationLabel = null;
+
     protected static ?int $navigationSort = null;
+
     protected static ?string $slug = null;
+
     protected static bool $shouldRegisterNavigation = false;
 
     /** @var array<string, mixed>|null */
     public ?array $data = [];
+
     public int $activePaymentTab = 1;
 
     public static function getLabel(): string
@@ -293,7 +299,7 @@ abstract class PaymentSettingsPage extends Page
     }
 
     /**
-     * @return array<\Filament\Schemas\Components\Component>
+     * @return array<Component>
      */
     protected function bankAccountSchema(): array
     {
@@ -380,7 +386,7 @@ abstract class PaymentSettingsPage extends Page
     }
 
     /**
-     * @return array<\Filament\Schemas\Components\Component>
+     * @return array<Component>
      */
     protected function gatewaySchema(): array
     {
@@ -633,7 +639,7 @@ abstract class PaymentSettingsPage extends Page
     }
 
     /**
-     * @return array<\Filament\Schemas\Components\Component>
+     * @return array<Component>
      */
     protected function paymentConfigurationSchema(): array
     {
@@ -700,7 +706,7 @@ abstract class PaymentSettingsPage extends Page
     }
 
     /**
-     * @return array<\Filament\Schemas\Components\Component>
+     * @return array<Component>
      */
     protected function advancedSchema(): array
     {
@@ -752,7 +758,7 @@ abstract class PaymentSettingsPage extends Page
     }
 
     /**
-     * @param array<string, mixed> $data
+     * @param  array<string, mixed>  $data
      */
     protected function saveBankSettings(array $data): void
     {
@@ -776,7 +782,7 @@ abstract class PaymentSettingsPage extends Page
     }
 
     /**
-     * @param array<string, mixed> $data
+     * @param  array<string, mixed>  $data
      */
     protected function saveGatewaySettings(array $data): void
     {
@@ -844,7 +850,7 @@ abstract class PaymentSettingsPage extends Page
     }
 
     /**
-     * @param array<string, mixed> $data
+     * @param  array<string, mixed>  $data
      */
     protected function saveConfigurationSettings(array $data): void
     {
@@ -865,7 +871,7 @@ abstract class PaymentSettingsPage extends Page
     }
 
     /**
-     * @param array<string, mixed> $data
+     * @param  array<string, mixed>  $data
      */
     protected function saveAdvancedSettings(array $data): void
     {
@@ -927,7 +933,7 @@ abstract class PaymentSettingsPage extends Page
         if ($errors !== []) {
             Notification::make()
                 ->title('Missing credentials')
-                ->body('Missing fields: ' . implode(', ', $errors))
+                ->body('Missing fields: '.implode(', ', $errors))
                 ->danger()
                 ->send();
 
@@ -936,7 +942,7 @@ abstract class PaymentSettingsPage extends Page
 
         Notification::make()
             ->title('Credentials validated')
-            ->body(Str::title($gateway) . ' credentials look complete.')
+            ->body(Str::title($gateway).' credentials look complete.')
             ->success()
             ->send();
     }

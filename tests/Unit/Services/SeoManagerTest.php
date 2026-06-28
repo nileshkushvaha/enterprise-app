@@ -8,8 +8,6 @@ use App\Content\SEO\SeoManager;
 use App\Models\Page;
 use App\Models\Post;
 use App\Models\User;
-use App\Settings\GeneralSettings;
-use App\Settings\SeoSettings;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -30,12 +28,12 @@ class SeoManagerTest extends TestCase
     public function test_page_metadata_uses_explicit_meta_fields(): void
     {
         $page = Page::factory()->create([
-            'title'            => 'About Us',
-            'meta_title'       => 'Custom Title',
+            'title' => 'About Us',
+            'meta_title' => 'Custom Title',
             'meta_description' => 'Custom Desc',
-            'meta_keywords'    => 'foo, bar',
+            'meta_keywords' => 'foo, bar',
             // Pass without space — normaliseRobots adds ', ' after each ','
-            'robots'           => 'noindex,follow',
+            'robots' => 'noindex,follow',
         ]);
 
         $meta = $this->seo->getPageMetadata($page);
@@ -49,7 +47,7 @@ class SeoManagerTest extends TestCase
     public function test_page_metadata_falls_back_to_title_when_meta_title_empty(): void
     {
         $page = Page::factory()->create([
-            'title'      => 'Page Title',
+            'title' => 'Page Title',
             'meta_title' => null,
         ]);
 
@@ -81,7 +79,7 @@ class SeoManagerTest extends TestCase
     public function test_page_metadata_canonical_falls_back_to_route(): void
     {
         $page = Page::factory()->create([
-            'slug'          => 'about-us',
+            'slug' => 'about-us',
             'canonical_url' => null,
         ]);
 
@@ -135,10 +133,10 @@ class SeoManagerTest extends TestCase
     public function test_post_metadata_uses_explicit_meta_fields(): void
     {
         $post = Post::factory()->published()->create([
-            'meta_title'       => 'Post Meta Title',
+            'meta_title' => 'Post Meta Title',
             'meta_description' => 'Post Meta Desc',
             // normaliseRobots adds ', ' after ','; pass without space to get clean output
-            'robots'           => 'noindex,nofollow',
+            'robots' => 'noindex,nofollow',
         ]);
 
         $meta = $this->seo->getPostMetadata($post);
@@ -173,7 +171,7 @@ class SeoManagerTest extends TestCase
     public function test_post_structured_data_includes_author_name(): void
     {
         $author = User::factory()->create(['name' => 'Jane Doe']);
-        $post   = Post::factory()->published()->create(['author_id' => $author->id]);
+        $post = Post::factory()->published()->create(['author_id' => $author->id]);
         $post->load('author');
 
         $data = $this->seo->getPostStructuredData($post);

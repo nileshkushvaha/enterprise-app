@@ -31,4 +31,3 @@ class PostCategoryFactory extends Factory
         ]);
     }
 }
-

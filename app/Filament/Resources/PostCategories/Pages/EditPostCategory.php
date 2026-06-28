@@ -21,4 +21,3 @@ class EditPostCategory extends EditRecord
         ];
     }
 }
-

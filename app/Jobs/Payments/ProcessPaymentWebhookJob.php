@@ -18,7 +18,8 @@ class ProcessPaymentWebhookJob implements ShouldQueue
     use Queueable;
     use SerializesModels;
 
-    public int   $tries   = 5;
+    public int $tries = 5;
+
     public array $backoff = [30, 60, 120, 300, 600];
 
     public function __construct(
@@ -36,4 +37,3 @@ class ProcessPaymentWebhookJob implements ShouldQueue
         $processor->process($this->gateway, $this->payload, $this->headers);
     }
 }
-

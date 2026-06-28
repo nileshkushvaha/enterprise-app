@@ -6,6 +6,7 @@ use App\Content\Contracts\HasContentBlocks;
 use App\Content\Models\ContentBlock;
 use App\Enums\PageStatus;
 use App\Enums\PageVisibility;
+use Database\Factories\PostFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
@@ -20,12 +21,13 @@ use Spatie\Activitylog\Support\LogOptions;
 use Spatie\MediaLibrary\HasMedia;
 use Spatie\MediaLibrary\InteractsWithMedia;
 
-class Post extends Model implements HasMedia, HasContentBlocks
+class Post extends Model implements HasContentBlocks, HasMedia
 {
-    /** @use HasFactory<\Database\Factories\PostFactory> */
-    use HasFactory, HasUuids, SoftDeletes, LogsActivity, InteractsWithMedia;
+    /** @use HasFactory<PostFactory> */
+    use HasFactory, HasUuids, InteractsWithMedia, LogsActivity, SoftDeletes;
 
     protected $keyType = 'string';
+
     public $incrementing = false;
 
     protected $fillable = [

@@ -10,6 +10,7 @@ use App\Policies\CacheManagerPolicy;
 use App\Services\CacheManagerService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
+use Mockery\MockInterface;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
@@ -19,6 +20,7 @@ class CacheManagerPageTest extends TestCase
     use RefreshDatabase;
 
     private User $superAdmin;
+
     private User $regularUser;
 
     protected function setUp(): void
@@ -61,19 +63,19 @@ class CacheManagerPageTest extends TestCase
 
     // ── canAccess ──────────────────────────────────────────────────────────
 
-    public function test_canAccess_returns_false_for_regular_user(): void
+    public function test_can_access_returns_false_for_regular_user(): void
     {
         $this->actingAs($this->regularUser);
         $this->assertFalse(CacheManagerPage::canAccess());
     }
 
-    public function test_canAccess_returns_true_for_super_admin(): void
+    public function test_can_access_returns_true_for_super_admin(): void
     {
         $this->actingAs($this->superAdmin);
         $this->assertTrue(CacheManagerPage::canAccess());
     }
 
-    public function test_canAccess_returns_true_for_user_with_view_permission(): void
+    public function test_can_access_returns_true_for_user_with_view_permission(): void
     {
         $this->regularUser->givePermissionTo('cache_manager.view');
         $this->actingAs($this->regularUser);
@@ -83,18 +85,18 @@ class CacheManagerPageTest extends TestCase
 
     // ── Policy ─────────────────────────────────────────────────────────────
 
-    public function test_policy_viewPage_returns_false_without_permission(): void
+    public function test_policy_view_page_returns_false_without_permission(): void
     {
         $this->assertFalse(app(CacheManagerPolicy::class)->viewPage($this->regularUser));
     }
 
-    public function test_policy_viewPage_returns_true_with_permission(): void
+    public function test_policy_view_page_returns_true_with_permission(): void
     {
         $this->regularUser->givePermissionTo('cache_manager.view');
         $this->assertTrue(app(CacheManagerPolicy::class)->viewPage($this->regularUser));
     }
 
-    public function test_policy_viewPage_does_not_throw_when_permission_does_not_exist(): void
+    public function test_policy_view_page_does_not_throw_when_permission_does_not_exist(): void
     {
         // Delete the permission to simulate a fresh install where shield:generate hasn't run
         Permission::where('name', 'cache_manager.view')->delete();
@@ -105,7 +107,7 @@ class CacheManagerPageTest extends TestCase
         $this->assertFalse($result);
     }
 
-    public function test_policy_clearApplicationCache_does_not_throw_when_permission_missing(): void
+    public function test_policy_clear_application_cache_does_not_throw_when_permission_missing(): void
     {
         Permission::where('name', 'cache_manager.clear')->delete();
         app()['cache']->forget('spatie.permission.cache');
@@ -210,10 +212,10 @@ class CacheManagerPageTest extends TestCase
             $mock->shouldReceive('clearApplicationCache')
                 ->once()
                 ->andReturn([
-                    'success'   => false,
-                    'message'   => 'Command failed.',
-                    'output'    => 'Something went wrong.',
-                    'exitCode'  => 1,
+                    'success' => false,
+                    'message' => 'Command failed.',
+                    'output' => 'Something went wrong.',
+                    'exitCode' => 1,
                     'timestamp' => now()->toDateTimeString(),
                 ]);
 
@@ -235,10 +237,10 @@ class CacheManagerPageTest extends TestCase
             $mock->shouldReceive($method)
                 ->once()
                 ->andReturn([
-                    'success'   => true,
-                    'message'   => $successMessage,
-                    'output'    => $successMessage,
-                    'exitCode'  => 0,
+                    'success' => true,
+                    'message' => $successMessage,
+                    'output' => $successMessage,
+                    'exitCode' => 0,
                     'timestamp' => now()->toDateTimeString(),
                 ]);
 
@@ -246,7 +248,7 @@ class CacheManagerPageTest extends TestCase
         });
     }
 
-    private function stubInfoMethods(\Mockery\MockInterface $mock): void
+    private function stubInfoMethods(MockInterface $mock): void
     {
         $mock->shouldReceive('getCacheDriver')->andReturn('array')->byDefault();
         $mock->shouldReceive('getCacheStore')->andReturn('Array (in-memory)')->byDefault();

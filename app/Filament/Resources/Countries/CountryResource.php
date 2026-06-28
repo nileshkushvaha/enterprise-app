@@ -45,10 +45,10 @@ class CountryResource extends Resource
     public static function getPages(): array
     {
         return [
-            'index'  => ListCountries::route('/'),
+            'index' => ListCountries::route('/'),
             'create' => CreateCountry::route('/create'),
-            'view'   => ViewCountry::route('/{record}'),
-            'edit'   => EditCountry::route('/{record}/edit'),
+            'view' => ViewCountry::route('/{record}'),
+            'edit' => EditCountry::route('/{record}/edit'),
         ];
     }
 }

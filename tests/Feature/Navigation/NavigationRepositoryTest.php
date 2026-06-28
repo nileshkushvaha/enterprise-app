@@ -27,9 +27,9 @@ class NavigationRepositoryTest extends TestCase
     private function publishedMenu(array $attrs = []): NavigationMenu
     {
         return NavigationMenu::factory()->create(array_merge([
-            'status'   => NavigationStatus::Published->value,
+            'status' => NavigationStatus::Published->value,
             'location' => NavigationLocation::Header->value,
-            'locale'   => null,
+            'locale' => null,
         ], $attrs));
     }
 
@@ -48,7 +48,7 @@ class NavigationRepositoryTest extends TestCase
     public function test_find_by_location_returns_null_for_draft(): void
     {
         NavigationMenu::factory()->create([
-            'status'   => NavigationStatus::Draft->value,
+            'status' => NavigationStatus::Draft->value,
             'location' => NavigationLocation::Header->value,
         ]);
 
@@ -69,7 +69,7 @@ class NavigationRepositoryTest extends TestCase
         $menu = $this->publishedMenu();
         NavigationItem::factory()->create([
             'navigation_id' => $menu->id,
-            'is_active'     => true,
+            'is_active' => true,
         ]);
 
         $found = $this->repository->findByLocation(NavigationLocation::Header);
@@ -123,7 +123,7 @@ class NavigationRepositoryTest extends TestCase
     public function test_find_by_slug_returns_null_for_draft(): void
     {
         NavigationMenu::factory()->create([
-            'slug'   => 'hidden',
+            'slug' => 'hidden',
             'status' => NavigationStatus::Draft->value,
         ]);
 

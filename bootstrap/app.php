@@ -1,5 +1,8 @@
 <?php
 
+use App\Http\Middleware\EnsureAccountIsActive;
+use App\Http\Middleware\TrackUserSession;
+use App\Providers\EventServiceProvider;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -15,14 +18,14 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withEvents(false)
     ->withProviders([
-        App\Providers\EventServiceProvider::class,
+        EventServiceProvider::class,
     ])
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->redirectGuestsTo(fn () => route('auth.login'));
 
         $middleware->alias([
-            'account.active'      => App\Http\Middleware\EnsureAccountIsActive::class,
-            'session.track'       => App\Http\Middleware\TrackUserSession::class,
+            'account.active' => EnsureAccountIsActive::class,
+            'session.track' => TrackUserSession::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

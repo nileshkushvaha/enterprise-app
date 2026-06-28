@@ -8,11 +8,11 @@ use App\Content\Contracts\HasContentBlocks;
 use App\Content\SEO\SeoManager;
 use App\Models\Page;
 use App\Models\Post;
-use Illuminate\Support\Facades\Storage;
 use App\Services\BlockRenderer;
 use App\Settings\GeneralSettings;
 use App\Settings\SeoSettings;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * Unified content renderer.
@@ -119,7 +119,7 @@ class ContentRenderer
             fn () => $this->assembleCombinedContent($owner)
         );
 
-        $seo        = $this->resolveSeo($owner);
+        $seo = $this->resolveSeo($owner);
         $structured = $this->resolveStructuredData($owner);
 
         return $this->applyLayout($combined, $owner, $seo, $structured);
@@ -140,7 +140,7 @@ class ContentRenderer
                 ->whereIn('position', ['after_content', null, ''])
         );
 
-        return $beforeHtml . $richHtml . $afterHtml;
+        return $beforeHtml.$richHtml.$afterHtml;
     }
 
     private function renderRichContent(HasContentBlocks $owner): string
@@ -151,7 +151,7 @@ class ContentRenderer
             return '';
         }
 
-        return '<section class="py-12"><div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8"><div class="cms-content">' . $content . '</div></div></section>';
+        return '<section class="py-12"><div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8"><div class="cms-content">'.$content.'</div></div></section>';
     }
 
     private function renderBlocks(Collection $blocks): string
@@ -181,19 +181,19 @@ class ContentRenderer
     private function applyLayout(string $content, object $contentModel, array $seo, array $structuredData): string
     {
         $layoutName = $contentModel->template ?? 'default';
-        $layout     = match ($layoutName) {
+        $layout = match ($layoutName) {
             'landing' => 'layouts.landing',
-            'blank'   => 'layouts.blank',
-            default   => 'layouts.page',
+            'blank' => 'layouts.blank',
+            default => 'layouts.page',
         };
 
         return view($layout, [
-            'content'         => $content,
-            'page'            => $contentModel,
-            'post'            => $contentModel instanceof Post ? $contentModel : null,
-            'seo'             => $seo,
+            'content' => $content,
+            'page' => $contentModel,
+            'post' => $contentModel instanceof Post ? $contentModel : null,
+            'seo' => $seo,
             'structured_data' => $structuredData,
-            'site'            => $this->getSiteMetadata(),
+            'site' => $this->getSiteMetadata(),
         ])->render();
     }
 
@@ -202,7 +202,7 @@ class ContentRenderer
         return match (true) {
             $owner instanceof Post => $this->seoManager->getPostMetadata($owner),
             $owner instanceof Page => $this->seoManager->getPageMetadata($owner),
-            default                => [],
+            default => [],
         };
     }
 
@@ -211,14 +211,14 @@ class ContentRenderer
         return match (true) {
             $owner instanceof Post => $this->seoManager->getPostStructuredData($owner),
             $owner instanceof Page => $this->seoManager->getPageStructuredData($owner),
-            default                => [],
+            default => [],
         };
     }
 
     private function contentCacheKey(HasContentBlocks $owner): string
     {
         $type = class_basename($owner);
-        $id   = method_exists($owner, 'getKey') ? $owner->getKey() : spl_object_id($owner);
+        $id = method_exists($owner, 'getKey') ? $owner->getKey() : spl_object_id($owner);
 
         return strtolower("{$type}-render:{$id}");
     }
@@ -231,6 +231,7 @@ class ContentRenderer
         if (str_starts_with($path, 'http') || str_starts_with($path, '//')) {
             return $path;
         }
+
         return Storage::disk('public')->url($path);
     }
 
@@ -258,27 +259,27 @@ class ContentRenderer
 
         if (! $general) {
             return [
-                'app_name'                           => config('app.name'),
-                'logo'                               => null,
-                'favicon'                            => null,
-                'footer_text'                        => null,
-                'footer_copyright'                   => null,
-                'google_analytics_id'                => null,
-                'google_tag_manager_id'              => null,
-                'facebook_pixel_id'                  => null,
+                'app_name' => config('app.name'),
+                'logo' => null,
+                'favicon' => null,
+                'footer_text' => null,
+                'footer_copyright' => null,
+                'google_analytics_id' => null,
+                'google_tag_manager_id' => null,
+                'facebook_pixel_id' => null,
                 'google_search_console_verification' => null,
             ];
         }
 
         return [
-            'app_name'                           => $general->app_name,
-            'logo'                               => $this->toStorageUrl($general->logo),
-            'favicon'                            => $this->toStorageUrl($general->favicon),
-            'footer_text'                        => $general->footer_text,
-            'footer_copyright'                   => $general->footer_copyright,
-            'google_analytics_id'                => $this->seoSettings->google_analytics_id,
-            'google_tag_manager_id'              => $this->seoSettings->google_tag_manager_id,
-            'facebook_pixel_id'                  => $this->seoSettings->facebook_pixel_id,
+            'app_name' => $general->app_name,
+            'logo' => $this->toStorageUrl($general->logo),
+            'favicon' => $this->toStorageUrl($general->favicon),
+            'footer_text' => $general->footer_text,
+            'footer_copyright' => $general->footer_copyright,
+            'google_analytics_id' => $this->seoSettings->google_analytics_id,
+            'google_tag_manager_id' => $this->seoSettings->google_tag_manager_id,
+            'facebook_pixel_id' => $this->seoSettings->facebook_pixel_id,
             'google_search_console_verification' => $this->seoSettings->google_search_console_verification,
         ];
     }

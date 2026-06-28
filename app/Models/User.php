@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Models;
 
-use Database\Factories\UserFactory;
+use App\Notifications\Auth\AccountLockedNotification;
+use App\Notifications\Auth\VerifyEmailNotification;
+use App\Settings\LoginSecuritySettings;
 use Filament\Models\Contracts\FilamentUser;
 use Filament\Panel;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
@@ -23,19 +25,20 @@ class User extends Authenticatable implements FilamentUser, MustVerifyEmail
     use HasFactory, HasRoles, LogsActivity, Notifiable;
 
     // ── Status constants ────────────────────────────────────────────
-    public const STATUS_PENDING     = 'pending_verification';
-    public const STATUS_ACTIVE      = 'active';
-    public const STATUS_INACTIVE    = 'inactive';
-    public const STATUS_BLOCKED     = 'blocked';
-    public const STATUS_SUSPENDED   = 'suspended';
+    public const STATUS_PENDING = 'pending_verification';
 
-    public const MAX_FAILED_ATTEMPTS   = 5;
-    public const LOCK_DURATION_MINUTES = 30;
-    public const UNLOCK_TOKEN_MINUTES  = 60;
+    public const STATUS_ACTIVE = 'active';
 
-    public const DEFAULT_ROLE = 'student';
+    public const STATUS_INACTIVE = 'inactive';
 
-    // ── Recovery codes count ────────────────────────────────────────
+    public const STATUS_BLOCKED = 'blocked';
+
+    public const STATUS_SUSPENDED = 'suspended';
+
+    // Unlock email token TTL — no corresponding settings field; keep as constant
+    public const UNLOCK_TOKEN_MINUTES = 60;
+
+    // Recovery codes — 2FA is future scope; keep as constant until TwoFactorSettings exists
     public const RECOVERY_CODES_COUNT = 8;
 
     // ────────────────────────────────────────────────────────────────
@@ -75,15 +78,15 @@ class User extends Authenticatable implements FilamentUser, MustVerifyEmail
     protected function casts(): array
     {
         return [
-            'email_verified_at'        => 'datetime',
-            'locked_until'             => 'datetime',
-            'unlock_token_expires_at'  => 'datetime',
-            'last_login_at'            => 'datetime',
-            'password_changed_at'      => 'datetime',
-            'two_factor_confirmed_at'  => 'datetime',
-            'login_alerts_enabled'     => 'boolean',
-            'new_device_alerts_enabled'=> 'boolean',
-            'password'                 => 'hashed',
+            'email_verified_at' => 'datetime',
+            'locked_until' => 'datetime',
+            'unlock_token_expires_at' => 'datetime',
+            'last_login_at' => 'datetime',
+            'password_changed_at' => 'datetime',
+            'two_factor_confirmed_at' => 'datetime',
+            'login_alerts_enabled' => 'boolean',
+            'new_device_alerts_enabled' => 'boolean',
+            'password' => 'hashed',
         ];
     }
 
@@ -108,7 +111,7 @@ class User extends Authenticatable implements FilamentUser, MustVerifyEmail
 
     public function getFullNameAttribute(): string
     {
-        return trim(($this->first_name ?? '') . ' ' . ($this->last_name ?? ''))
+        return trim(($this->first_name ?? '').' '.($this->last_name ?? ''))
             ?: $this->name;
     }
 
@@ -139,29 +142,30 @@ class User extends Authenticatable implements FilamentUser, MustVerifyEmail
     public function recordSuccessfulLogin(string $ip, string $userAgent): void
     {
         $this->updateQuietly([
-            'failed_login_count'    => 0,
-            'locked_until'          => null,
-            'unlock_token'          => null,
+            'failed_login_count' => 0,
+            'locked_until' => null,
+            'unlock_token' => null,
             'unlock_token_expires_at' => null,
-            'last_login_at'         => now(),
-            'last_login_ip'         => $ip,
+            'last_login_at' => now(),
+            'last_login_ip' => $ip,
             'last_login_user_agent' => $userAgent,
         ]);
     }
 
     public function recordFailedLogin(): void
     {
+        $settings = app(LoginSecuritySettings::class);
         $newCount = $this->failed_login_count + 1;
-        $data     = ['failed_login_count' => $newCount];
+        $data = ['failed_login_count' => $newCount];
 
-        if ($newCount >= self::MAX_FAILED_ATTEMPTS) {
+        if ($newCount >= $settings->max_failed_attempts) {
             $token = Str::random(64);
-            $data['locked_until']            = now()->addMinutes(self::LOCK_DURATION_MINUTES);
-            $data['unlock_token']            = hash('sha256', $token);
+            $data['locked_until'] = now()->addMinutes($settings->lockout_duration);
+            $data['unlock_token'] = hash('sha256', $token);
             $data['unlock_token_expires_at'] = now()->addMinutes(self::UNLOCK_TOKEN_MINUTES);
             $this->updateQuietly($data);
-            // Fire unlock notification after saving token
-            $this->notify(new \App\Notifications\Auth\AccountLockedNotification($token));
+            $this->notify(new AccountLockedNotification($token));
+
             return;
         }
 
@@ -174,18 +178,19 @@ class User extends Authenticatable implements FilamentUser, MustVerifyEmail
     {
         $plain = Str::random(64);
         $this->updateQuietly([
-            'unlock_token'            => hash('sha256', $plain),
+            'unlock_token' => hash('sha256', $plain),
             'unlock_token_expires_at' => now()->addMinutes(self::UNLOCK_TOKEN_MINUTES),
         ]);
+
         return $plain;
     }
 
     public function unlock(): void
     {
         $this->updateQuietly([
-            'failed_login_count'      => 0,
-            'locked_until'            => null,
-            'unlock_token'            => null,
+            'failed_login_count' => 0,
+            'locked_until' => null,
+            'unlock_token' => null,
             'unlock_token_expires_at' => null,
         ]);
     }
@@ -210,6 +215,7 @@ class User extends Authenticatable implements FilamentUser, MustVerifyEmail
         if (! $this->two_factor_recovery_codes) {
             return [];
         }
+
         return json_decode(decrypt($this->two_factor_recovery_codes), true) ?? [];
     }
 
@@ -217,14 +223,14 @@ class User extends Authenticatable implements FilamentUser, MustVerifyEmail
     public function consumeRecoveryCode(string $code): bool
     {
         $codes = $this->twoFactorRecoveryCodes();
-        $key   = array_search(trim($code), $codes, true);
+        $key = array_search(trim($code), $codes, true);
 
         if ($key === false) {
             return false;
         }
 
         // Replace with a fresh code
-        $codes[$key] = Str::random(10) . '-' . Str::random(10);
+        $codes[$key] = Str::random(10).'-'.Str::random(10);
         $this->updateQuietly([
             'two_factor_recovery_codes' => encrypt(json_encode(array_values($codes))),
         ]);
@@ -236,7 +242,7 @@ class User extends Authenticatable implements FilamentUser, MustVerifyEmail
 
     public function sendEmailVerificationNotification(): void
     {
-        $this->notify(new \App\Notifications\Auth\VerifyEmailNotification);
+        $this->notify(new VerifyEmailNotification);
     }
 
     // ── Filament ─────────────────────────────────────────────────────

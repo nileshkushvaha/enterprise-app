@@ -46,4 +46,3 @@ final class ContactFormSubmissionNotification extends Notification implements Sh
             ]);
     }
 }
-

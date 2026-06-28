@@ -38,7 +38,7 @@ class NavigationNodeTest extends TestCase
 
     public function test_has_children_returns_true_when_children_present(): void
     {
-        $child  = $this->makeNode(['id' => 'child-1']);
+        $child = $this->makeNode(['id' => 'child-1']);
         $parent = $this->makeNode(['children' => [$child]]);
 
         $this->assertTrue($parent->hasChildren());
@@ -53,9 +53,9 @@ class NavigationNodeTest extends TestCase
 
     public function test_is_leaf_inverse_of_has_children(): void
     {
-        $child  = $this->makeNode(['id' => 'child-1']);
+        $child = $this->makeNode(['id' => 'child-1']);
         $parent = $this->makeNode(['children' => [$child]]);
-        $leaf   = $this->makeNode();
+        $leaf = $this->makeNode();
 
         $this->assertFalse($parent->isLeaf());
         $this->assertTrue($leaf->isLeaf());
@@ -64,7 +64,7 @@ class NavigationNodeTest extends TestCase
     public function test_with_active_returns_new_instance(): void
     {
         $original = $this->makeNode(['isActive' => false]);
-        $active   = $original->withActive(true, false);
+        $active = $original->withActive(true, false);
 
         $this->assertNotSame($original, $active);
         $this->assertFalse($original->isActive);
@@ -74,10 +74,10 @@ class NavigationNodeTest extends TestCase
     public function test_with_active_preserves_all_other_properties(): void
     {
         $original = $this->makeNode([
-            'id'       => 'node-x',
-            'label'    => 'About',
+            'id' => 'node-x',
+            'label' => 'About',
             'cssClass' => 'nav-item',
-            'depth'    => 2,
+            'depth' => 2,
         ]);
 
         $modified = $original->withActive(true, true);
@@ -93,8 +93,8 @@ class NavigationNodeTest extends TestCase
     public function test_with_children_returns_new_instance(): void
     {
         $original = $this->makeNode();
-        $child    = $this->makeNode(['id' => 'c1']);
-        $updated  = $original->withChildren([$child]);
+        $child = $this->makeNode(['id' => 'c1']);
+        $updated = $original->withChildren([$child]);
 
         $this->assertNotSame($original, $updated);
         $this->assertCount(0, $original->children);
@@ -104,7 +104,7 @@ class NavigationNodeTest extends TestCase
     public function test_with_children_preserves_other_properties(): void
     {
         $original = $this->makeNode(['label' => 'Services', 'depth' => 1]);
-        $updated  = $original->withChildren([$this->makeNode(['id' => 'sub'])]);
+        $updated = $original->withChildren([$this->makeNode(['id' => 'sub'])]);
 
         $this->assertSame('Services', $updated->label);
         $this->assertSame(1, $updated->depth);
@@ -113,7 +113,7 @@ class NavigationNodeTest extends TestCase
     public function test_properties_are_readonly(): void
     {
         $node = $this->makeNode();
-        $ref  = new \ReflectionProperty($node, 'id');
+        $ref = new \ReflectionProperty($node, 'id');
 
         $this->assertTrue($ref->isReadOnly());
     }

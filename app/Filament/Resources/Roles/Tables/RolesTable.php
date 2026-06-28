@@ -11,6 +11,8 @@ use Filament\Actions\EditAction;
 use Filament\Actions\ExportBulkAction;
 use Filament\Actions\ReplicateAction;
 use Filament\Actions\ViewAction;
+use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Support\Enums\FontWeight;
 use Filament\Support\Icons\Heroicon;
@@ -19,6 +21,7 @@ use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Str;
 use Spatie\Permission\Models\Role;
 
 class RolesTable
@@ -32,7 +35,7 @@ class RolesTable
                     ->weight(FontWeight::Medium)
                     ->searchable()
                     ->sortable()
-                    ->formatStateUsing(fn (string $state): string => \Illuminate\Support\Str::headline($state)),
+                    ->formatStateUsing(fn (string $state): string => Str::headline($state)),
 
                 TextColumn::make('guard_name')
                     ->label('Guard')
@@ -63,9 +66,9 @@ class RolesTable
                     ->label('Status')
                     ->badge()
                     ->color(fn (string $state): string => match ($state) {
-                        'active'   => 'success',
+                        'active' => 'success',
                         'inactive' => 'danger',
-                        default    => 'gray',
+                        default => 'gray',
                     })
                     ->sortable(),
 
@@ -86,20 +89,20 @@ class RolesTable
                 SelectFilter::make('status')
                     ->label('Status')
                     ->options([
-                        'active'   => 'Active',
+                        'active' => 'Active',
                         'inactive' => 'Inactive',
                     ]),
 
                 Filter::make('created_at')
                     ->label('Created Date')
                     ->form([
-                        \Filament\Forms\Components\DatePicker::make('from')->label('From'),
-                        \Filament\Forms\Components\DatePicker::make('to')->label('To'),
+                        DatePicker::make('from')->label('From'),
+                        DatePicker::make('to')->label('To'),
                     ])
                     ->query(function (Builder $query, array $data): Builder {
                         return $query
                             ->when($data['from'], fn ($q, $d) => $q->whereDate('created_at', '>=', $d))
-                            ->when($data['to'],   fn ($q, $d) => $q->whereDate('created_at', '<=', $d));
+                            ->when($data['to'], fn ($q, $d) => $q->whereDate('created_at', '<=', $d));
                     }),
             ])
 
@@ -112,16 +115,16 @@ class RolesTable
                     ->label('Duplicate')
                     ->icon('heroicon-o-document-duplicate')
                     ->form([
-                        \Filament\Forms\Components\TextInput::make('name')
+                        TextInput::make('name')
                             ->label('New Role Name')
                             ->required()
                             ->maxLength(100)
                             ->unique(table: 'roles', column: 'name'),
                     ])
                     ->beforeReplicaSaved(function (Role $record, array $data): void {
-                        $record->name        = $data['name'];
+                        $record->name = $data['name'];
                         $record->description = $record->description
-                            ? 'Copy of: ' . $record->description
+                            ? 'Copy of: '.$record->description
                             : null;
                         $record->status = 'inactive'; // duplicates start inactive
                     })

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\MassPrunable;
 use Illuminate\Database\Eloquent\Model;
 
@@ -21,11 +22,11 @@ class SchedulerHistory extends Model
     ];
 
     protected $casts = [
-        'ran_at'      => 'datetime',
+        'ran_at' => 'datetime',
         'duration_ms' => 'integer',
     ];
 
-    public function prunable(): \Illuminate\Database\Eloquent\Builder
+    public function prunable(): Builder
     {
         return static::where('ran_at', '<', now()->subDays(30));
     }
@@ -50,6 +51,6 @@ class SchedulerHistory extends Model
             return "{$this->duration_ms}ms";
         }
 
-        return round($this->duration_ms / 1000, 2) . 's';
+        return round($this->duration_ms / 1000, 2).'s';
     }
 }

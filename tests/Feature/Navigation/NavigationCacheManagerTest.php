@@ -42,7 +42,7 @@ class NavigationCacheManagerTest extends TestCase
     private function makeMenu(array $attrs = []): NavigationMenu
     {
         return NavigationMenu::factory()->create(array_merge([
-            'status'   => NavigationStatus::Published->value,
+            'status' => NavigationStatus::Published->value,
             'location' => NavigationLocation::Header->value,
         ], $attrs));
     }
@@ -57,7 +57,7 @@ class NavigationCacheManagerTest extends TestCase
     public function test_put_then_get_returns_tree(): void
     {
         $tree = $this->makeTree();
-        $key  = 'nav:tree:header:my-menu:default';
+        $key = 'nav:tree:header:my-menu:default';
 
         $this->cache->put($key, $tree, 3600);
 
@@ -70,7 +70,7 @@ class NavigationCacheManagerTest extends TestCase
     public function test_get_returns_null_after_ttl_expiry(): void
     {
         $tree = $this->makeTree();
-        $key  = 'nav:tree:test-ttl';
+        $key = 'nav:tree:test-ttl';
 
         $this->cache->put($key, $tree, 1);
 
@@ -95,7 +95,7 @@ class NavigationCacheManagerTest extends TestCase
         $menu = $this->makeMenu(['slug' => 'header']);
 
         $keyDefault = $this->cache->cacheKey($menu, null);
-        $keyFr      = $this->cache->cacheKey($menu, 'fr');
+        $keyFr = $this->cache->cacheKey($menu, 'fr');
 
         $this->assertNotSame($keyDefault, $keyFr);
     }
@@ -103,7 +103,7 @@ class NavigationCacheManagerTest extends TestCase
     public function test_cache_key_contains_location_slug_locale(): void
     {
         $menu = $this->makeMenu(['slug' => 'header', 'location' => NavigationLocation::Header->value]);
-        $key  = $this->cache->cacheKey($menu, 'en');
+        $key = $this->cache->cacheKey($menu, 'en');
 
         $this->assertStringContainsString('header', $key);
         $this->assertStringContainsString('en', $key);
@@ -114,7 +114,7 @@ class NavigationCacheManagerTest extends TestCase
     public function test_invalidate_for_menu_removes_its_cached_keys(): void
     {
         $tree = $this->makeTree('menu-abc');
-        $key  = 'nav:tree:header:my-nav:default';
+        $key = 'nav:tree:header:my-nav:default';
 
         $this->cache->put($key, $tree, 3600);
         $this->assertNotNull($this->cache->get($key));
@@ -146,7 +146,7 @@ class NavigationCacheManagerTest extends TestCase
     public function test_invalidate_for_location_removes_matching_keys(): void
     {
         $tree = $this->makeTree('menu-1', NavigationLocation::Header);
-        $key  = 'nav:tree:header:my-nav:default';
+        $key = 'nav:tree:header:my-nav:default';
 
         $this->cache->put($key, $tree, 3600);
         $this->cache->invalidateForLocation(NavigationLocation::Header);

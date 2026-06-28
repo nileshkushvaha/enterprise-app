@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
-use App\Content\Models\ContentBlock;
 use App\Content\Rendering\ContentRenderer;
 use App\Enums\BlockType;
 use App\Enums\PageStatus;
@@ -24,7 +23,7 @@ class CacheInvalidationTest extends TestCase
     public function test_adding_block_to_page_invalidates_render_cache(): void
     {
         $page = Page::factory()->create([
-            'status'     => PageStatus::Published,
+            'status' => PageStatus::Published,
             'visibility' => PageVisibility::Public,
         ]);
 
@@ -38,10 +37,10 @@ class CacheInvalidationTest extends TestCase
         // Adding a block triggers ContentBlockObserver → invalidateCache().
         $page->blocks()->create([
             'block_type' => BlockType::Hero,
-            'content'    => ['title' => 'New Block'],
-            'settings'   => [],
+            'content' => ['title' => 'New Block'],
+            'settings' => [],
             'sort_order' => 0,
-            'is_active'  => true,
+            'is_active' => true,
         ]);
 
         $this->assertFalse(Cache::has($cacheKey));
@@ -49,13 +48,13 @@ class CacheInvalidationTest extends TestCase
 
     public function test_updating_block_invalidates_page_render_cache(): void
     {
-        $page  = Page::factory()->create(['status' => 'published', 'visibility' => 'public']);
+        $page = Page::factory()->create(['status' => 'published', 'visibility' => 'public']);
         $block = $page->blocks()->create([
             'block_type' => BlockType::Hero,
-            'content'    => ['title' => 'Old'],
-            'settings'   => [],
+            'content' => ['title' => 'Old'],
+            'settings' => [],
             'sort_order' => 0,
-            'is_active'  => true,
+            'is_active' => true,
         ]);
 
         // Prime cache.
@@ -71,13 +70,13 @@ class CacheInvalidationTest extends TestCase
 
     public function test_deleting_block_invalidates_page_render_cache(): void
     {
-        $page  = Page::factory()->create(['status' => 'published', 'visibility' => 'public']);
+        $page = Page::factory()->create(['status' => 'published', 'visibility' => 'public']);
         $block = $page->blocks()->create([
             'block_type' => BlockType::CTA,
-            'content'    => [],
-            'settings'   => [],
+            'content' => [],
+            'settings' => [],
             'sort_order' => 0,
-            'is_active'  => true,
+            'is_active' => true,
         ]);
 
         $this->get(route('page.show', $page->slug))->assertOk();
@@ -98,10 +97,10 @@ class CacheInvalidationTest extends TestCase
         $longText = implode(' ', array_fill(0, 500, 'word'));
         $post->blocks()->create([
             'block_type' => BlockType::RichText,
-            'content'    => ['text' => $longText],
-            'settings'   => [],
+            'content' => ['text' => $longText],
+            'settings' => [],
             'sort_order' => 0,
-            'is_active'  => true,
+            'is_active' => true,
         ]);
 
         // 500 words / 200 wpm = 2.5 → ceil = 3
@@ -110,15 +109,15 @@ class CacheInvalidationTest extends TestCase
 
     public function test_inactive_blocks_excluded_from_reading_time(): void
     {
-        $post     = Post::factory()->published()->create(['reading_time' => 1]);
+        $post = Post::factory()->published()->create(['reading_time' => 1]);
         $longText = implode(' ', array_fill(0, 1000, 'word'));
 
         $post->blocks()->create([
             'block_type' => BlockType::RichText,
-            'content'    => ['text' => $longText],
-            'settings'   => [],
+            'content' => ['text' => $longText],
+            'settings' => [],
             'sort_order' => 0,
-            'is_active'  => false,  // inactive — must be excluded
+            'is_active' => false,  // inactive — must be excluded
         ]);
 
         // Reading time should stay at 1 because the block is inactive.
@@ -132,10 +131,10 @@ class CacheInvalidationTest extends TestCase
         $page = Page::factory()->create(['status' => 'published', 'visibility' => 'public']);
         $block = $page->blocks()->create([
             'block_type' => BlockType::Hero,
-            'content'    => ['title' => 'Version 1'],
-            'settings'   => [],
+            'content' => ['title' => 'Version 1'],
+            'settings' => [],
             'sort_order' => 0,
-            'is_active'  => true,
+            'is_active' => true,
         ]);
 
         // First render — caches Version 1.
@@ -156,7 +155,7 @@ class CacheInvalidationTest extends TestCase
 
     public function test_invalidate_content_cache_clears_key(): void
     {
-        $page     = Page::factory()->create(['status' => 'published', 'visibility' => 'public']);
+        $page = Page::factory()->create(['status' => 'published', 'visibility' => 'public']);
         $renderer = app(ContentRenderer::class);
 
         // Prime the cache.
@@ -171,15 +170,15 @@ class CacheInvalidationTest extends TestCase
 
     public function test_render_preview_bypasses_cache(): void
     {
-        $page  = Page::factory()->create(['status' => 'published', 'visibility' => 'public']);
+        $page = Page::factory()->create(['status' => 'published', 'visibility' => 'public']);
         $renderer = app(ContentRenderer::class);
 
         $page->blocks()->create([
             'block_type' => BlockType::Hero,
-            'content'    => ['title' => 'Cached Version'],
-            'settings'   => [],
+            'content' => ['title' => 'Cached Version'],
+            'settings' => [],
             'sort_order' => 0,
-            'is_active'  => true,
+            'is_active' => true,
         ]);
 
         // Cache the "Cached Version".

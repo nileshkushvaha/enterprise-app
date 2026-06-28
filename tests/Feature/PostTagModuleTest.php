@@ -29,4 +29,3 @@ class PostTagModuleTest extends TestCase
         $this->assertNotEquals($first->slug, $second->slug);
     }
 }
-

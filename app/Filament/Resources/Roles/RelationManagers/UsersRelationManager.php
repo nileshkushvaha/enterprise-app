@@ -34,7 +34,7 @@ class UsersRelationManager extends RelationManager
                     ->label('')
                     ->circular()
                     ->defaultImageUrl(
-                        fn ($record) => 'https://ui-avatars.com/api/?name=' . urlencode($record->name) . '&color=ffffff&background=6366f1'
+                        fn ($record) => 'https://ui-avatars.com/api/?name='.urlencode($record->name).'&color=ffffff&background=6366f1'
                     )
                     ->size(36),
 
@@ -54,9 +54,9 @@ class UsersRelationManager extends RelationManager
                     ->label('Status')
                     ->badge()
                     ->color(fn (string $state): string => match ($state) {
-                        'active'   => 'success',
+                        'active' => 'success',
                         'inactive' => 'danger',
-                        default    => 'gray',
+                        default => 'gray',
                     }),
 
                 TextColumn::make('created_at')

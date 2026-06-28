@@ -30,9 +30,9 @@ class NavigationManagerTest extends TestCase
     private function publishedMenu(array $attrs = []): NavigationMenu
     {
         return NavigationMenu::factory()->create(array_merge([
-            'status'   => NavigationStatus::Published->value,
+            'status' => NavigationStatus::Published->value,
             'location' => NavigationLocation::Header->value,
-            'locale'   => null,
+            'locale' => null,
         ], $attrs));
     }
 
@@ -40,10 +40,10 @@ class NavigationManagerTest extends TestCase
     {
         return NavigationItem::factory()->create(array_merge([
             'navigation_id' => $menu->id,
-            'link_type'     => 'url',
-            'url'           => '/',
-            'is_active'     => true,
-            'visibility'    => NavigationVisibility::All->value,
+            'link_type' => 'url',
+            'url' => '/',
+            'is_active' => true,
+            'visibility' => NavigationVisibility::All->value,
         ], $attrs));
     }
 
@@ -61,7 +61,7 @@ class NavigationManagerTest extends TestCase
     public function test_for_location_returns_null_when_no_published_menu(): void
     {
         NavigationMenu::factory()->create([
-            'status'   => NavigationStatus::Draft->value,
+            'status' => NavigationStatus::Draft->value,
             'location' => NavigationLocation::Sidebar->value,
         ]);
 
@@ -130,7 +130,7 @@ class NavigationManagerTest extends TestCase
     {
         $this->publishedMenu();
 
-        $first  = $this->manager->forLocation(NavigationLocation::Header);
+        $first = $this->manager->forLocation(NavigationLocation::Header);
         $second = $this->manager->forLocation(NavigationLocation::Header);
 
         $this->assertSame($first->id, $second->id);
@@ -186,7 +186,7 @@ class NavigationManagerTest extends TestCase
     public function test_navigation_manager_is_only_public_entry_point(): void
     {
         // The helper delegates to NavigationManager
-        $fromHelper  = navigation('header');
+        $fromHelper = navigation('header');
         $fromManager = $this->manager->forLocation(NavigationLocation::Header);
 
         // Both null (no header menu) proves same path

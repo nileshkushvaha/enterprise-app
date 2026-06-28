@@ -18,9 +18,13 @@ use Illuminate\Contracts\Support\Htmlable;
 class PaymentConfigurationPage extends PaymentSettingsPage
 {
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedCog8Tooth;
+
     protected static ?string $navigationLabel = 'Payment Configuration';
+
     protected static string|\UnitEnum|null $navigationGroup = 'Payment';
+
     protected static ?int $navigationSort = 3;
+
     protected static ?string $slug = 'payment-settings/configuration';
 
     public static function getLabel(): string
@@ -33,7 +37,7 @@ class PaymentConfigurationPage extends PaymentSettingsPage
         return 'Payment Configuration Settings';
     }
 
-    public function getSubheading(): string|null
+    public function getSubheading(): ?string
     {
         return 'Control invoice numbering, tax, currency and payment defaults.';
     }

@@ -45,7 +45,7 @@ class ActiveDetectorTest extends TestCase
     private function makeNode(string $url, array $children = []): NavigationNode
     {
         return new NavigationNode(
-            id: 'n-' . sha1($url),
+            id: 'n-'.sha1($url),
             navigationId: 'tree-1',
             label: 'Item',
             link: new ResolvedLink($url, '_self', null, []),
@@ -71,7 +71,7 @@ class ActiveDetectorTest extends TestCase
     public function test_exact_url_match_marks_node_active(): void
     {
         $detector = $this->makeDetector('http://localhost/about');
-        $tree     = $this->makeTree([$this->makeNode('http://localhost/about')]);
+        $tree = $this->makeTree([$this->makeNode('http://localhost/about')]);
 
         $result = $detector->markActive($tree);
 
@@ -81,7 +81,7 @@ class ActiveDetectorTest extends TestCase
     public function test_non_matching_url_keeps_node_inactive(): void
     {
         $detector = $this->makeDetector('http://localhost/contact');
-        $tree     = $this->makeTree([$this->makeNode('http://localhost/about')]);
+        $tree = $this->makeTree([$this->makeNode('http://localhost/about')]);
 
         $result = $detector->markActive($tree);
 
@@ -91,7 +91,7 @@ class ActiveDetectorTest extends TestCase
     public function test_hash_url_never_matches(): void
     {
         $detector = $this->makeDetector('http://localhost/');
-        $tree     = $this->makeTree([$this->makeNode('#')]);
+        $tree = $this->makeTree([$this->makeNode('#')]);
 
         $result = $detector->markActive($tree);
 
@@ -101,7 +101,7 @@ class ActiveDetectorTest extends TestCase
     public function test_mailto_url_never_matches(): void
     {
         $detector = $this->makeDetector('http://localhost/');
-        $tree     = $this->makeTree([$this->makeNode('mailto:a@b.com')]);
+        $tree = $this->makeTree([$this->makeNode('mailto:a@b.com')]);
 
         $result = $detector->markActive($tree);
 
@@ -111,7 +111,7 @@ class ActiveDetectorTest extends TestCase
     public function test_tel_url_never_matches(): void
     {
         $detector = $this->makeDetector('http://localhost/');
-        $tree     = $this->makeTree([$this->makeNode('tel:+1234')]);
+        $tree = $this->makeTree([$this->makeNode('tel:+1234')]);
 
         $result = $detector->markActive($tree);
 
@@ -123,7 +123,7 @@ class ActiveDetectorTest extends TestCase
     public function test_trailing_slash_is_normalised(): void
     {
         $detector = $this->makeDetector('http://localhost/about/');
-        $tree     = $this->makeTree([$this->makeNode('http://localhost/about')]);
+        $tree = $this->makeTree([$this->makeNode('http://localhost/about')]);
 
         $result = $detector->markActive($tree);
 
@@ -136,9 +136,9 @@ class ActiveDetectorTest extends TestCase
     {
         $detector = $this->makeDetector('http://localhost/services/web');
 
-        $child  = $this->makeNode('http://localhost/services/web');
+        $child = $this->makeNode('http://localhost/services/web');
         $parent = $this->makeNode('http://localhost/services', [$child]);
-        $tree   = $this->makeTree([$parent]);
+        $tree = $this->makeTree([$parent]);
 
         $result = $detector->markActive($tree);
 
@@ -150,9 +150,9 @@ class ActiveDetectorTest extends TestCase
     {
         $detector = $this->makeDetector('http://localhost/contact');
 
-        $child  = $this->makeNode('http://localhost/services/web');
+        $child = $this->makeNode('http://localhost/services/web');
         $parent = $this->makeNode('http://localhost/services', [$child]);
-        $tree   = $this->makeTree([$parent]);
+        $tree = $this->makeTree([$parent]);
 
         $result = $detector->markActive($tree);
 
@@ -164,7 +164,7 @@ class ActiveDetectorTest extends TestCase
     public function test_mark_active_returns_new_tree_instance(): void
     {
         $detector = $this->makeDetector('http://localhost/');
-        $tree     = $this->makeTree([]);
+        $tree = $this->makeTree([]);
 
         $result = $detector->markActive($tree);
 
@@ -174,8 +174,8 @@ class ActiveDetectorTest extends TestCase
     public function test_original_tree_nodes_are_not_mutated(): void
     {
         $detector = $this->makeDetector('http://localhost/about');
-        $node     = $this->makeNode('http://localhost/about');
-        $tree     = $this->makeTree([$node]);
+        $node = $this->makeNode('http://localhost/about');
+        $tree = $this->makeTree([$node]);
 
         $detector->markActive($tree);
 

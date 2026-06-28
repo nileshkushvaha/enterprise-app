@@ -38,4 +38,3 @@ class PostCategoryModuleTest extends TestCase
         $this->assertNotEquals($parent->slug, $child->slug);
     }
 }
-

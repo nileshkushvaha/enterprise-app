@@ -72,4 +72,3 @@ class PostCategoryResource extends Resource
         return auth()->user()?->can('create', PostCategory::class) ?? false;
     }
 }
-

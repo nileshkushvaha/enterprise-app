@@ -36,7 +36,7 @@ class PagePermissionSeeder extends Seeder
         $adminRole = Role::where('name', 'admin')->first();
         if ($adminRole) {
             $adminRole->givePermissionTo($permissions);
-            $this->command->info("✓ Admin role granted page permissions");
+            $this->command->info('✓ Admin role granted page permissions');
         }
 
         $editorRole = Role::firstOrCreate(
@@ -49,9 +49,8 @@ class PagePermissionSeeder extends Seeder
             'pages.update',
             'pages.publish',
         ]);
-        $this->command->info("✓ Editor role created with page permissions");
+        $this->command->info('✓ Editor role created with page permissions');
 
-        $this->command->info("✓ Page permissions seeded successfully");
+        $this->command->info('✓ Page permissions seeded successfully');
     }
 }
-

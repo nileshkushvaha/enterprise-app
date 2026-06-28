@@ -7,10 +7,16 @@ namespace Tests\Feature;
 use App\Filament\Pages\SchedulerMonitorPage;
 use App\Models\SchedulerHistory;
 use App\Models\User;
+use App\Policies\SchedulerMonitorPolicy;
 use App\Services\SchedulerService;
+use Illuminate\Console\Events\ScheduledTaskFailed;
+use Illuminate\Console\Events\ScheduledTaskFinished;
+use Illuminate\Console\Events\ScheduledTaskSkipped;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Collection;
 use Livewire\Livewire;
+use Spatie\Activitylog\Models\Activity;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
@@ -20,6 +26,7 @@ class SchedulerMonitorTest extends TestCase
     use RefreshDatabase;
 
     private User $superAdmin;
+
     private User $regularUser;
 
     protected function setUp(): void
@@ -36,7 +43,7 @@ class SchedulerMonitorTest extends TestCase
 
         $superAdminRole = Role::firstOrCreate(['name' => 'super_admin', 'guard_name' => 'web']);
 
-        $this->superAdmin  = User::factory()->create(['status' => 'active']);
+        $this->superAdmin = User::factory()->create(['status' => 'active']);
         $this->superAdmin->assignRole($superAdminRole);
 
         $this->regularUser = User::factory()->create(['status' => 'active']);
@@ -89,15 +96,15 @@ class SchedulerMonitorTest extends TestCase
     public function test_scheduler_history_records_can_be_created(): void
     {
         SchedulerHistory::create([
-            'command'      => '/usr/bin/php artisan cms:publish-scheduled',
+            'command' => '/usr/bin/php artisan cms:publish-scheduled',
             'triggered_by' => 'scheduler',
-            'status'       => 'success',
-            'duration_ms'  => 123,
-            'ran_at'       => now(),
+            'status' => 'success',
+            'duration_ms' => 123,
+            'ran_at' => now(),
         ]);
 
         $this->assertDatabaseHas('scheduler_histories', [
-            'status'       => 'success',
+            'status' => 'success',
             'triggered_by' => 'scheduler',
         ]);
     }
@@ -125,9 +132,9 @@ class SchedulerMonitorTest extends TestCase
     public function test_get_tasks_returns_collection(): void
     {
         $service = app(SchedulerService::class);
-        $tasks   = $service->getTasks();
+        $tasks = $service->getTasks();
 
-        $this->assertInstanceOf(\Illuminate\Support\Collection::class, $tasks);
+        $this->assertInstanceOf(Collection::class, $tasks);
     }
 
     public function test_get_tasks_includes_registered_schedule_entries(): void
@@ -135,7 +142,7 @@ class SchedulerMonitorTest extends TestCase
         // The project has PublishScheduledContent registered in routes/console.php.
         // After ensureScheduleLoaded() runs, it should appear in the list.
         $service = app(SchedulerService::class);
-        $tasks   = $service->getTasks();
+        $tasks = $service->getTasks();
 
         // At minimum the schedule is readable without throwing
         $this->assertIsInt($tasks->count());
@@ -148,15 +155,15 @@ class SchedulerMonitorTest extends TestCase
         $schedule->command('inspire')->everyMinute()->description('Test task');
 
         SchedulerHistory::create([
-            'command'      => '/usr/bin/php artisan inspire', // matches what Schedule stores
+            'command' => '/usr/bin/php artisan inspire', // matches what Schedule stores
             'triggered_by' => 'scheduler',
-            'status'       => 'success',
-            'duration_ms'  => 50,
-            'ran_at'       => now()->subMinutes(5),
+            'status' => 'success',
+            'duration_ms' => 50,
+            'ran_at' => now()->subMinutes(5),
         ]);
 
         $service = app(SchedulerService::class);
-        $tasks   = $service->getTasks();
+        $tasks = $service->getTasks();
 
         // The task list must be a collection; history is merged by command key
         $this->assertGreaterThan(0, $tasks->count());
@@ -169,9 +176,9 @@ class SchedulerMonitorTest extends TestCase
         $schedule->command('inspire')->everyMinute();
 
         $service = app(SchedulerService::class);
-        $tasks   = $service->getTasks();
+        $tasks = $service->getTasks();
 
-        $inspireTask = $tasks->first(fn($t) => str_contains($t['command'], 'inspire'));
+        $inspireTask = $tasks->first(fn ($t) => str_contains($t['command'], 'inspire'));
 
         if (! $inspireTask) {
             $this->markTestSkipped('inspire command not found in schedule');
@@ -190,7 +197,7 @@ class SchedulerMonitorTest extends TestCase
     public function test_policy_view_page_denied_for_regular_user(): void
     {
         $this->assertFalse(
-            app(\App\Policies\SchedulerMonitorPolicy::class)->viewPage($this->regularUser)
+            app(SchedulerMonitorPolicy::class)->viewPage($this->regularUser)
         );
     }
 
@@ -199,14 +206,14 @@ class SchedulerMonitorTest extends TestCase
         $this->regularUser->givePermissionTo('scheduler_monitor.view');
 
         $this->assertTrue(
-            app(\App\Policies\SchedulerMonitorPolicy::class)->viewPage($this->regularUser)
+            app(SchedulerMonitorPolicy::class)->viewPage($this->regularUser)
         );
     }
 
     public function test_policy_run_task_denied_for_user_without_permission(): void
     {
         $this->assertFalse(
-            app(\App\Policies\SchedulerMonitorPolicy::class)->runTask($this->regularUser)
+            app(SchedulerMonitorPolicy::class)->runTask($this->regularUser)
         );
     }
 
@@ -215,7 +222,7 @@ class SchedulerMonitorTest extends TestCase
         $this->regularUser->givePermissionTo('scheduler_monitor.run');
 
         $this->assertTrue(
-            app(\App\Policies\SchedulerMonitorPolicy::class)->runTask($this->regularUser)
+            app(SchedulerMonitorPolicy::class)->runTask($this->regularUser)
         );
     }
 
@@ -224,41 +231,41 @@ class SchedulerMonitorTest extends TestCase
     public function test_scheduled_task_finished_event_records_success_history(): void
     {
         $schedule = app(Schedule::class);
-        $event    = $schedule->command('inspire')->everyMinute();
+        $event = $schedule->command('inspire')->everyMinute();
 
-        event(new \Illuminate\Console\Events\ScheduledTaskFinished($event, 0.25));
+        event(new ScheduledTaskFinished($event, 0.25));
 
         $this->assertDatabaseHas('scheduler_histories', [
-            'status'       => 'success',
+            'status' => 'success',
             'triggered_by' => 'scheduler',
-            'duration_ms'  => 250,
+            'duration_ms' => 250,
         ]);
     }
 
     public function test_scheduled_task_failed_event_records_failure_history(): void
     {
-        $schedule  = app(Schedule::class);
-        $event     = $schedule->command('inspire')->everyMinute();
+        $schedule = app(Schedule::class);
+        $event = $schedule->command('inspire')->everyMinute();
         $exception = new \RuntimeException('Something went wrong');
 
-        event(new \Illuminate\Console\Events\ScheduledTaskFailed($event, $exception));
+        event(new ScheduledTaskFailed($event, $exception));
 
         $this->assertDatabaseHas('scheduler_histories', [
-            'status'       => 'failed',
+            'status' => 'failed',
             'triggered_by' => 'scheduler',
-            'output'       => 'Something went wrong',
+            'output' => 'Something went wrong',
         ]);
     }
 
     public function test_scheduled_task_skipped_event_records_skipped_history(): void
     {
         $schedule = app(Schedule::class);
-        $event    = $schedule->command('inspire')->everyMinute();
+        $event = $schedule->command('inspire')->everyMinute();
 
-        event(new \Illuminate\Console\Events\ScheduledTaskSkipped($event));
+        event(new ScheduledTaskSkipped($event));
 
         $this->assertDatabaseHas('scheduler_histories', [
-            'status'       => 'skipped',
+            'status' => 'skipped',
             'triggered_by' => 'scheduler',
         ]);
     }
@@ -266,11 +273,11 @@ class SchedulerMonitorTest extends TestCase
     public function test_skipped_history_has_null_duration(): void
     {
         $schedule = app(Schedule::class);
-        $event    = $schedule->command('inspire')->everyMinute();
+        $event = $schedule->command('inspire')->everyMinute();
 
-        event(new \Illuminate\Console\Events\ScheduledTaskSkipped($event));
+        event(new ScheduledTaskSkipped($event));
 
-        $record = \App\Models\SchedulerHistory::where('status', 'skipped')->latest('ran_at')->first();
+        $record = SchedulerHistory::where('status', 'skipped')->latest('ran_at')->first();
 
         $this->assertNotNull($record);
         $this->assertNull($record->duration_ms);
@@ -278,7 +285,7 @@ class SchedulerMonitorTest extends TestCase
 
     // ── canAccess / canRunTasks ────────────────────────────────────────────
 
-    public function test_canAccess_returns_true_for_user_with_view_permission(): void
+    public function test_can_access_returns_true_for_user_with_view_permission(): void
     {
         $this->regularUser->givePermissionTo('scheduler_monitor.view');
         $this->actingAs($this->regularUser);
@@ -286,7 +293,7 @@ class SchedulerMonitorTest extends TestCase
         $this->assertTrue(SchedulerMonitorPage::canAccess());
     }
 
-    public function test_canRunTasks_returns_true_for_user_with_run_permission(): void
+    public function test_can_run_tasks_returns_true_for_user_with_run_permission(): void
     {
         $this->regularUser->givePermissionTo('scheduler_monitor.run');
         $this->actingAs($this->regularUser);
@@ -295,7 +302,7 @@ class SchedulerMonitorTest extends TestCase
         $this->assertTrue($page->canRunTasks());
     }
 
-    public function test_canRunTasks_returns_false_for_user_without_permission(): void
+    public function test_can_run_tasks_returns_false_for_user_without_permission(): void
     {
         $this->actingAs($this->regularUser);
 
@@ -313,10 +320,10 @@ class SchedulerMonitorTest extends TestCase
         // command known to fail gracefully.
         $schedule->command('inspire')->everyMinute();
 
-        $service = app(\App\Services\SchedulerService::class);
-        $tasks   = $service->getTasks();
+        $service = app(SchedulerService::class);
+        $tasks = $service->getTasks();
 
-        $inspireTask = $tasks->first(fn($t) => str_contains($t['command'], 'inspire'));
+        $inspireTask = $tasks->first(fn ($t) => str_contains($t['command'], 'inspire'));
 
         if (! $inspireTask) {
             $this->markTestSkipped('inspire command not found in schedule');
@@ -336,10 +343,10 @@ class SchedulerMonitorTest extends TestCase
         $schedule = app(Schedule::class);
         $schedule->command('inspire')->everyMinute();
 
-        $service = app(\App\Services\SchedulerService::class);
-        $tasks   = $service->getTasks();
+        $service = app(SchedulerService::class);
+        $tasks = $service->getTasks();
 
-        $inspireTask = $tasks->first(fn($t) => str_contains($t['command'], 'inspire'));
+        $inspireTask = $tasks->first(fn ($t) => str_contains($t['command'], 'inspire'));
 
         if (! $inspireTask) {
             $this->markTestSkipped('inspire command not found in schedule');
@@ -348,11 +355,11 @@ class SchedulerMonitorTest extends TestCase
         $this->actingAs($this->superAdmin);
         $service->runNow($inspireTask['id']);
 
-        $log = \Spatie\Activitylog\Models\Activity::where('log_name', 'scheduler_monitor')->latest()->first();
+        $log = Activity::where('log_name', 'scheduler_monitor')->latest()->first();
 
         $this->assertNotNull($log);
         $this->assertEquals($this->superAdmin->id, $log->causer_id);
-        $this->assertEquals(\App\Models\User::class, $log->causer_type);
+        $this->assertEquals(User::class, $log->causer_type);
     }
 
     public function test_run_now_logs_activity_with_status_and_duration(): void
@@ -360,10 +367,10 @@ class SchedulerMonitorTest extends TestCase
         $schedule = app(Schedule::class);
         $schedule->command('inspire')->everyMinute();
 
-        $service = app(\App\Services\SchedulerService::class);
-        $tasks   = $service->getTasks();
+        $service = app(SchedulerService::class);
+        $tasks = $service->getTasks();
 
-        $inspireTask = $tasks->first(fn($t) => str_contains($t['command'], 'inspire'));
+        $inspireTask = $tasks->first(fn ($t) => str_contains($t['command'], 'inspire'));
 
         if (! $inspireTask) {
             $this->markTestSkipped('inspire command not found in schedule');
@@ -372,7 +379,7 @@ class SchedulerMonitorTest extends TestCase
         $this->actingAs($this->superAdmin);
         $service->runNow($inspireTask['id']);
 
-        $log = \Spatie\Activitylog\Models\Activity::where('log_name', 'scheduler_monitor')->latest()->first();
+        $log = Activity::where('log_name', 'scheduler_monitor')->latest()->first();
 
         $this->assertNotNull($log);
         $this->assertArrayHasKey('status', $log->properties->toArray());
@@ -383,28 +390,28 @@ class SchedulerMonitorTest extends TestCase
 
     public function test_prunable_scope_excludes_recent_records(): void
     {
-        \App\Models\SchedulerHistory::create([
-            'command'      => 'artisan inspire',
+        SchedulerHistory::create([
+            'command' => 'artisan inspire',
             'triggered_by' => 'scheduler',
-            'status'       => 'success',
-            'ran_at'       => now()->subDays(10),
+            'status' => 'success',
+            'ran_at' => now()->subDays(10),
         ]);
 
-        $prunable = (new \App\Models\SchedulerHistory())->prunable()->get();
+        $prunable = (new SchedulerHistory)->prunable()->get();
 
         $this->assertCount(0, $prunable);
     }
 
     public function test_prunable_scope_includes_old_records(): void
     {
-        \App\Models\SchedulerHistory::create([
-            'command'      => 'artisan inspire',
+        SchedulerHistory::create([
+            'command' => 'artisan inspire',
             'triggered_by' => 'scheduler',
-            'status'       => 'success',
-            'ran_at'       => now()->subDays(31),
+            'status' => 'success',
+            'ran_at' => now()->subDays(31),
         ]);
 
-        $prunable = (new \App\Models\SchedulerHistory())->prunable()->get();
+        $prunable = (new SchedulerHistory)->prunable()->get();
 
         $this->assertCount(1, $prunable);
     }

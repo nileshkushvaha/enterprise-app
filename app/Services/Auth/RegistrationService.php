@@ -7,6 +7,7 @@ namespace App\Services\Auth;
 use App\Actions\Auth\RegisterUserAction;
 use App\Events\Auth\UserRegistered;
 use App\Models\User;
+use App\Settings\RegistrationSettings;
 use Spatie\Permission\Models\Role;
 
 final class RegistrationService
@@ -20,8 +21,8 @@ final class RegistrationService
         // 1. Create user + profile via Action
         $user = $this->registerAction->execute($data);
 
-        // 2. Assign default frontend role (student / user)
-        $defaultRole = Role::whereName(User::DEFAULT_ROLE)->first();
+        // 2. Assign default frontend role from registration settings
+        $defaultRole = Role::whereName(app(RegistrationSettings::class)->default_role ?? '')->first();
         if ($defaultRole) {
             $user->assignRole($defaultRole);
         }

@@ -60,7 +60,7 @@ class ContainerBindingsTest extends TestCase
 
     public function test_navigation_manager_is_singleton(): void
     {
-        $first  = app(NavigationManager::class);
+        $first = app(NavigationManager::class);
         $second = app(NavigationManager::class);
 
         $this->assertSame($first, $second);
@@ -68,7 +68,7 @@ class ContainerBindingsTest extends TestCase
 
     public function test_link_type_registry_is_singleton(): void
     {
-        $first  = app(LinkTypeRegistry::class);
+        $first = app(LinkTypeRegistry::class);
         $second = app(LinkTypeRegistry::class);
 
         $this->assertSame($first, $second);
@@ -77,7 +77,7 @@ class ContainerBindingsTest extends TestCase
     public function test_link_type_registry_has_all_ten_drivers_registered(): void
     {
         $registry = app(LinkTypeRegistry::class);
-        $types    = $registry->registeredTypes();
+        $types = $registry->registeredTypes();
 
         foreach (['page', 'post', 'category', 'tag', 'route', 'url', 'external', 'email', 'phone', 'anchor'] as $type) {
             $this->assertContains($type, $types, "Driver for [{$type}] is not registered.");

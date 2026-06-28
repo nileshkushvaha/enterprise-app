@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Models\SchedulerHistory;
+use Carbon\Carbon;
 use Illuminate\Console\Scheduling\CallbackEvent;
 use Illuminate\Console\Scheduling\Event;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
+use Lorisleiva\CronTranslator\CronTranslator;
 use Symfony\Component\Console\Output\BufferedOutput;
 
 class SchedulerService
@@ -40,19 +42,19 @@ class SchedulerService
             $history = $latestHistory->get($event->command ?? '');
 
             return [
-                'id'               => sha1(($event->command ?? '') . $event->expression),
-                'command'          => $event->command ?? '',
-                'name'             => $this->displayName($event),
-                'description'      => $event->description ?? '',
-                'expression'       => $event->expression,
-                'frequency'        => $this->describeExpression($event->expression),
-                'next_run'         => $this->safeNextRun($event),
-                'last_run'         => $history?->ran_at,
-                'duration_ms'      => $history?->duration_ms,
-                'status'           => $history?->status,
-                'is_closure'       => $event instanceof CallbackEvent,
-                'mutex_locked'     => $event->withoutOverlapping && $this->isMutexLocked($event),
-                'without_overlap'  => $event->withoutOverlapping,
+                'id' => sha1(($event->command ?? '').$event->expression),
+                'command' => $event->command ?? '',
+                'name' => $this->displayName($event),
+                'description' => $event->description ?? '',
+                'expression' => $event->expression,
+                'frequency' => $this->describeExpression($event->expression),
+                'next_run' => $this->safeNextRun($event),
+                'last_run' => $history?->ran_at,
+                'duration_ms' => $history?->duration_ms,
+                'status' => $history?->status,
+                'is_closure' => $event instanceof CallbackEvent,
+                'mutex_locked' => $event->withoutOverlapping && $this->isMutexLocked($event),
+                'without_overlap' => $event->withoutOverlapping,
             ];
         });
     }
@@ -65,22 +67,22 @@ class SchedulerService
         $this->ensureScheduleLoaded();
 
         $event = collect($this->schedule->events())
-            ->first(fn(Event $e) => sha1(($e->command ?? '') . $e->expression) === $taskId);
+            ->first(fn (Event $e) => sha1(($e->command ?? '').$e->expression) === $taskId);
 
         if (! $event) {
             throw new \RuntimeException('Scheduled task not found.');
         }
 
-        $start  = microtime(true);
+        $start = microtime(true);
         $output = '';
         $status = 'success';
 
         try {
             if (! $event instanceof CallbackEvent && preg_match('/artisan\s+(.+)$/', $event->command ?? '', $m)) {
-                $buffer   = new BufferedOutput();
+                $buffer = new BufferedOutput;
                 $exitCode = Artisan::call(trim($m[1]), [], $buffer);
-                $output   = trim($buffer->fetch());
-                $status   = $exitCode === 0 ? 'success' : 'failed';
+                $output = trim($buffer->fetch());
+                $status = $exitCode === 0 ? 'success' : 'failed';
             } else {
                 $event->run(app());
             }
@@ -92,19 +94,19 @@ class SchedulerService
         $durationMs = (int) ((microtime(true) - $start) * 1000);
 
         SchedulerHistory::create([
-            'command'      => $event->command ?? 'closure',
+            'command' => $event->command ?? 'closure',
             'triggered_by' => 'manual',
-            'status'       => $status,
-            'duration_ms'  => $durationMs,
-            'output'       => $output ?: null,
-            'ran_at'       => now(),
+            'status' => $status,
+            'duration_ms' => $durationMs,
+            'output' => $output ?: null,
+            'ran_at' => now(),
         ]);
 
         $user = auth()->user();
         $logger = activity('scheduler_monitor')
             ->withProperties([
-                'task'        => $this->displayName($event),
-                'status'      => $status,
+                'task' => $this->displayName($event),
+                'status' => $status,
                 'duration_ms' => $durationMs,
             ]);
 
@@ -112,7 +114,7 @@ class SchedulerService
             $logger = $logger->causedBy($user);
         }
 
-        $logger->log('Manually ran: ' . $this->displayName($event));
+        $logger->log('Manually ran: '.$this->displayName($event));
 
         return ['status' => $status, 'duration_ms' => $durationMs, 'output' => $output];
     }
@@ -172,7 +174,7 @@ class SchedulerService
     private function describeExpression(string $expression): string
     {
         try {
-            return \Lorisleiva\CronTranslator\CronTranslator::translate($expression);
+            return CronTranslator::translate($expression);
         } catch (\Throwable) {
             return $expression;
         }
@@ -187,7 +189,7 @@ class SchedulerService
         }
     }
 
-    private function safeNextRun(Event $event): ?\Carbon\Carbon
+    private function safeNextRun(Event $event): ?Carbon
     {
         try {
             return $event->nextRunDate();

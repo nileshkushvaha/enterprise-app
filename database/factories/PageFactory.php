@@ -3,6 +3,7 @@
 namespace Database\Factories;
 
 use App\Models\Page;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -35,7 +36,7 @@ class PageFactory extends Factory
             'meta_keywords' => implode(', ', fake()->words(5)),
             'canonical_url' => fake()->optional(0.5)->url(),
             'robots' => 'index, follow',
-            'created_by' => \App\Models\User::inRandomOrder()->first()?->id ?? 1,
+            'created_by' => User::inRandomOrder()->first()?->id ?? 1,
             'updated_by' => null,
         ];
     }
@@ -77,6 +78,6 @@ class PageFactory extends Factory
 
     public function block(): static
     {
-        return $this->has(\Database\Factories\PageBlockFactory::new(), 'blocks');
+        return $this->has(PageBlockFactory::new(), 'blocks');
     }
 }

@@ -13,4 +13,3 @@ final class GatewayConnectionResult
         public readonly array $meta = [],
     ) {}
 }
-

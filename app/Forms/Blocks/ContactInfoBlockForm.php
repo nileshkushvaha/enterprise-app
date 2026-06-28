@@ -4,8 +4,8 @@ namespace App\Forms\Blocks;
 
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
-use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Components\Section;
 
 class ContactInfoBlockForm
@@ -45,12 +45,12 @@ class ContactInfoBlockForm
                             Select::make('icon')
                                 ->label('Icon')
                                 ->options([
-                                    'phone'    => '📞 Phone',
-                                    'email'    => '✉️ Email',
+                                    'phone' => '📞 Phone',
+                                    'email' => '✉️ Email',
                                     'location' => '📍 Address / Location',
-                                    'clock'    => '🕐 Hours',
-                                    'globe'    => '🌐 Website',
-                                    'chat'     => '💬 Chat',
+                                    'clock' => '🕐 Hours',
+                                    'globe' => '🌐 Website',
+                                    'chat' => '💬 Chat',
                                 ])
                                 ->default('phone')
                                 ->required()

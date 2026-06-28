@@ -8,6 +8,6 @@ return new class extends SettingsMigration
     {
         // 'template' = render home.blade.php | 'static_page' = render chosen CMS page
         $this->migrator->add('general.homepage_display', 'template');
-        $this->migrator->add('general.homepage_id',      null);
+        $this->migrator->add('general.homepage_id', null);
     }
 };

@@ -3,9 +3,9 @@
 namespace App\Forms\Blocks;
 
 use Filament\Forms\Components\FileUpload;
-use Filament\Schemas\Components\Section;
-use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
+use Filament\Schemas\Components\Section;
 
 class ImageBlockForm
 {
@@ -20,7 +20,7 @@ class ImageBlockForm
                         ->label('Image')
                         ->required()
                         ->image()
-                        
+
                         ->directory('blocks/image')
                         ->maxSize(5120),
 

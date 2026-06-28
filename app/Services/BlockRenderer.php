@@ -15,7 +15,7 @@ class BlockRenderer
 
     public function __construct()
     {
-        $this->hydrator = new BlockContentHydrator();
+        $this->hydrator = new BlockContentHydrator;
     }
 
     /**
@@ -79,8 +79,8 @@ class BlockRenderer
 
         return [
             ...$this->hydrator::hydrate($blockType, $content),
-            'block_id'       => $block->id ?? null,
-            'blockable_id'   => $block->blockable_id ?? null,
+            'block_id' => $block->id ?? null,
+            'blockable_id' => $block->blockable_id ?? null,
             'blockable_type' => $block->blockable_type ?? null,
         ];
     }
@@ -93,9 +93,10 @@ class BlockRenderer
         $html = '';
         foreach ($blocks as $block) {
             if ($block->is_active) {
-                $html .= $this->render($block) . "\n";
+                $html .= $this->render($block)."\n";
             }
         }
+
         return $html;
     }
 

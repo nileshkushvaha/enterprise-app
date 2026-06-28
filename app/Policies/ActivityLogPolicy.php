@@ -6,6 +6,7 @@ namespace App\Policies;
 
 use App\Models\User;
 use Illuminate\Auth\Access\HandlesAuthorization;
+use Spatie\Permission\Exceptions\PermissionDoesNotExist;
 
 class ActivityLogPolicy
 {
@@ -19,7 +20,7 @@ class ActivityLogPolicy
 
         try {
             return $user->hasPermissionTo('activity_log.view');
-        } catch (\Spatie\Permission\Exceptions\PermissionDoesNotExist) {
+        } catch (PermissionDoesNotExist) {
             return false;
         }
     }

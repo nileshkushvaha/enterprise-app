@@ -140,15 +140,15 @@ enum BlockType: string
     public static function grouped(): array
     {
         $grouped = [];
-        
+
         foreach (self::cases() as $type) {
             $category = $type->category();
-            if (!isset($grouped[$category])) {
+            if (! isset($grouped[$category])) {
                 $grouped[$category] = [];
             }
             $grouped[$category][] = $type;
         }
-        
+
         return $grouped;
     }
 }

@@ -3,7 +3,6 @@
 namespace App\Filament\Resources\Posts\Tables;
 
 use App\Enums\PageStatus;
-use App\Enums\PageVisibility;
 use App\Models\Post;
 use App\Services\PostService;
 use Filament\Actions\Action;
@@ -53,7 +52,7 @@ class PostsTable
                     ->sortable(),
                 TextColumn::make('reading_time')
                     ->label('Reading Time')
-                    ->formatStateUsing(fn ($state): string => max(1, (int) $state) . ' min')
+                    ->formatStateUsing(fn ($state): string => max(1, (int) $state).' min')
                     ->sortable(),
                 TextColumn::make('updated_at')
                     ->label('Updated')

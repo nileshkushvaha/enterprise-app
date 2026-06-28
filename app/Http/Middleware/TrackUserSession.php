@@ -18,20 +18,20 @@ final class TrackUserSession
 
         if ($request->user() && $request->hasSession()) {
             $sessionId = $request->session()->getId();
-            $ua        = $request->userAgent() ?? '';
-            $parsed    = UserAgentParser::parse($ua);
+            $ua = $request->userAgent() ?? '';
+            $parsed = UserAgentParser::parse($ua);
 
             UserSession::updateOrCreate(
                 ['session_id' => $sessionId],
                 [
-                    'user_id'          => $request->user()->id,
-                    'ip_address'       => $request->ip(),
-                    'user_agent'       => substr($ua, 0, 500),
-                    'browser'          => $parsed['browser'],
-                    'platform'         => $parsed['platform'],
-                    'device_type'      => $parsed['device_type'],
+                    'user_id' => $request->user()->id,
+                    'ip_address' => $request->ip(),
+                    'user_agent' => substr($ua, 0, 500),
+                    'browser' => $parsed['browser'],
+                    'platform' => $parsed['platform'],
+                    'device_type' => $parsed['device_type'],
                     'last_activity_at' => now(),
-                    'created_at'       => now(),
+                    'created_at' => now(),
                 ]
             );
         }

@@ -45,7 +45,7 @@ class SeoController extends Controller
                 'Allow: /',
                 'Disallow: /admin',
                 'Disallow: /login',
-                'Sitemap: ' . route('seo.sitemap'),
+                'Sitemap: '.route('seo.sitemap'),
                 '',
             ])
         );

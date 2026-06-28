@@ -54,7 +54,7 @@ class RoleForm
                             Select::make('status')
                                 ->label('Status')
                                 ->options([
-                                    'active'   => 'Active',
+                                    'active' => 'Active',
                                     'inactive' => 'Inactive',
                                 ])
                                 ->default('active')
@@ -88,9 +88,9 @@ class RoleForm
                     ->schema([
                         View::make('filament.roles.permission-matrix')
                             ->viewData([
-                                'grouped'        => $grouped,
+                                'grouped' => $grouped,
                                 'allPermissions' => $service->allNames(),
-                                'total'          => $service->total(),
+                                'total' => $service->total(),
                             ]),
                     ])
                     ->columnSpanFull(),

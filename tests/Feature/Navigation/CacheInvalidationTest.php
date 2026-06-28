@@ -18,19 +18,20 @@ class CacheInvalidationTest extends TestCase
     use RefreshDatabase;
 
     private NavigationManager $manager;
+
     private NavigationCacheManager $cacheManager;
 
     protected function setUp(): void
     {
         parent::setUp();
-        $this->manager      = app(NavigationManager::class);
+        $this->manager = app(NavigationManager::class);
         $this->cacheManager = app(NavigationCacheManager::class);
     }
 
     private function publishedMenu(array $attrs = []): NavigationMenu
     {
         return NavigationMenu::factory()->create(array_merge([
-            'status'   => NavigationStatus::Published->value,
+            'status' => NavigationStatus::Published->value,
             'location' => NavigationLocation::Header->value,
         ], $attrs));
     }
@@ -45,7 +46,7 @@ class CacheInvalidationTest extends TestCase
     public function test_cache_invalidated_when_item_is_created(): void
     {
         $menu = $this->publishedMenu();
-        $key  = $this->cacheKey($menu);
+        $key = $this->cacheKey($menu);
 
         // Prime the cache
         $this->manager->forLocation(NavigationLocation::Header);
@@ -61,7 +62,7 @@ class CacheInvalidationTest extends TestCase
     {
         $menu = $this->publishedMenu();
         $item = NavigationItem::factory()->create(['navigation_id' => $menu->id, 'is_active' => true]);
-        $key  = $this->cacheKey($menu);
+        $key = $this->cacheKey($menu);
 
         $this->manager->forLocation(NavigationLocation::Header);
         $this->assertNotNull($this->cacheManager->get($key));
@@ -75,7 +76,7 @@ class CacheInvalidationTest extends TestCase
     {
         $menu = $this->publishedMenu();
         $item = NavigationItem::factory()->create(['navigation_id' => $menu->id, 'is_active' => true]);
-        $key  = $this->cacheKey($menu);
+        $key = $this->cacheKey($menu);
 
         $this->manager->forLocation(NavigationLocation::Header);
         $this->assertNotNull($this->cacheManager->get($key));
@@ -106,7 +107,7 @@ class CacheInvalidationTest extends TestCase
     public function test_cache_invalidated_when_menu_is_updated(): void
     {
         $menu = $this->publishedMenu();
-        $key  = $this->cacheKey($menu);
+        $key = $this->cacheKey($menu);
 
         $this->manager->forLocation(NavigationLocation::Header);
         $this->assertNotNull($this->cacheManager->get($key));
@@ -119,7 +120,7 @@ class CacheInvalidationTest extends TestCase
     public function test_cache_invalidated_when_menu_is_deleted(): void
     {
         $menu = $this->publishedMenu();
-        $key  = $this->cacheKey($menu);
+        $key = $this->cacheKey($menu);
 
         $this->manager->forLocation(NavigationLocation::Header);
         $this->assertNotNull($this->cacheManager->get($key));

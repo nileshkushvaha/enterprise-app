@@ -35,7 +35,7 @@ return new class extends Migration
             $table->string('last_login_user_agent')->nullable();
             $table->timestamp('password_changed_at')->nullable();
             $table->enum('status', ['pending_verification', 'active', 'inactive', 'blocked', 'suspended'])
-                  ->default('pending_verification');
+                ->default('pending_verification');
             $table->string('avatar')->nullable();
             $table->timestamps();
         });

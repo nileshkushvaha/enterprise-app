@@ -18,7 +18,9 @@ class ContentBlockPolicyTest extends TestCase
     use RefreshDatabase;
 
     private User $pageAdmin;
+
     private User $postAdmin;
+
     private User $noPermUser;
 
     protected function setUp(): void
@@ -32,10 +34,10 @@ class ContentBlockPolicyTest extends TestCase
             }
         }
 
-        $this->pageAdmin  = User::factory()->create();
+        $this->pageAdmin = User::factory()->create();
         $this->pageAdmin->givePermissionTo(['pages.view', 'pages.create', 'pages.update', 'pages.delete', 'pages.restore']);
 
-        $this->postAdmin  = User::factory()->create();
+        $this->postAdmin = User::factory()->create();
         $this->postAdmin->givePermissionTo(['posts.view', 'posts.create', 'posts.update', 'posts.delete', 'posts.restore']);
 
         $this->noPermUser = User::factory()->create();
@@ -46,28 +48,30 @@ class ContentBlockPolicyTest extends TestCase
     private function pageBlock(): ContentBlock
     {
         $page = Page::factory()->create();
+
         return ContentBlock::create([
             'blockable_type' => 'page',
-            'blockable_id'   => $page->id,
-            'block_type'     => BlockType::Hero,
-            'content'        => [],
-            'settings'       => [],
-            'sort_order'     => 0,
-            'is_active'      => true,
+            'blockable_id' => $page->id,
+            'block_type' => BlockType::Hero,
+            'content' => [],
+            'settings' => [],
+            'sort_order' => 0,
+            'is_active' => true,
         ]);
     }
 
     private function postBlock(): ContentBlock
     {
         $post = Post::factory()->create();
+
         return ContentBlock::create([
             'blockable_type' => 'post',
-            'blockable_id'   => $post->id,
-            'block_type'     => BlockType::Hero,
-            'content'        => [],
-            'settings'       => [],
-            'sort_order'     => 0,
-            'is_active'      => true,
+            'blockable_id' => $post->id,
+            'block_type' => BlockType::Hero,
+            'content' => [],
+            'settings' => [],
+            'sort_order' => 0,
+            'is_active' => true,
         ]);
     }
 

@@ -33,12 +33,12 @@ final class PermissionGroupingService
         return $permissions
             ->groupBy(fn (string $name) => PermissionLabelFormatter::extractModule($name))
             ->map(fn (Collection $perms, string $module) => [
-                'module'      => $module,
-                'title'       => PermissionLabelFormatter::moduleLabel($perms->first()),
-                'icon'        => PermissionLabelFormatter::moduleIcon($module),
-                'order'       => PermissionLabelFormatter::moduleOrder($module),
+                'module' => $module,
+                'title' => PermissionLabelFormatter::moduleLabel($perms->first()),
+                'icon' => PermissionLabelFormatter::moduleIcon($module),
+                'order' => PermissionLabelFormatter::moduleOrder($module),
                 'permissions' => $perms->map(fn (string $name) => [
-                    'name'  => $name,
+                    'name' => $name,
                     'label' => PermissionLabelFormatter::actionLabel($name),
                 ])->sortBy('label')->values(),
             ])

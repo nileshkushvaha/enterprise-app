@@ -13,7 +13,7 @@ class LogoutController extends Controller
 {
     public function __invoke(Request $request): RedirectResponse
     {
-        $user      = auth()->user();
+        $user = auth()->user();
         $ipAddress = $request->ip() ?? '127.0.0.1';
         $userAgent = $request->userAgent() ?? '';
 

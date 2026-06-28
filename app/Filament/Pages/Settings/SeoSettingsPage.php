@@ -9,8 +9,8 @@ use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Select;
-use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\Actions as ActionsComponent;
@@ -27,11 +27,15 @@ class SeoSettingsPage extends Page
 {
     use HasSettingsAccess;
 
-    protected static string|BackedEnum|null $navigationIcon  = Heroicon::OutlinedMagnifyingGlass;
-    protected static ?string $navigationLabel                = 'SEO';
-    protected static string|\UnitEnum|null $navigationGroup                = 'Configuration';
-    protected static ?int    $navigationSort                 = 2;
-    protected static ?string $slug                           = 'settings/seo';
+    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedMagnifyingGlass;
+
+    protected static ?string $navigationLabel = 'SEO';
+
+    protected static string|\UnitEnum|null $navigationGroup = 'Configuration';
+
+    protected static ?int $navigationSort = 2;
+
+    protected static ?string $slug = 'settings/seo';
 
     /** @var array<string, mixed>|null */
     public ?array $data = [];
@@ -54,9 +58,9 @@ class SeoSettingsPage extends Page
     public function getBreadcrumbs(): array
     {
         return [
-            '/admin'     => 'Dashboard',
+            '/admin' => 'Dashboard',
             '/admin/settings/general' => 'Settings',
-            '#'          => 'SEO',
+            '#' => 'SEO',
         ];
     }
 
@@ -65,17 +69,17 @@ class SeoSettingsPage extends Page
         $settings = app(SeoSettings::class);
 
         $this->form->fill([
-            'meta_title'                         => $settings->meta_title,
-            'meta_description'                   => $settings->meta_description,
-            'meta_keywords'                       => $settings->meta_keywords,
-            'robots'                             => $settings->robots,
-            'canonical_url'                      => $settings->canonical_url,
+            'meta_title' => $settings->meta_title,
+            'meta_description' => $settings->meta_description,
+            'meta_keywords' => $settings->meta_keywords,
+            'robots' => $settings->robots,
+            'canonical_url' => $settings->canonical_url,
             'google_search_console_verification' => $settings->google_search_console_verification,
-            'google_analytics_id'                => $settings->google_analytics_id,
-            'google_tag_manager_id'              => $settings->google_tag_manager_id,
-            'facebook_pixel_id'                  => $settings->facebook_pixel_id,
-            'og_image'                           => $settings->og_image,
-            'twitter_card'                       => $settings->twitter_card,
+            'google_analytics_id' => $settings->google_analytics_id,
+            'google_tag_manager_id' => $settings->google_tag_manager_id,
+            'facebook_pixel_id' => $settings->facebook_pixel_id,
+            'og_image' => $settings->og_image,
+            'twitter_card' => $settings->twitter_card,
         ]);
     }
 
@@ -118,7 +122,7 @@ class SeoSettingsPage extends Page
                                 ->helperText('Max 70 characters. Shown in browser tab and search results.')
                                 ->suffixAction(
                                     Action::make('count')
-                                        ->label(fn ($state) => strlen($state ?? '') . '/70')
+                                        ->label(fn ($state) => strlen($state ?? '').'/70')
                                         ->disabled()
                                 ),
 
@@ -138,9 +142,9 @@ class SeoSettingsPage extends Page
                             Select::make('robots')
                                 ->label('Robots Directive')
                                 ->options([
-                                    'index,follow'     => 'index, follow (default)',
-                                    'noindex,follow'   => 'noindex, follow',
-                                    'index,nofollow'   => 'index, nofollow',
+                                    'index,follow' => 'index, follow (default)',
+                                    'noindex,follow' => 'noindex, follow',
+                                    'index,nofollow' => 'index, nofollow',
                                     'noindex,nofollow' => 'noindex, nofollow',
                                 ])
                                 ->native(false)
@@ -199,10 +203,10 @@ class SeoSettingsPage extends Page
                         Select::make('twitter_card')
                             ->label('Twitter Card Type')
                             ->options([
-                                'summary'             => 'Summary',
+                                'summary' => 'Summary',
                                 'summary_large_image' => 'Summary with Large Image',
-                                'app'                 => 'App',
-                                'player'              => 'Player',
+                                'app' => 'App',
+                                'player' => 'Player',
                             ])
                             ->native(false)
                             ->required(),
@@ -222,17 +226,17 @@ class SeoSettingsPage extends Page
 
         $settings = app(SeoSettings::class);
 
-        $settings->meta_title                         = $data['meta_title'] ?? null;
-        $settings->meta_description                   = $data['meta_description'] ?? null;
-        $settings->meta_keywords                      = $data['meta_keywords'] ?? null;
-        $settings->robots                             = $data['robots'];
-        $settings->canonical_url                      = $data['canonical_url'] ?? null;
+        $settings->meta_title = $data['meta_title'] ?? null;
+        $settings->meta_description = $data['meta_description'] ?? null;
+        $settings->meta_keywords = $data['meta_keywords'] ?? null;
+        $settings->robots = $data['robots'];
+        $settings->canonical_url = $data['canonical_url'] ?? null;
         $settings->google_search_console_verification = $data['google_search_console_verification'] ?? null;
-        $settings->google_analytics_id                = $data['google_analytics_id'] ?? null;
-        $settings->google_tag_manager_id              = $data['google_tag_manager_id'] ?? null;
-        $settings->facebook_pixel_id                  = $data['facebook_pixel_id'] ?? null;
-        $settings->og_image                           = $data['og_image'] ?? $settings->og_image;
-        $settings->twitter_card                       = $data['twitter_card'];
+        $settings->google_analytics_id = $data['google_analytics_id'] ?? null;
+        $settings->google_tag_manager_id = $data['google_tag_manager_id'] ?? null;
+        $settings->facebook_pixel_id = $data['facebook_pixel_id'] ?? null;
+        $settings->og_image = $data['og_image'] ?? $settings->og_image;
+        $settings->twitter_card = $data['twitter_card'];
 
         $settings->save();
 

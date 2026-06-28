@@ -57,7 +57,7 @@ class ResolvedLinkTest extends TestCase
     public function test_immutability_via_reflection(): void
     {
         $link = new ResolvedLink('/x', '_self', null, []);
-        $ref  = new \ReflectionProperty($link, 'url');
+        $ref = new \ReflectionProperty($link, 'url');
 
         $this->assertTrue($ref->isReadOnly());
     }

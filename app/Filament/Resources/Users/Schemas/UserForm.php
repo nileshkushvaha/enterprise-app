@@ -2,21 +2,22 @@
 
 namespace App\Filament\Resources\Users\Schemas;
 
+use App\Services\Security\PasswordRuleBuilder;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
+use Filament\Resources\Pages\CreateRecord;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Tabs;
 use Filament\Schemas\Components\Tabs\Tab;
 use Filament\Schemas\Schema;
-use Illuminate\Validation\Rules\Password;
 
 class UserForm
 {
     public static function configure(Schema $schema): Schema
     {
-        $isCreate = $schema->getLivewire() instanceof \Filament\Resources\Pages\CreateRecord;
+        $isCreate = $schema->getLivewire() instanceof CreateRecord;
 
         return $schema
             ->components([
@@ -58,9 +59,9 @@ class UserForm
                                                 ->revealable()
                                                 ->required($isCreate)
                                                 ->confirmed()
-                                                ->rule(Password::min(8))
-                                                ->dehydrated(fn(?string $state): bool => filled($state))
-                                                ->dehydrateStateUsing(fn(string $state): string => $state),
+                                                ->rule(app(PasswordRuleBuilder::class)->build())
+                                                ->dehydrated(fn (?string $state): bool => filled($state))
+                                                ->dehydrateStateUsing(fn (string $state): string => $state),
 
                                             TextInput::make('password_confirmation')
                                                 ->label('Confirm Password')
@@ -74,12 +75,12 @@ class UserForm
                                             Select::make('status')
                                                 ->label('Status')
                                                 ->options([
-                                                    'active'   => 'Active',
+                                                    'active' => 'Active',
                                                     'inactive' => 'Inactive',
                                                 ])
                                                 ->default('active')
                                                 ->required()
-                                                ->native(false)
+                                                ->native(false),
                                         ]),
                                     ]),
                             ]),

@@ -29,11 +29,15 @@ class MailSettingsPage extends Page
 {
     use HasSettingsAccess;
 
-    protected static string|BackedEnum|null $navigationIcon  = Heroicon::OutlinedEnvelope;
-    protected static ?string $navigationLabel                = 'Mail';
-    protected static string|\UnitEnum|null $navigationGroup                = 'Configuration';
-    protected static ?int    $navigationSort                 = 3;
-    protected static ?string $slug                           = 'settings/mail';
+    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedEnvelope;
+
+    protected static ?string $navigationLabel = 'Mail';
+
+    protected static string|\UnitEnum|null $navigationGroup = 'Configuration';
+
+    protected static ?int $navigationSort = 3;
+
+    protected static ?string $slug = 'settings/mail';
 
     /** @var array<string, mixed>|null */
     public ?array $data = [];
@@ -58,9 +62,9 @@ class MailSettingsPage extends Page
     public function getBreadcrumbs(): array
     {
         return [
-            '/admin'     => 'Dashboard',
+            '/admin' => 'Dashboard',
             '/admin/settings/general' => 'Settings',
-            '#'          => 'Mail',
+            '#' => 'Mail',
         ];
     }
 
@@ -69,17 +73,17 @@ class MailSettingsPage extends Page
         $settings = app(MailSettings::class);
 
         $this->form->fill([
-            'from_name'          => $settings->from_name,
-            'from_email'         => $settings->from_email,
-            'driver'             => $settings->driver,
-            'host'               => $settings->host,
-            'port'               => $settings->port,
-            'username'           => $settings->username,
-            'password'           => null, // never prefill password
-            'encryption'         => $settings->encryption,
-            'queue_emails'       => $settings->queue_emails,
+            'from_name' => $settings->from_name,
+            'from_email' => $settings->from_email,
+            'driver' => $settings->driver,
+            'host' => $settings->host,
+            'port' => $settings->port,
+            'username' => $settings->username,
+            'password' => null, // never prefill password
+            'encryption' => $settings->encryption,
+            'queue_emails' => $settings->queue_emails,
             'connection_timeout' => $settings->connection_timeout,
-            'retry_attempts'     => $settings->retry_attempts,
+            'retry_attempts' => $settings->retry_attempts,
         ]);
     }
 
@@ -158,10 +162,10 @@ class MailSettingsPage extends Page
                             Select::make('driver')
                                 ->label('Mail Driver')
                                 ->options([
-                                    'smtp'     => 'SMTP',
+                                    'smtp' => 'SMTP',
                                     'sendmail' => 'Sendmail',
-                                    'log'      => 'Log (development)',
-                                    'array'    => 'Array (testing)',
+                                    'log' => 'Log (development)',
+                                    'array' => 'Array (testing)',
                                 ])
                                 ->native(false)
                                 ->required()
@@ -170,8 +174,8 @@ class MailSettingsPage extends Page
                             Select::make('encryption')
                                 ->label('Encryption')
                                 ->options([
-                                    'tls'  => 'TLS (recommended)',
-                                    'ssl'  => 'SSL',
+                                    'tls' => 'TLS (recommended)',
+                                    'ssl' => 'SSL',
                                     'none' => 'None',
                                 ])
                                 ->native(false)
@@ -257,16 +261,16 @@ class MailSettingsPage extends Page
 
         $settings = app(MailSettings::class);
 
-        $settings->from_name          = $data['from_name'];
-        $settings->from_email         = $data['from_email'];
-        $settings->driver             = $data['driver'];
-        $settings->host               = $data['host'];
-        $settings->port               = (int) $data['port'];
-        $settings->username           = $data['username'] ?? null;
-        $settings->encryption         = $data['encryption'];
-        $settings->queue_emails       = (bool) ($data['queue_emails'] ?? false);
+        $settings->from_name = $data['from_name'];
+        $settings->from_email = $data['from_email'];
+        $settings->driver = $data['driver'];
+        $settings->host = $data['host'];
+        $settings->port = (int) $data['port'];
+        $settings->username = $data['username'] ?? null;
+        $settings->encryption = $data['encryption'];
+        $settings->queue_emails = (bool) ($data['queue_emails'] ?? false);
         $settings->connection_timeout = (int) ($data['connection_timeout'] ?? 30);
-        $settings->retry_attempts     = (int) ($data['retry_attempts'] ?? 3);
+        $settings->retry_attempts = (int) ($data['retry_attempts'] ?? 3);
 
         // Only update password if a new one was provided — encrypt it
         if (filled($data['password'] ?? null)) {
@@ -288,19 +292,19 @@ class MailSettingsPage extends Page
 
             // Temporarily override mail config with saved settings
             config([
-                'mail.mailers.smtp.host'       => $settings->host,
-                'mail.mailers.smtp.port'        => $settings->port,
-                'mail.mailers.smtp.username'    => $settings->username,
-                'mail.mailers.smtp.password'    => $settings->password
+                'mail.mailers.smtp.host' => $settings->host,
+                'mail.mailers.smtp.port' => $settings->port,
+                'mail.mailers.smtp.username' => $settings->username,
+                'mail.mailers.smtp.password' => $settings->password
                     ? Crypt::decryptString($settings->password)
                     : null,
-                'mail.mailers.smtp.encryption'  => $settings->encryption === 'none' ? null : $settings->encryption,
-                'mail.from.address'             => $settings->from_email,
-                'mail.from.name'                => $settings->from_name,
+                'mail.mailers.smtp.encryption' => $settings->encryption === 'none' ? null : $settings->encryption,
+                'mail.from.address' => $settings->from_email,
+                'mail.from.name' => $settings->from_name,
             ]);
 
             Mail::raw(
-                'This is a test email from ' . app(GeneralSettings::class)->app_name . '. Your mail configuration is working correctly.',
+                'This is a test email from '.app(GeneralSettings::class)->app_name.'. Your mail configuration is working correctly.',
                 function ($message) use ($to, $settings) {
                     $message->to($to)
                         ->from($settings->from_email, $settings->from_name)
