@@ -4,6 +4,7 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
+// Merged: make_media_model_id_uuid_compatible (model_id CHAR(36) instead of unsignedBigInteger)
 return new class extends Migration
 {
     public function up(): void
@@ -11,7 +12,11 @@ return new class extends Migration
         Schema::create('media', function (Blueprint $table) {
             $table->id();
 
-            $table->morphs('model');
+            // UUID-compatible morph pair (model_id as CHAR(36) instead of the default BIGINT)
+            $table->string('model_type');
+            $table->char('model_id', 36);
+            $table->index(['model_type', 'model_id']);
+
             $table->uuid()->nullable()->unique();
             $table->string('collection_name');
             $table->string('name');

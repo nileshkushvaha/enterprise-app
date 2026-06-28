@@ -4,11 +4,9 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
+// Merged: add_content_to_pages_and_posts (content longText column)
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
         Schema::create('pages', function (Blueprint $table) {
@@ -16,10 +14,11 @@ return new class extends Migration
             $table->string('title', 255);
             $table->string('slug', 255)->unique();
             $table->text('excerpt')->nullable();
+            $table->longText('content')->nullable();
             $table->string('template')->default('default');
             $table->string('layout')->default('default');
-            $table->string('status')->default('draft'); // draft, published, scheduled, archived
-            $table->string('visibility')->default('private'); // public, private
+            $table->string('status')->default('draft');
+            $table->string('visibility')->default('private');
             $table->dateTime('published_at')->nullable();
             $table->string('meta_title', 70)->nullable();
             $table->string('meta_description', 160)->nullable();
@@ -40,9 +39,6 @@ return new class extends Migration
         });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
         Schema::dropIfExists('pages');

@@ -4,6 +4,7 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
+// Merged: add_scheduling_to_navigation_items (locale, publish_from, publish_until + index)
 return new class extends Migration
 {
     public function up(): void
@@ -19,7 +20,7 @@ return new class extends Migration
             $table->unsignedInteger('depth')->default(0);
 
             $table->string('label');
-            $table->string('link_type', 50);        // NavigationLinkType varchar
+            $table->string('link_type', 50);
             $table->string('url')->nullable();
             $table->string('route_name')->nullable();
             $table->json('route_params')->nullable();
@@ -35,11 +36,14 @@ return new class extends Migration
             $table->string('css_id')->nullable();
             $table->string('badge_text', 50)->nullable();
             $table->string('badge_color', 30)->nullable();
-            $table->string('visibility', 30)->default('all'); // NavigationVisibility varchar
+            $table->string('visibility', 30)->default('all');
             $table->unsignedSmallInteger('sort_order')->default(0);
             $table->boolean('is_active')->default(true);
             $table->boolean('open_in_modal')->default(false);
             $table->json('extra_attributes')->nullable();
+            $table->string('locale', 10)->nullable();
+            $table->timestamp('publish_from')->nullable();
+            $table->timestamp('publish_until')->nullable();
             $table->unsignedBigInteger('created_by')->nullable();
             $table->unsignedBigInteger('updated_by')->nullable();
             $table->timestamps();
@@ -50,6 +54,7 @@ return new class extends Migration
 
             $table->index(['linkable_type', 'linkable_id']);
             $table->index(['navigation_id', 'is_active', '_lft', '_rgt']);
+            $table->index(['navigation_id', 'publish_from', 'publish_until'], 'nav_items_scheduling_index');
         });
     }
 

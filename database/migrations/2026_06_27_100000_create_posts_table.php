@@ -4,6 +4,8 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
+// Merged: drop_featured_image_from_posts_table (column omitted from schema)
+//         add_content_to_pages_and_posts (content longText column)
 return new class extends Migration
 {
     public function up(): void
@@ -13,7 +15,7 @@ return new class extends Migration
             $table->string('title', 255);
             $table->string('slug', 255)->unique();
             $table->text('excerpt')->nullable();
-            $table->string('featured_image')->nullable();
+            $table->longText('content')->nullable();
             $table->unsignedBigInteger('author_id')->nullable();
             $table->string('status')->default('draft');
             $table->string('visibility')->default('private');
@@ -47,4 +49,3 @@ return new class extends Migration
         Schema::dropIfExists('posts');
     }
 };
-

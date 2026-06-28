@@ -9,6 +9,7 @@ DROP TABLE IF EXISTS `activity_log`;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `activity_log` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `batch_uuid` char(36) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `log_name` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `description` text COLLATE utf8mb4_unicode_ci NOT NULL,
   `subject_type` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
@@ -23,6 +24,8 @@ CREATE TABLE `activity_log` (
   PRIMARY KEY (`id`),
   KEY `subject` (`subject_type`,`subject_id`),
   KEY `causer` (`causer_type`,`causer_id`),
+  KEY `activity_log_created_at_index` (`created_at`),
+  KEY `activity_log_batch_uuid_index` (`batch_uuid`),
   KEY `activity_log_log_name_index` (`log_name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -56,10 +59,11 @@ CREATE TABLE `content_blocks` (
   `blockable_type` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
   `blockable_id` char(36) COLLATE utf8mb4_unicode_ci NOT NULL,
   `block_type` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `name` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'Optional human-readable label to identify this block in the admin',
+  `name` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `content` json DEFAULT NULL,
   `settings` json DEFAULT NULL,
   `sort_order` smallint unsigned NOT NULL DEFAULT '0',
+  `position` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'after_content',
   `is_active` tinyint(1) NOT NULL DEFAULT '1',
   `created_by` bigint unsigned DEFAULT NULL,
   `updated_by` bigint unsigned DEFAULT NULL,
@@ -71,6 +75,7 @@ CREATE TABLE `content_blocks` (
   KEY `content_blocks_created_by_foreign` (`created_by`),
   KEY `content_blocks_updated_by_foreign` (`updated_by`),
   KEY `content_blocks_block_type_index` (`block_type`),
+  KEY `content_blocks_position_index` (`position`),
   KEY `content_blocks_blockable_type_is_active_index` (`blockable_type`,`is_active`),
   CONSTRAINT `content_blocks_created_by_foreign` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
   CONSTRAINT `content_blocks_updated_by_foreign` FOREIGN KEY (`updated_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
@@ -323,9 +328,9 @@ CREATE TABLE `navigations` (
   `settings` json DEFAULT NULL,
   `created_by` bigint unsigned DEFAULT NULL,
   `updated_by` bigint unsigned DEFAULT NULL,
-  `deleted_at` timestamp NULL DEFAULT NULL,
   `created_at` timestamp NULL DEFAULT NULL,
   `updated_at` timestamp NULL DEFAULT NULL,
+  `deleted_at` timestamp NULL DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `navigations_slug_unique` (`slug`),
   KEY `navigations_created_by_foreign` (`created_by`),
@@ -345,6 +350,7 @@ CREATE TABLE `pages` (
   `title` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
   `slug` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
   `excerpt` text COLLATE utf8mb4_unicode_ci,
+  `content` longtext COLLATE utf8mb4_unicode_ci,
   `template` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'default',
   `layout` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'default',
   `status` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'draft',
@@ -466,6 +472,7 @@ CREATE TABLE `posts` (
   `title` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
   `slug` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
   `excerpt` text COLLATE utf8mb4_unicode_ci,
+  `content` longtext COLLATE utf8mb4_unicode_ci,
   `author_id` bigint unsigned DEFAULT NULL,
   `status` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'draft',
   `visibility` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'private',
@@ -522,6 +529,23 @@ CREATE TABLE `roles` (
   `updated_at` timestamp NULL DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `roles_name_guard_name_unique` (`name`,`guard_name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `scheduler_histories`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `scheduler_histories` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `command` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `triggered_by` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'scheduler',
+  `status` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `duration_ms` int unsigned DEFAULT NULL,
+  `output` text COLLATE utf8mb4_unicode_ci,
+  `ran_at` timestamp NOT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `scheduler_histories_command_ran_at_index` (`command`,`ran_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `sessions`;
@@ -663,48 +687,33 @@ CREATE TABLE `users` (
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (1,'0001_01_01_000000_create_users_table',1);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (2,'0001_01_01_000001_create_cache_table',1);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (3,'0001_01_01_000002_create_jobs_table',1);
-INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (4,'2026_06_26_173011_create_permission_tables',2);
-INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (5,'2026_06_26_174252_create_activity_log_table',3);
-INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (7,'2026_06_26_175107_create_permission_tables',4);
-INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (8,'2026_06_26_182530_add_status_and_avatar_to_users_table',5);
-INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (9,'2026_06_26_183253_create_countries_table',6);
-INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (10,'2026_06_26_185105_add_meta_to_roles_table',7);
-INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (11,'2026_06_26_193822_add_profile_fields_to_users_table',8);
-INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (12,'2026_06_26_193822_create_user_profiles_table',8);
-INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (13,'2026_06_26_195727_create_login_histories_table',9);
-INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (14,'2026_06_26_205847_create_user_sessions_table',10);
-INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (15,'2026_06_26_210337_add_two_factor_to_users_table',11);
-INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (16,'2026_06_26_224724_make_profile_preference_columns_nullable',12);
-INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (17,'2022_12_14_083707_create_settings_table',13);
-INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (18,'2026_06_26_233119_fill_general_settings',14);
-INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (19,'2026_06_26_233120_fill_mail_settings',14);
-INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (20,'2026_06_26_233120_fill_seo_settings',14);
-INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (21,'2026_06_27_034500_fill_payment_bank_settings',15);
-INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (22,'2026_06_27_034510_fill_payment_gateway_settings',15);
-INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (23,'2026_06_27_034520_fill_payment_configuration_settings',15);
-INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (24,'2026_06_27_034530_fill_payment_advanced_settings',15);
-INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (25,'2026_06_27_061000_remove_instamojo_gateway_settings',16);
-INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (26,'2026_06_27_065804_create_pages_table',17);
-INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (27,'2026_06_27_070110_create_page_blocks_table',18);
-INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (28,'2026_06_27_070746_update_activity_log_subject_id_to_uuid',19);
-INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (29,'2026_06_27_074000_create_media_table',20);
-INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (30,'2026_06_27_091500_make_media_model_id_uuid_compatible',21);
-INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (31,'2026_06_27_100000_create_posts_table',22);
-INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (32,'2026_06_27_100100_create_post_blocks_table',22);
-INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (33,'2026_06_27_100200_create_post_categories_table',22);
-INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (34,'2026_06_27_100300_create_post_category_post_table',22);
-INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (35,'2026_06_27_100400_create_tags_table',22);
-INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (36,'2026_06_27_100500_create_post_tag_post_table',22);
-INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (37,'2026_06_27_100600_create_post_related_post_table',22);
-INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (38,'2026_06_27_200000_drop_featured_image_from_posts_table',23);
-INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (39,'2026_06_27_210000_create_content_blocks_table',24);
-INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (40,'2026_06_27_153115_widen_two_factor_columns_on_users_table',25);
-INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (41,'2026_06_27_220000_convert_content_blocks_morph_aliases',25);
-INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (42,'2026_06_27_230000_create_navigations_table',26);
-INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (43,'2026_06_27_230100_create_navigation_items_table',26);
-INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (44,'2026_06_27_230200_create_navigation_item_roles_table',26);
-INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (45,'2026_06_27_230300_create_navigation_item_permissions_table',26);
-INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (46,'2026_06_28_100000_add_scheduling_to_navigation_items',27);
-INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (47,'2026_06_28_200000_add_soft_deletes_to_navigations',28);
-INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (48,'2026_06_28_000001_add_reading_settings',29);
-INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (49,'2026_06_28_061350_add_name_to_content_blocks_table',30);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (4,'2022_12_14_083707_create_settings_table',1);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (5,'2026_06_26_174252_create_activity_log_table',1);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (6,'2026_06_26_175107_create_permission_tables',1);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (7,'2026_06_26_183253_create_countries_table',1);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (8,'2026_06_26_193822_create_user_profiles_table',1);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (9,'2026_06_26_195727_create_login_histories_table',1);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (10,'2026_06_26_205847_create_user_sessions_table',1);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (11,'2026_06_26_233119_fill_general_settings',1);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (12,'2026_06_26_233120_fill_mail_settings',1);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (13,'2026_06_26_233120_fill_seo_settings',1);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (14,'2026_06_27_034500_fill_payment_bank_settings',1);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (15,'2026_06_27_034510_fill_payment_gateway_settings',1);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (16,'2026_06_27_034520_fill_payment_configuration_settings',1);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (17,'2026_06_27_034530_fill_payment_advanced_settings',1);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (18,'2026_06_27_061000_remove_instamojo_gateway_settings',1);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (19,'2026_06_27_065804_create_pages_table',1);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (20,'2026_06_27_074000_create_media_table',1);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (21,'2026_06_27_100000_create_posts_table',1);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (22,'2026_06_27_100200_create_post_categories_table',1);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (23,'2026_06_27_100300_create_post_category_post_table',1);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (24,'2026_06_27_100400_create_tags_table',1);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (25,'2026_06_27_100500_create_post_tag_post_table',1);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (26,'2026_06_27_100600_create_post_related_post_table',1);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (27,'2026_06_27_210000_create_content_blocks_table',1);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (28,'2026_06_27_230000_create_navigations_table',1);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (29,'2026_06_27_230100_create_navigation_items_table',1);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (30,'2026_06_27_230200_create_navigation_item_roles_table',1);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (31,'2026_06_27_230300_create_navigation_item_permissions_table',1);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (32,'2026_06_28_000001_add_reading_settings',1);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (33,'2026_06_28_142841_create_scheduler_histories_table',1);
