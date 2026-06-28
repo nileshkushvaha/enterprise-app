@@ -12,10 +12,28 @@ use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\Cache;
 use Spatie\Activitylog\Models\Activity;
 
 class ActivityLogTable
 {
+    /** Maps event names to Filament badge colors. */
+    private static function eventColor(?string $event): string
+    {
+        return match ($event) {
+            'created', 'registered'                                    => 'success',
+            'updated', 'roles_updated', 'profile_updated',
+            'password_changed', 'photo_updated', 'role_updated',
+            '2fa_enabled', '2fa_disabled', 'account_unlocked'         => 'warning',
+            'deleted', 'login_failed'                                  => 'danger',
+            'login', 'logout', 'password_reset', 'auto_published',
+            'manually_ran', 'webhook_received', 'role_created',
+            'photo_removed', 'password_reset_requested'               => 'info',
+            'previewed', 'contact_form_submitted', 'media_updated'     => 'gray',
+            default                                                    => 'gray',
+        };
+    }
+
     public static function configure(Table $table): Table
     {
         return $table
@@ -32,13 +50,7 @@ class ActivityLogTable
                 TextColumn::make('event')
                     ->label('Event')
                     ->badge()
-                    ->color(fn (?string $state): string => match ($state) {
-                        'created'       => 'success',
-                        'updated'       => 'warning',
-                        'deleted'       => 'danger',
-                        'media_updated' => 'info',
-                        default         => 'gray',
-                    })
+                    ->color(fn (?string $state): string => self::eventColor($state))
                     ->sortable(),
 
                 TextColumn::make('description')
@@ -60,7 +72,8 @@ class ActivityLogTable
                     ->label('By')
                     ->default('System')
                     ->searchable()
-                    ->sortable(),
+                    ->sortable()
+                    ->description(fn (Activity $record): ?string => $record->causer?->email),
 
                 TextColumn::make('created_at')
                     ->label('When')
@@ -73,42 +86,51 @@ class ActivityLogTable
             ->filters([
                 SelectFilter::make('event')
                     ->label('Event')
-                    ->options(fn (): array => \Spatie\Activitylog\Models\Activity::query()
-                        ->distinct()
-                        ->whereNotNull('event')
-                        ->pluck('event', 'event')
-                        ->mapWithKeys(fn ($v) => [$v => ucfirst($v)])
-                        ->toArray()
-                    )
+                    ->options(fn (): array => Cache::remember(
+                        'activity_log_filter_events',
+                        300,
+                        fn (): array => Activity::query()
+                            ->distinct()
+                            ->whereNotNull('event')
+                            ->pluck('event', 'event')
+                            ->mapWithKeys(fn ($v) => [$v => ucwords(str_replace('_', ' ', $v))])
+                            ->toArray()
+                    ))
                     ->placeholder('All events'),
 
                 SelectFilter::make('log_name')
                     ->label('Log Channel')
-                    ->options(fn (): array => \Spatie\Activitylog\Models\Activity::query()
-                        ->distinct()
-                        ->whereNotNull('log_name')
-                        ->pluck('log_name', 'log_name')
-                        ->mapWithKeys(fn ($v) => [$v => ucwords(str_replace('_', ' ', $v))])
-                        ->toArray()
-                    )
+                    ->options(fn (): array => Cache::remember(
+                        'activity_log_filter_channels',
+                        300,
+                        fn (): array => Activity::query()
+                            ->distinct()
+                            ->whereNotNull('log_name')
+                            ->pluck('log_name', 'log_name')
+                            ->mapWithKeys(fn ($v) => [$v => ucwords(str_replace('_', ' ', $v))])
+                            ->toArray()
+                    ))
                     ->placeholder('All channels'),
 
                 SelectFilter::make('subject_type')
                     ->label('Subject Type')
-                    ->options(fn (): array => \Spatie\Activitylog\Models\Activity::query()
-                        ->distinct()
-                        ->whereNotNull('subject_type')
-                        ->pluck('subject_type', 'subject_type')
-                        ->mapWithKeys(fn ($v) => [$v => class_basename($v)])
-                        ->toArray()
-                    )
+                    ->options(fn (): array => Cache::remember(
+                        'activity_log_filter_subjects',
+                        300,
+                        fn (): array => Activity::query()
+                            ->distinct()
+                            ->whereNotNull('subject_type')
+                            ->pluck('subject_type', 'subject_type')
+                            ->mapWithKeys(fn ($v) => [$v => class_basename($v)])
+                            ->toArray()
+                    ))
                     ->placeholder('All subjects'),
 
                 SelectFilter::make('causer_id')
                     ->label('User')
-                    ->options(fn (): array => \App\Models\User::query()
-                        ->whereIn('id', \Spatie\Activitylog\Models\Activity::query()
-                            ->where('causer_type', \App\Models\User::class)
+                    ->options(fn (): array => User::query()
+                        ->whereIn('id', Activity::query()
+                            ->where('causer_type', User::class)
                             ->whereNotNull('causer_id')
                             ->distinct()
                             ->pluck('causer_id')
@@ -144,7 +166,8 @@ class ActivityLogTable
                 ViewAction::make()->label(''),
             ])
             ->bulkActions([])
-            ->paginated([15, 25, 50, 100])
+            ->paginated([25, 50, 100])
+            ->defaultPaginationPageOption(25)
             ->poll(null);
     }
 }

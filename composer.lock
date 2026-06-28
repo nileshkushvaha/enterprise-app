@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "46d223872753bec23006902449e42f3c",
+    "content-hash": "5dc202ccef1936cca172655994926384",
     "packages": [
         {
             "name": "bezhansalleh/filament-plugin-essentials",
@@ -3842,6 +3842,62 @@
                 }
             ],
             "time": "2026-06-27T03:14:20+00:00"
+        },
+        {
+            "name": "lorisleiva/cron-translator",
+            "version": "v0.5.1",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/lorisleiva/cron-translator.git",
+                "reference": "99e87184dc4b535c157af888782e84ba1d397b6e"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/lorisleiva/cron-translator/zipball/99e87184dc4b535c157af888782e84ba1d397b6e",
+                "reference": "99e87184dc4b535c157af888782e84ba1d397b6e",
+                "shasum": ""
+            },
+            "require": {
+                "php": "^8.0"
+            },
+            "require-dev": {
+                "phpunit/phpunit": "^9.5"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "Lorisleiva\\CronTranslator\\": "src"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Loris LEIVA",
+                    "email": "loris.leiva@gmail.com",
+                    "homepage": "https://lorisleiva.com"
+                }
+            ],
+            "description": "Makes CRON expressions human-readable",
+            "homepage": "https://github.com/lorisleiva/cron-translator",
+            "keywords": [
+                "cron",
+                "expression",
+                "human"
+            ],
+            "support": {
+                "issues": "https://github.com/lorisleiva/cron-translator/issues",
+                "source": "https://github.com/lorisleiva/cron-translator/tree/v0.5.1"
+            },
+            "funding": [
+                {
+                    "url": "https://github.com/lorisleiva",
+                    "type": "github"
+                }
+            ],
+            "time": "2026-03-27T10:08:36+00:00"
         },
         {
             "name": "maennchen/zipstream-php",

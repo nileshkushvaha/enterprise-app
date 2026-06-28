@@ -6,7 +6,10 @@ namespace App\Providers\Filament;
 
 use App\Filament\Pages\AdminChangePassword;
 use App\Filament\Pages\AdminProfile;
+use App\Filament\Pages\CacheManagerPage;
 use App\Filament\Pages\Dashboard;
+use App\Filament\Pages\QueueMonitorPage;
+use App\Filament\Pages\SchedulerMonitorPage;
 use App\Filament\Widgets\RecentLoginsWidget;
 use App\Filament\Widgets\RecentUsersWidget;
 use App\Filament\Widgets\StatsOverviewWidget;
@@ -68,6 +71,9 @@ class AdminPanelProvider extends PanelProvider
             ])
             ->pages([
                 Dashboard::class,
+                CacheManagerPage::class,
+                SchedulerMonitorPage::class,
+                QueueMonitorPage::class,
             ])
             ->discoverWidgets(in: app_path('Filament/Widgets'), for: 'App\Filament\Widgets')
             ->widgets([

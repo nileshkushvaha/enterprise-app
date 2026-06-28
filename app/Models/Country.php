@@ -29,6 +29,10 @@ class Country extends Model
 
     public function getActivitylogOptions(): LogOptions
     {
-        return LogOptions::defaults()->logFillable()->logOnlyDirty()->dontLogEmptyChanges();
+        return LogOptions::defaults()
+            ->useLogName('countries')
+            ->logFillable()
+            ->logOnlyDirty()
+            ->dontLogEmptyChanges();
     }
 }

@@ -255,7 +255,7 @@ class User extends Authenticatable implements FilamentUser, MustVerifyEmail
     public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()
-            ->logOnly(['name', 'first_name', 'last_name', 'email', 'status'])
+            ->logOnly(['name', 'first_name', 'last_name', 'email', 'status', 'email_verified_at'])
             ->logOnlyDirty()
             ->dontLogEmptyChanges()
             ->useLogName('user');

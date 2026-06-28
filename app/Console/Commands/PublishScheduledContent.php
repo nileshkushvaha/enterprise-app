@@ -9,6 +9,7 @@ use App\Models\Post;
 use App\Services\CmsCacheService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class PublishScheduledContent extends Command
 {
@@ -25,8 +26,12 @@ class PublishScheduledContent extends Command
             $this->components->warn('Dry-run mode — no changes will be saved.');
         }
 
-        $publishedPages = $this->publishPages($dryRun);
-        $publishedPosts = $this->publishPosts($dryRun);
+        // Single UUID groups every activity entry produced in this scheduler run so
+        // operators can filter "show me everything published in batch X" via batch_uuid.
+        $batchUuid = (string) Str::uuid();
+
+        $publishedPages = $this->publishPages($dryRun, $batchUuid);
+        $publishedPosts = $this->publishPosts($dryRun, $batchUuid);
         $total = $publishedPages + $publishedPosts;
 
         if ($total > 0 && ! $dryRun) {
@@ -42,7 +47,7 @@ class PublishScheduledContent extends Command
         return self::SUCCESS;
     }
 
-    private function publishPages(bool $dryRun): int
+    private function publishPages(bool $dryRun, string $batchUuid): int
     {
         // Page::scopeScheduled() already enforces published_at <= now()
         $pages = Page::scheduled()->get();
@@ -64,17 +69,21 @@ class PublishScheduledContent extends Command
             }
 
             try {
-                DB::transaction(function () use ($page): void {
+                DB::transaction(function () use ($page, $batchUuid): void {
                     $page->update([
                         'status'     => \App\Enums\PageStatus::Published,
                         'visibility' => \App\Enums\PageVisibility::Public,
                     ]);
 
-                    activity()
+                    $log = activity('cms')
                         ->performedOn($page)
                         ->event('auto_published')
                         ->withProperties(['scheduled_at' => $page->published_at])
                         ->log("Page auto-published by scheduler: {$page->title}");
+
+                    if ($log) {
+                        $log->forceFill(['batch_uuid' => $batchUuid])->saveQuietly();
+                    }
                 });
 
                 $this->components->twoColumnDetail("Page: {$page->title}", 'published ✓');
@@ -87,7 +96,7 @@ class PublishScheduledContent extends Command
         return $published;
     }
 
-    private function publishPosts(bool $dryRun): int
+    private function publishPosts(bool $dryRun, string $batchUuid): int
     {
         // Post::scopeScheduled() enforces published_at <= now()
         $posts = Post::scheduled()->get();
@@ -109,17 +118,21 @@ class PublishScheduledContent extends Command
             }
 
             try {
-                DB::transaction(function () use ($post): void {
+                DB::transaction(function () use ($post, $batchUuid): void {
                     $post->update([
                         'status'     => \App\Enums\PageStatus::Published,
                         'visibility' => \App\Enums\PageVisibility::Public,
                     ]);
 
-                    activity()
+                    $log = activity('cms')
                         ->performedOn($post)
                         ->event('auto_published')
                         ->withProperties(['scheduled_at' => $post->published_at])
                         ->log("Post auto-published by scheduler: {$post->title}");
+
+                    if ($log) {
+                        $log->forceFill(['batch_uuid' => $batchUuid])->saveQuietly();
+                    }
                 });
 
                 $this->components->twoColumnDetail("Post: {$post->title}", 'published ✓');

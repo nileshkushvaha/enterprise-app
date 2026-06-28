@@ -28,7 +28,9 @@ final class ContactFormSubmissionNotification extends Notification implements Sh
      */
     public function __construct(
         private readonly array $payload
-    ) {}
+    ) {
+        $this->onQueue('notifications')->afterCommit();
+    }
 
     public function via(object $notifiable): array
     {

@@ -42,9 +42,10 @@ class CreateRole extends CreateRecord
         $role->syncPermissions($this->selectedPermissions);
 
         // Activity log
-        activity()
+        activity('roles')
             ->performedOn($role)
             ->causedBy(auth()->user())
+            ->event('created')
             ->withProperties([
                 'permissions_count' => count($this->selectedPermissions),
             ])

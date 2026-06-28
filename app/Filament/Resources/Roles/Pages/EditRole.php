@@ -23,7 +23,21 @@ class EditRole extends EditRecord
     {
         return [
             ViewAction::make(),
-            DeleteAction::make(),
+            DeleteAction::make()
+                ->before(function (): void {
+                    /** @var Role $role */
+                    $role = $this->record;
+                    // Log before deletion so the record still exists as the subject.
+                    activity('roles')
+                        ->performedOn($role)
+                        ->causedBy(auth()->user())
+                        ->event('deleted')
+                        ->withProperties([
+                            'name'               => $role->name,
+                            'permissions_count'  => $role->permissions->count(),
+                        ])
+                        ->log('Role deleted');
+                }),
         ];
     }
 
@@ -64,9 +78,10 @@ class EditRole extends EditRecord
         $added   = array_diff($this->selectedPermissions, $oldPermissions);
         $removed = array_diff($oldPermissions, $this->selectedPermissions);
 
-        activity()
+        activity('roles')
             ->performedOn($role)
             ->causedBy(auth()->user())
+            ->event('updated')
             ->withProperties([
                 'permissions_added'   => array_values($added),
                 'permissions_removed' => array_values($removed),

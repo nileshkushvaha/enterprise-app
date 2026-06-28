@@ -1,45 +1,75 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Policies;
 
+use Illuminate\Foundation\Auth\User as AuthUser;
 use App\Models\PostCategory;
-use App\Models\User;
+use Illuminate\Auth\Access\HandlesAuthorization;
 
 class PostCategoryPolicy
 {
-    public function viewAny(User $user): bool
+    use HandlesAuthorization;
+    
+    public function viewAny(AuthUser $authUser): bool
     {
-        return $user->can('posts.list');
+        return $authUser->can('ViewAny:PostCategory');
     }
 
-    public function view(User $user, PostCategory $postCategory): bool
+    public function view(AuthUser $authUser, PostCategory $postCategory): bool
     {
-        return $user->can('posts.view');
+        return $authUser->can('View:PostCategory');
     }
 
-    public function create(User $user): bool
+    public function create(AuthUser $authUser): bool
     {
-        return $user->can('posts.create');
+        return $authUser->can('Create:PostCategory');
     }
 
-    public function update(User $user, PostCategory $postCategory): bool
+    public function update(AuthUser $authUser, PostCategory $postCategory): bool
     {
-        return $user->can('posts.update');
+        return $authUser->can('Update:PostCategory');
     }
 
-    public function delete(User $user, PostCategory $postCategory): bool
+    public function delete(AuthUser $authUser, PostCategory $postCategory): bool
     {
-        return $user->can('posts.delete');
+        return $authUser->can('Delete:PostCategory');
     }
 
-    public function restore(User $user, PostCategory $postCategory): bool
+    public function deleteAny(AuthUser $authUser): bool
     {
-        return $user->can('posts.restore');
+        return $authUser->can('DeleteAny:PostCategory');
     }
 
-    public function forceDelete(User $user, PostCategory $postCategory): bool
+    public function restore(AuthUser $authUser, PostCategory $postCategory): bool
     {
-        return $user->can('posts.delete');
+        return $authUser->can('Restore:PostCategory');
     }
+
+    public function forceDelete(AuthUser $authUser, PostCategory $postCategory): bool
+    {
+        return $authUser->can('ForceDelete:PostCategory');
+    }
+
+    public function forceDeleteAny(AuthUser $authUser): bool
+    {
+        return $authUser->can('ForceDeleteAny:PostCategory');
+    }
+
+    public function restoreAny(AuthUser $authUser): bool
+    {
+        return $authUser->can('RestoreAny:PostCategory');
+    }
+
+    public function replicate(AuthUser $authUser, PostCategory $postCategory): bool
+    {
+        return $authUser->can('Replicate:PostCategory');
+    }
+
+    public function reorder(AuthUser $authUser): bool
+    {
+        return $authUser->can('Reorder:PostCategory');
+    }
+
 }
-

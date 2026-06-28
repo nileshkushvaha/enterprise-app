@@ -6,6 +6,7 @@ namespace Tests\Feature;
 
 use App\Filament\Pages\CacheManagerPage;
 use App\Models\User;
+use App\Policies\CacheManagerPolicy;
 use App\Services\CacheManagerService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
@@ -58,7 +59,7 @@ class CacheManagerPageTest extends TestCase
             ->assertRedirect();
     }
 
-    // ── canAccess / shouldRegisterNavigation ──────────────────────────────
+    // ── canAccess ──────────────────────────────────────────────────────────
 
     public function test_canAccess_returns_false_for_regular_user(): void
     {
@@ -72,28 +73,133 @@ class CacheManagerPageTest extends TestCase
         $this->assertTrue(CacheManagerPage::canAccess());
     }
 
-    // ── Actions via Livewire ──────────────────────────────────────────────
-
-    public function test_super_admin_can_clear_application_cache(): void
+    public function test_canAccess_returns_true_for_user_with_view_permission(): void
     {
-        $this->mock(CacheManagerService::class, function ($mock) {
-            $mock->shouldReceive('clearApplicationCache')
-                ->once()
-                ->andReturn([
-                    'success'   => true,
-                    'message'   => 'Application cache cleared successfully.',
-                    'output'    => 'Application cache cleared successfully.',
-                    'exitCode'  => 0,
-                    'timestamp' => now()->toDateTimeString(),
-                ]);
+        $this->regularUser->givePermissionTo('cache_manager.view');
+        $this->actingAs($this->regularUser);
 
-            $this->stubInfoMethods($mock);
-        });
+        $this->assertTrue(CacheManagerPage::canAccess());
+    }
 
+    // ── Policy ─────────────────────────────────────────────────────────────
+
+    public function test_policy_viewPage_returns_false_without_permission(): void
+    {
+        $this->assertFalse(app(CacheManagerPolicy::class)->viewPage($this->regularUser));
+    }
+
+    public function test_policy_viewPage_returns_true_with_permission(): void
+    {
+        $this->regularUser->givePermissionTo('cache_manager.view');
+        $this->assertTrue(app(CacheManagerPolicy::class)->viewPage($this->regularUser));
+    }
+
+    public function test_policy_viewPage_does_not_throw_when_permission_does_not_exist(): void
+    {
+        // Delete the permission to simulate a fresh install where shield:generate hasn't run
+        Permission::where('name', 'cache_manager.view')->delete();
+        app()['cache']->forget('spatie.permission.cache');
+
+        $result = app(CacheManagerPolicy::class)->viewPage($this->regularUser);
+
+        $this->assertFalse($result);
+    }
+
+    public function test_policy_clearApplicationCache_does_not_throw_when_permission_missing(): void
+    {
+        Permission::where('name', 'cache_manager.clear')->delete();
+        app()['cache']->forget('spatie.permission.cache');
+
+        $result = app(CacheManagerPolicy::class)->clearApplicationCache($this->regularUser);
+
+        $this->assertFalse($result);
+    }
+
+    public function test_policy_optimize_does_not_throw_when_permission_missing(): void
+    {
+        Permission::where('name', 'cache_manager.optimize')->delete();
+        app()['cache']->forget('spatie.permission.cache');
+
+        $result = app(CacheManagerPolicy::class)->optimize($this->regularUser);
+
+        $this->assertFalse($result);
+    }
+
+    // ── Actions via Livewire — all 7 methods ──────────────────────────────
+
+    public function test_clear_app_cache_action_calls_service(): void
+    {
+        $this->mockService('clearApplicationCache', 'Application cache cleared successfully.');
         $this->actingAs($this->superAdmin);
 
         Livewire::test(CacheManagerPage::class)
             ->callAction('clear_app_cache')
+            ->assertHasNoErrors()
+            ->assertSet('lastResult.success', true);
+    }
+
+    public function test_clear_view_cache_action_calls_service(): void
+    {
+        $this->mockService('clearViewCache', 'View cache cleared successfully.');
+        $this->actingAs($this->superAdmin);
+
+        Livewire::test(CacheManagerPage::class)
+            ->callAction('clear_view_cache')
+            ->assertHasNoErrors()
+            ->assertSet('lastResult.success', true);
+    }
+
+    public function test_clear_route_cache_action_calls_service(): void
+    {
+        $this->mockService('clearRouteCache', 'Route cache cleared successfully.');
+        $this->actingAs($this->superAdmin);
+
+        Livewire::test(CacheManagerPage::class)
+            ->callAction('clear_route_cache')
+            ->assertHasNoErrors()
+            ->assertSet('lastResult.success', true);
+    }
+
+    public function test_clear_config_cache_action_calls_service(): void
+    {
+        $this->mockService('clearConfigCache', 'Config cache cleared successfully.');
+        $this->actingAs($this->superAdmin);
+
+        Livewire::test(CacheManagerPage::class)
+            ->callAction('clear_config_cache')
+            ->assertHasNoErrors()
+            ->assertSet('lastResult.success', true);
+    }
+
+    public function test_clear_event_cache_action_calls_service(): void
+    {
+        $this->mockService('clearEventCache', 'Event cache cleared successfully.');
+        $this->actingAs($this->superAdmin);
+
+        Livewire::test(CacheManagerPage::class)
+            ->callAction('clear_event_cache')
+            ->assertHasNoErrors()
+            ->assertSet('lastResult.success', true);
+    }
+
+    public function test_optimize_action_calls_service(): void
+    {
+        $this->mockService('optimize', 'Application optimized successfully.');
+        $this->actingAs($this->superAdmin);
+
+        Livewire::test(CacheManagerPage::class)
+            ->callAction('optimize')
+            ->assertHasNoErrors()
+            ->assertSet('lastResult.success', true);
+    }
+
+    public function test_optimize_clear_action_calls_service(): void
+    {
+        $this->mockService('optimizeClear', 'All caches cleared successfully.');
+        $this->actingAs($this->superAdmin);
+
+        Livewire::test(CacheManagerPage::class)
+            ->callAction('optimize_clear')
             ->assertHasNoErrors()
             ->assertSet('lastResult.success', true);
     }
@@ -121,30 +227,24 @@ class CacheManagerPageTest extends TestCase
             ->assertSet('lastResult.success', false);
     }
 
-    public function test_optimize_action_calls_service(): void
+    // ── Helpers ───────────────────────────────────────────────────────────
+
+    private function mockService(string $method, string $successMessage): void
     {
-        $this->mock(CacheManagerService::class, function ($mock) {
-            $mock->shouldReceive('optimize')
+        $this->mock(CacheManagerService::class, function ($mock) use ($method, $successMessage) {
+            $mock->shouldReceive($method)
                 ->once()
                 ->andReturn([
                     'success'   => true,
-                    'message'   => 'Application optimized successfully.',
-                    'output'    => 'Application optimized successfully.',
+                    'message'   => $successMessage,
+                    'output'    => $successMessage,
                     'exitCode'  => 0,
                     'timestamp' => now()->toDateTimeString(),
                 ]);
 
             $this->stubInfoMethods($mock);
         });
-
-        $this->actingAs($this->superAdmin);
-
-        Livewire::test(CacheManagerPage::class)
-            ->callAction('optimize')
-            ->assertSet('lastResult.success', true);
     }
-
-    // ── Helpers ───────────────────────────────────────────────────────────
 
     private function stubInfoMethods(\Mockery\MockInterface $mock): void
     {

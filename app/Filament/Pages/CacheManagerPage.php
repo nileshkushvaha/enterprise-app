@@ -151,11 +151,11 @@ class CacheManagerPage extends Page
     {
         return [
             ActionGroup::make([
-                $this->makeAction('clear_app_cache',    'Clear App Cache',    'clearApplicationCache', 'heroicon-o-trash',       'danger',  'cache_manager.clear'),
-                $this->makeAction('clear_view_cache',   'Clear View Cache',   'clearViewCache',        'heroicon-o-eye-slash',   'warning', 'cache_manager.clear'),
-                $this->makeAction('clear_route_cache',  'Clear Route Cache',  'clearRouteCache',       'heroicon-o-map',         'warning', 'cache_manager.clear'),
-                $this->makeAction('clear_config_cache', 'Clear Config Cache', 'clearConfigCache',      'heroicon-o-cog-6-tooth', 'warning', 'cache_manager.clear'),
-                $this->makeAction('clear_event_cache',  'Clear Event Cache',  'clearEventCache',       'heroicon-o-bolt-slash',  'warning', 'cache_manager.clear'),
+                $this->makeAction('clear_app_cache',    'Clear Cache Store', 'clearApplicationCache', 'cache:clear',    'heroicon-o-trash',       'danger',  'cache_manager.clear'),
+                $this->makeAction('clear_view_cache',   'Clear View Cache',  'clearViewCache',        'view:clear',     'heroicon-o-eye-slash',   'warning', 'cache_manager.clear'),
+                $this->makeAction('clear_route_cache',  'Clear Route Cache', 'clearRouteCache',       'route:clear',    'heroicon-o-map',         'warning', 'cache_manager.clear'),
+                $this->makeAction('clear_config_cache', 'Clear Config Cache','clearConfigCache',      'config:clear',   'heroicon-o-cog-6-tooth', 'warning', 'cache_manager.clear'),
+                $this->makeAction('clear_event_cache',  'Clear Event Cache', 'clearEventCache',       'event:clear',    'heroicon-o-bolt-slash',  'warning', 'cache_manager.clear'),
             ])
                 ->label('Clear Caches')
                 ->icon('heroicon-o-trash')
@@ -163,8 +163,8 @@ class CacheManagerPage extends Page
                 ->button(),
 
             ActionGroup::make([
-                $this->makeAction('optimize',       'Optimize',       'optimize',       'heroicon-o-rocket-launch', 'success', 'cache_manager.optimize'),
-                $this->makeAction('optimize_clear', 'Optimize Clear', 'optimizeClear',  'heroicon-o-arrow-path',    'gray',    'cache_manager.optimize'),
+                $this->makeAction('optimize',       'Optimize',       'optimize',      'optimize',       'heroicon-o-rocket-launch', 'success', 'cache_manager.optimize'),
+                $this->makeAction('optimize_clear', 'Optimize Clear', 'optimizeClear', 'optimize:clear', 'heroicon-o-arrow-path',    'gray',    'cache_manager.optimize'),
             ])
                 ->label('Optimize')
                 ->icon('heroicon-o-rocket-launch')
@@ -198,6 +198,7 @@ class CacheManagerPage extends Page
         string $name,
         string $label,
         string $serviceMethod,
+        string $artisanCommand,
         string $icon,
         string $color,
         string $permission,
@@ -209,7 +210,7 @@ class CacheManagerPage extends Page
             ->disabled(fn() => $this->processing || ! $this->userHasPermission($permission))
             ->requiresConfirmation()
             ->modalHeading("Confirm: {$label}")
-            ->modalDescription("This will run artisan {$this->commandNameFor($name)}. Are you sure you want to continue?")
+            ->modalDescription("This will run artisan {$artisanCommand}. Are you sure you want to continue?")
             ->modalSubmitActionLabel('Yes, proceed')
             ->action(function () use ($serviceMethod) {
                 $this->processing = true;
@@ -239,19 +240,5 @@ class CacheManagerPage extends Page
                     $this->processing = false;
                 }
             });
-    }
-
-    private function commandNameFor(string $actionName): string
-    {
-        return match ($actionName) {
-            'clear_app_cache'    => 'cache:clear',
-            'clear_view_cache'   => 'view:clear',
-            'clear_route_cache'  => 'route:clear',
-            'clear_config_cache' => 'config:clear',
-            'clear_event_cache'  => 'event:clear',
-            'optimize'           => 'optimize',
-            'optimize_clear'     => 'optimize:clear',
-            default              => $actionName,
-        };
     }
 }

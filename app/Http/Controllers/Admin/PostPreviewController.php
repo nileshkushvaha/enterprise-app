@@ -35,7 +35,7 @@ class PostPreviewController extends Controller
             return response('Preview error. Please try again.', 500);
         }
 
-        activity()
+        activity('posts')
             ->performedOn($post)
             ->causedBy(auth()->user())
             ->event('previewed')

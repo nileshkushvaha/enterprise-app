@@ -11,9 +11,22 @@ Artisan::command('inspire', function () {
 
 // Auto-publish scheduled Pages and Posts every minute.
 // The command is idempotent: it only touches records whose published_at <= now().
+// runInBackground() removed: ScheduledTaskFinished fires immediately after fork,
+// recording ~5ms instead of actual duration. withoutOverlapping() prevents concurrency.
 app(Schedule::class)
     ->command(PublishScheduledContent::class)
     ->everyMinute()
     ->withoutOverlapping()
-    ->runInBackground()
     ->appendOutputTo(storage_path('logs/scheduled-publishing.log'));
+
+// Prune scheduler_histories older than 30 days (MassPrunable trait on the model).
+app(Schedule::class)
+    ->command('model:prune', ['--model' => \App\Models\SchedulerHistory::class])
+    ->daily()
+    ->appendOutputTo(storage_path('logs/model-prune.log'));
+
+// Clean activity_log entries older than clean_after_days (config/activitylog.php, default 365 days).
+app(Schedule::class)
+    ->command('activitylog:clean')
+    ->weekly()
+    ->appendOutputTo(storage_path('logs/activitylog-clean.log'));

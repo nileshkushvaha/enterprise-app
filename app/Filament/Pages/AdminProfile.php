@@ -99,10 +99,8 @@ class AdminProfile extends EditProfile
     // ── Save: user fields + profile upsert ───────────────────────────
     protected function handleRecordUpdate(Model $record, array $data): Model
     {
-        // Strip hidden/password fields
         unset($data['email'], $data['_pw'], $data['_pwc'], $data['_cpw']);
 
-        // Profile-only fields
         $profileFields = [
             'phone', 'gender', 'date_of_birth',
             'address', 'city', 'state', 'country_id', 'postal_code',
@@ -117,7 +115,6 @@ class AdminProfile extends EditProfile
             }
         }
 
-        // Keep name in sync
         $data['name'] = trim(($data['first_name'] ?? $record->first_name ?? '') . ' ' . ($data['last_name'] ?? $record->last_name ?? ''));
 
         $record->update($data);
@@ -140,7 +137,6 @@ class AdminProfile extends EditProfile
                 // ── Section 1: Account Info ──────────────────────────
                 Section::make('Account Information')
                     ->description('Your login email and display name.')
-                    ->aside()
                     ->schema([
                         $this->getEmailFormComponent(),
 
@@ -154,7 +150,6 @@ class AdminProfile extends EditProfile
                 // ── Section 2: Personal Details ──────────────────────
                 Section::make('Personal Details')
                     ->description('Your name and basic personal information.')
-                    ->aside()
                     ->schema([
                         Grid::make(2)
                             ->schema([
@@ -195,7 +190,6 @@ class AdminProfile extends EditProfile
                 // ── Section 3: Location ──────────────────────────────
                 Section::make('Location')
                     ->description('Your address and regional settings.')
-                    ->aside()
                     ->schema([
                         Textarea::make('address')
                             ->label('Street Address')
@@ -230,7 +224,6 @@ class AdminProfile extends EditProfile
                 // ── Section 4: Preferences ───────────────────────────
                 Section::make('Preferences')
                     ->description('Your timezone and language settings.')
-                    ->aside()
                     ->schema([
                         Grid::make(2)
                             ->schema([

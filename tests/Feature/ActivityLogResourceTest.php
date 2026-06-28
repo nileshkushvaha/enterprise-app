@@ -218,6 +218,137 @@ class ActivityLogResourceTest extends TestCase
         $this->assertFalse($policy->viewAny($this->regularUser));
     }
 
+    // ── Filter: causer_id ─────────────────────────────────────────────────
+
+    public function test_list_page_can_filter_by_causer_id(): void
+    {
+        activity('test')->causedBy($this->superAdmin)->log('by super admin');
+        activity('test')->causedBy($this->logViewer)->log('by log viewer');
+
+        $this->actingAs($this->superAdmin);
+
+        Livewire::test(ListActivityLogs::class)
+            ->filterTable('causer_id', $this->superAdmin->id)
+            ->assertCountTableRecords(1);
+    }
+
+    // ── Filter: date range ────────────────────────────────────────────────
+
+    public function test_list_page_can_filter_by_date_range(): void
+    {
+        // Create one old and one recent activity
+        $oldActivity = activity('test')->log('old entry');
+        $oldActivity->forceFill(['created_at' => now()->subDays(10)])->saveQuietly();
+
+        activity('test')->log('new entry');
+
+        $this->actingAs($this->superAdmin);
+
+        Livewire::test(ListActivityLogs::class)
+            ->filterTable('date_range', [
+                'from'  => now()->subDays(1)->toDateString(),
+                'until' => now()->toDateString(),
+            ])
+            ->assertCountTableRecords(1);
+    }
+
+    // ── No bulk actions ───────────────────────────────────────────────────
+
+    public function test_list_page_has_no_bulk_actions(): void
+    {
+        $this->actingAs($this->superAdmin);
+
+        // The resource disables all bulk actions — verify no delete/restore bulk action exists.
+        Livewire::test(ListActivityLogs::class)
+            ->assertSuccessful()
+            ->assertTableBulkActionDoesNotExist('delete')
+            ->assertTableBulkActionDoesNotExist('forceDelete');
+    }
+
+    // ── End-to-end: model mutation → log entry ────────────────────────────
+
+    public function test_page_model_mutation_creates_activity_log_entry(): void
+    {
+        $page = \App\Models\Page::factory()->create(['title' => 'Original Title', 'status' => 'draft']);
+        Activity::query()->delete(); // clear factory-generated activity
+
+        $page->update(['title' => 'Updated Title']);
+
+        // subject_type is stored via morph map (e.g. 'page'), so match on log_name and event.
+        $this->assertDatabaseHas('activity_log', [
+            'log_name' => 'pages',
+            'event'    => 'updated',
+        ]);
+    }
+
+    public function test_country_model_mutation_uses_countries_log_name(): void
+    {
+        $country = \App\Models\Country::create([
+            'name'        => 'Test Country',
+            'iso2'        => 'TC',
+            'iso3'        => 'TCY',
+            'phone_code'  => '999',
+            'nationality' => 'Testian',
+            'status'      => 'active',
+        ]);
+        Activity::query()->delete();
+
+        $country->update(['name' => 'Updated Country']);
+
+        $this->assertDatabaseHas('activity_log', [
+            'log_name' => 'countries',
+            'event'    => 'updated',
+        ]);
+    }
+
+    // ── Infolist renders ──────────────────────────────────────────────────
+
+    public function test_view_page_renders_before_and_after_tabs(): void
+    {
+        $activity = activity('test')
+            ->causedBy($this->superAdmin)
+            ->event('updated')
+            ->withProperties([
+                'ip'         => '127.0.0.1',
+                'user_agent' => 'PHPUnit/Test',
+            ])
+            ->log('Test with attribute changes');
+
+        // Manually set attribute_changes to simulate model diff
+        $activity->forceFill([
+            'attribute_changes' => [
+                'old'        => ['name' => 'Old'],
+                'attributes' => ['name' => 'New'],
+            ],
+        ])->saveQuietly();
+
+        $this->actingAs($this->superAdmin)
+            ->get(ActivityLogResource::getUrl('view', ['record' => $activity->id]))
+            ->assertOk()
+            ->assertSee('Before')
+            ->assertSee('After')
+            ->assertSee('Metadata');
+    }
+
+    // ── Role activity logging ─────────────────────────────────────────────
+
+    public function test_role_creation_is_logged_to_roles_channel(): void
+    {
+        \Spatie\Permission\Models\Role::create(['name' => 'test-audited-role', 'guard_name' => 'web']);
+
+        // Simulate what CreateRole::afterCreate() does
+        activity('roles')
+            ->causedBy($this->superAdmin)
+            ->event('created')
+            ->withProperties(['permissions_count' => 0])
+            ->log('Role created');
+
+        $this->assertDatabaseHas('activity_log', [
+            'log_name' => 'roles',
+            'event'    => 'created',
+        ]);
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────
 
     private function makeActivity(

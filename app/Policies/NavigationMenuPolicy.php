@@ -4,53 +4,72 @@ declare(strict_types=1);
 
 namespace App\Policies;
 
+use Illuminate\Foundation\Auth\User as AuthUser;
 use App\Models\NavigationMenu;
-use App\Models\User;
+use Illuminate\Auth\Access\HandlesAuthorization;
 
 class NavigationMenuPolicy
 {
-    public function viewAny(User $user): bool
+    use HandlesAuthorization;
+    
+    public function viewAny(AuthUser $authUser): bool
     {
-        return $user->can('navigation_menus.list');
+        return $authUser->can('ViewAny:NavigationMenu');
     }
 
-    public function view(User $user, NavigationMenu $menu): bool
+    public function view(AuthUser $authUser, NavigationMenu $navigationMenu): bool
     {
-        return $user->can('navigation_menus.view');
+        return $authUser->can('View:NavigationMenu');
     }
 
-    public function create(User $user): bool
+    public function create(AuthUser $authUser): bool
     {
-        return $user->can('navigation_menus.create');
+        return $authUser->can('Create:NavigationMenu');
     }
 
-    public function update(User $user, NavigationMenu $menu): bool
+    public function update(AuthUser $authUser, NavigationMenu $navigationMenu): bool
     {
-        return $user->can('navigation_menus.update');
+        return $authUser->can('Update:NavigationMenu');
     }
 
-    public function delete(User $user, NavigationMenu $menu): bool
+    public function delete(AuthUser $authUser, NavigationMenu $navigationMenu): bool
     {
-        return $user->can('navigation_menus.delete');
+        return $authUser->can('Delete:NavigationMenu');
     }
 
-    public function restore(User $user, NavigationMenu $menu): bool
+    public function deleteAny(AuthUser $authUser): bool
     {
-        return $user->can('navigation_menus.delete');
+        return $authUser->can('DeleteAny:NavigationMenu');
     }
 
-    public function forceDelete(User $user, NavigationMenu $menu): bool
+    public function restore(AuthUser $authUser, NavigationMenu $navigationMenu): bool
     {
-        return $user->can('navigation_menus.delete');
+        return $authUser->can('Restore:NavigationMenu');
     }
 
-    public function publish(User $user, NavigationMenu $menu): bool
+    public function forceDelete(AuthUser $authUser, NavigationMenu $navigationMenu): bool
     {
-        return $user->can('navigation_menus.publish');
+        return $authUser->can('ForceDelete:NavigationMenu');
     }
 
-    public function duplicate(User $user, NavigationMenu $menu): bool
+    public function forceDeleteAny(AuthUser $authUser): bool
     {
-        return $user->can('navigation_menus.create');
+        return $authUser->can('ForceDeleteAny:NavigationMenu');
     }
+
+    public function restoreAny(AuthUser $authUser): bool
+    {
+        return $authUser->can('RestoreAny:NavigationMenu');
+    }
+
+    public function replicate(AuthUser $authUser, NavigationMenu $navigationMenu): bool
+    {
+        return $authUser->can('Replicate:NavigationMenu');
+    }
+
+    public function reorder(AuthUser $authUser): bool
+    {
+        return $authUser->can('Reorder:NavigationMenu');
+    }
+
 }

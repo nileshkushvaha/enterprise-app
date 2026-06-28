@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use Illuminate\Support\Facades\Artisan;
-use Spatie\Activitylog\Facades\Activity;
+use Symfony\Component\Console\Output\BufferedOutput;
 
 class CacheManagerService
 {
@@ -78,78 +78,49 @@ class CacheManagerService
 
     public function clearApplicationCache(): array
     {
-        $exitCode = Artisan::call('cache:clear');
-        $output   = trim(Artisan::output());
-
-        $this->log('cache:clear', $output, $exitCode);
-
-        return $this->result($exitCode, $output, 'Application cache cleared successfully.');
+        return $this->run('cache:clear', 'Application cache cleared successfully.');
     }
 
     public function clearViewCache(): array
     {
-        $exitCode = Artisan::call('view:clear');
-        $output   = trim(Artisan::output());
-
-        $this->log('view:clear', $output, $exitCode);
-
-        return $this->result($exitCode, $output, 'View cache cleared successfully.');
+        return $this->run('view:clear', 'View cache cleared successfully.');
     }
 
     public function clearRouteCache(): array
     {
-        $exitCode = Artisan::call('route:clear');
-        $output   = trim(Artisan::output());
-
-        $this->log('route:clear', $output, $exitCode);
-
-        return $this->result($exitCode, $output, 'Route cache cleared successfully.');
+        return $this->run('route:clear', 'Route cache cleared successfully.');
     }
 
     public function clearConfigCache(): array
     {
-        $exitCode = Artisan::call('config:clear');
-        $output   = trim(Artisan::output());
-
-        $this->log('config:clear', $output, $exitCode);
-
-        return $this->result($exitCode, $output, 'Config cache cleared successfully.');
+        return $this->run('config:clear', 'Config cache cleared successfully.');
     }
 
     public function clearEventCache(): array
     {
-        $exitCode = Artisan::call('event:clear');
-        $output   = trim(Artisan::output());
-
-        $this->log('event:clear', $output, $exitCode);
-
-        return $this->result($exitCode, $output, 'Event cache cleared successfully.');
+        return $this->run('event:clear', 'Event cache cleared successfully.');
     }
 
     public function optimize(): array
     {
-        $exitCode = Artisan::call('optimize');
-        $output   = trim(Artisan::output());
-
-        $this->log('optimize', $output, $exitCode);
-
-        return $this->result($exitCode, $output, 'Application optimized successfully.');
+        return $this->run('optimize', 'Application optimized successfully.');
     }
 
     public function optimizeClear(): array
     {
-        $exitCode = Artisan::call('optimize:clear');
-        $output   = trim(Artisan::output());
-
-        $this->log('optimize:clear', $output, $exitCode);
-
-        return $this->result($exitCode, $output, 'All caches cleared successfully.');
+        return $this->run('optimize:clear', 'All caches cleared successfully.');
     }
 
     // ── Internals ─────────────────────────────────────────────────────────
 
-    private function result(int $exitCode, string $output, string $successMessage): array
+    private function run(string $command, string $successMessage): array
     {
+        $buffer   = new BufferedOutput();
+        $exitCode = Artisan::call($command, [], $buffer);
+        $output   = trim($buffer->fetch());
+
+        $this->logActivity($command, $output, $exitCode);
+
         $success = $exitCode === 0;
 
         return [
@@ -161,7 +132,7 @@ class CacheManagerService
         ];
     }
 
-    private function log(string $command, string $output, int $exitCode): void
+    private function logActivity(string $command, string $output, int $exitCode): void
     {
         $logger = activity('cache_manager')
             ->withProperties([

@@ -13,7 +13,10 @@ final class WelcomeNotification extends Notification implements ShouldQueue
 {
     use Queueable;
 
-    public function __construct() {}
+    public function __construct()
+    {
+        $this->onQueue('notifications')->afterCommit();
+    }
 
     public function via(object $notifiable): array
     {

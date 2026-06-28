@@ -30,7 +30,7 @@ class PageFactory extends Factory
             'status' => fake()->randomElement(['draft', 'published', 'scheduled', 'archived']),
             'visibility' => fake()->randomElement(['public', 'private']),
             'published_at' => fake()->optional(0.7)->dateTimeBetween('-6 months', 'now'),
-            'meta_title' => fake()->sentence(5),
+            'meta_title' => fake()->optional()->text(70),
             'meta_description' => fake()->text(160),
             'meta_keywords' => implode(', ', fake()->words(5)),
             'canonical_url' => fake()->optional(0.5)->url(),

@@ -219,11 +219,6 @@ class Post extends Model implements HasMedia, HasContentBlocks
         ]);
     }
 
-    public function invalidateRenderCache(): void
-    {
-        app(\App\Services\PageRenderService::class)->invalidatePostCache($this);
-    }
-
     public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()

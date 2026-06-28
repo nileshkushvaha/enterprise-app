@@ -15,6 +15,23 @@ use Spatie\Activitylog\Models\Activity;
 
 class ActivityLogInfolist
 {
+    /** Maps event names to Filament badge colors (mirrors ActivityLogTable). */
+    private static function eventColor(?string $event): string
+    {
+        return match ($event) {
+            'created', 'registered'                                    => 'success',
+            'updated', 'roles_updated', 'profile_updated',
+            'password_changed', 'photo_updated', 'role_updated',
+            '2fa_enabled', '2fa_disabled', 'account_unlocked'         => 'warning',
+            'deleted', 'login_failed'                                  => 'danger',
+            'login', 'logout', 'password_reset', 'auto_published',
+            'manually_ran', 'webhook_received', 'role_created',
+            'photo_removed', 'password_reset_requested'               => 'info',
+            'previewed', 'contact_form_submitted', 'media_updated'     => 'gray',
+            default                                                    => 'gray',
+        };
+    }
+
     public static function configure(Schema $schema): Schema
     {
         return $schema->components([
@@ -28,13 +45,7 @@ class ActivityLogInfolist
                 TextEntry::make('event')
                     ->label('Event')
                     ->badge()
-                    ->color(fn (?string $state): string => match ($state) {
-                        'created'       => 'success',
-                        'updated'       => 'warning',
-                        'deleted'       => 'danger',
-                        'media_updated' => 'info',
-                        default         => 'gray',
-                    }),
+                    ->color(fn (?string $state): string => self::eventColor($state)),
 
                 TextEntry::make('created_at')
                     ->label('Performed At')
@@ -66,7 +77,9 @@ class ActivityLogInfolist
                                 }
                                 try {
                                     $model = (new $class)->find($record->subject_id);
-                                    return $model ? class_basename($class) . ' #' . $record->subject_id . ' (exists)' : class_basename($class) . ' #' . $record->subject_id . ' (deleted)';
+                                    return $model
+                                        ? class_basename($class) . ' #' . $record->subject_id . ' (exists)'
+                                        : class_basename($class) . ' #' . $record->subject_id . ' (deleted)';
                                 } catch (\Throwable) {
                                     return '—';
                                 }
@@ -134,6 +147,12 @@ class ActivityLogInfolist
                     Tab::make('Metadata')
                         ->icon('heroicon-o-information-circle')
                         ->schema([
+                            TextEntry::make('batch_uuid')
+                                ->label('Batch UUID')
+                                ->default('—')
+                                ->copyable()
+                                ->helperText('Groups related log entries created in a single operation.'),
+
                             TextEntry::make('properties_ip')
                                 ->label('IP Address')
                                 ->state(fn (Activity $record): string => data_get($record->properties, 'ip') ?? data_get($record->properties, 'ip_address') ?? '—')

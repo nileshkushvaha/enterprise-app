@@ -92,7 +92,6 @@ class AdminChangePassword extends Page
             ->components([
                 Section::make('Update Password')
                     ->description('Enter your current password, then choose a new one.')
-                    ->aside()
                     ->schema([
                         TextInput::make('current_password')
                             ->label('Current Password')

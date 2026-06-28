@@ -245,14 +245,6 @@ class Page extends Model implements HasMedia, HasContentBlocks
     }
 
     /**
-     * Invalidate render cache
-     */
-    public function invalidateRenderCache(): void
-    {
-        app(\App\Services\PageRenderService::class)->invalidateCache($this);
-    }
-
-    /**
      * Activity Log settings
      */
     public function getActivitylogOptions(): LogOptions

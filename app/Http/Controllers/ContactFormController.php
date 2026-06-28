@@ -100,7 +100,7 @@ class ContactFormController extends Controller
                 ->notifyNow(new ContactFormSubmissionNotification($payload));
         }
 
-        activity()
+        activity('contact')
             ->performedOn($block)
             ->event('contact_form_submitted')
             ->withProperties([

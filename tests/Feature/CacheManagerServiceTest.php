@@ -21,9 +21,8 @@ class CacheManagerServiceTest extends TestCase
         parent::setUp();
 
         // Prevent real artisan commands from running during tests — they
-        // can cache config and break the in-memory SQLite environment.
+        // can mutate bootstrap/cache and interfere with the test environment.
         Artisan::shouldReceive('call')->andReturn(0)->byDefault();
-        Artisan::shouldReceive('output')->andReturn('')->byDefault();
 
         $this->service = app(CacheManagerService::class);
     }
@@ -131,14 +130,13 @@ class CacheManagerServiceTest extends TestCase
     public function test_failed_exit_code_marks_success_false(): void
     {
         Artisan::shouldReceive('call')->once()->andReturn(1);
-        Artisan::shouldReceive('output')->once()->andReturn('Something failed.');
 
         $result = $this->service->clearApplicationCache();
 
         $this->assertFalse($result['success']);
     }
 
-    // ── Activity logging ───────────────────────────────────────────────────
+    // ── Activity logging — all 7 methods ──────────────────────────────────
 
     public function test_clearApplicationCache_logs_activity(): void
     {
@@ -148,8 +146,97 @@ class CacheManagerServiceTest extends TestCase
         $this->service->clearApplicationCache();
 
         $this->assertDatabaseHas('activity_log', [
-            'log_name' => 'cache_manager',
+            'log_name'    => 'cache_manager',
+            'description' => 'Executed artisan cache:clear',
         ]);
+    }
+
+    public function test_clearViewCache_logs_activity(): void
+    {
+        $this->service->clearViewCache();
+
+        $this->assertDatabaseHas('activity_log', [
+            'log_name'    => 'cache_manager',
+            'description' => 'Executed artisan view:clear',
+        ]);
+    }
+
+    public function test_clearRouteCache_logs_activity(): void
+    {
+        $this->service->clearRouteCache();
+
+        $this->assertDatabaseHas('activity_log', [
+            'log_name'    => 'cache_manager',
+            'description' => 'Executed artisan route:clear',
+        ]);
+    }
+
+    public function test_clearConfigCache_logs_activity(): void
+    {
+        $this->service->clearConfigCache();
+
+        $this->assertDatabaseHas('activity_log', [
+            'log_name'    => 'cache_manager',
+            'description' => 'Executed artisan config:clear',
+        ]);
+    }
+
+    public function test_clearEventCache_logs_activity(): void
+    {
+        $this->service->clearEventCache();
+
+        $this->assertDatabaseHas('activity_log', [
+            'log_name'    => 'cache_manager',
+            'description' => 'Executed artisan event:clear',
+        ]);
+    }
+
+    public function test_optimize_logs_activity(): void
+    {
+        $this->service->optimize();
+
+        $this->assertDatabaseHas('activity_log', [
+            'log_name'    => 'cache_manager',
+            'description' => 'Executed artisan optimize',
+        ]);
+    }
+
+    public function test_optimizeClear_logs_activity(): void
+    {
+        $this->service->optimizeClear();
+
+        $this->assertDatabaseHas('activity_log', [
+            'log_name'    => 'cache_manager',
+            'description' => 'Executed artisan optimize:clear',
+        ]);
+    }
+
+    public function test_activity_log_records_causer(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+
+        $this->service->clearApplicationCache();
+
+        $log = \Spatie\Activitylog\Models\Activity::where('log_name', 'cache_manager')->latest()->first();
+
+        $this->assertNotNull($log);
+        $this->assertEquals($user->id, $log->causer_id);
+        $this->assertEquals(User::class, $log->causer_type);
+    }
+
+    public function test_activity_log_records_command_in_properties(): void
+    {
+        $this->service->clearViewCache();
+
+        $log = \Spatie\Activitylog\Models\Activity::where('log_name', 'cache_manager')
+            ->where('description', 'Executed artisan view:clear')
+            ->latest()
+            ->first();
+
+        $this->assertNotNull($log);
+        $this->assertEquals('view:clear', $log->properties['command']);
+        $this->assertArrayHasKey('exit_code', $log->properties->toArray());
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────

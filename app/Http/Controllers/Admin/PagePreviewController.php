@@ -35,7 +35,7 @@ class PagePreviewController extends Controller
             return response('Preview error. Please try again.', 500);
         }
 
-        activity()
+        activity('pages')
             ->performedOn($page)
             ->causedBy(auth()->user())
             ->event('previewed')

@@ -6,6 +6,7 @@ namespace App\Policies;
 
 use Illuminate\Auth\Access\HandlesAuthorization;
 use Illuminate\Foundation\Auth\User as AuthUser;
+use Spatie\Permission\Exceptions\PermissionDoesNotExist;
 
 class CacheManagerPolicy
 {
@@ -13,14 +14,30 @@ class CacheManagerPolicy
 
     public function viewPage(AuthUser $user): bool
     {
-        return $this->isSuperAdmin($user)
-            || $user->hasPermissionTo('cache_manager.view');
+        if ($this->isSuperAdmin($user)) {
+            return true;
+        }
+
+        try {
+            return method_exists($user, 'hasPermissionTo')
+                && $user->hasPermissionTo('cache_manager.view');
+        } catch (PermissionDoesNotExist) {
+            return false;
+        }
     }
 
     public function clearApplicationCache(AuthUser $user): bool
     {
-        return $this->isSuperAdmin($user)
-            || $user->hasPermissionTo('cache_manager.clear');
+        if ($this->isSuperAdmin($user)) {
+            return true;
+        }
+
+        try {
+            return method_exists($user, 'hasPermissionTo')
+                && $user->hasPermissionTo('cache_manager.clear');
+        } catch (PermissionDoesNotExist) {
+            return false;
+        }
     }
 
     public function clearViewCache(AuthUser $user): bool
@@ -45,8 +62,16 @@ class CacheManagerPolicy
 
     public function optimize(AuthUser $user): bool
     {
-        return $this->isSuperAdmin($user)
-            || $user->hasPermissionTo('cache_manager.optimize');
+        if ($this->isSuperAdmin($user)) {
+            return true;
+        }
+
+        try {
+            return method_exists($user, 'hasPermissionTo')
+                && $user->hasPermissionTo('cache_manager.optimize');
+        } catch (PermissionDoesNotExist) {
+            return false;
+        }
     }
 
     public function optimizeClear(AuthUser $user): bool

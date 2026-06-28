@@ -10,10 +10,14 @@ use App\Events\Auth\UserLoggedOut;
 use App\Models\LoginHistory;
 use App\Support\UserAgentParser;
 use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 
 class LogLoginActivity implements ShouldQueue
 {
-    public string $queue = 'default';
+    public string $queue   = 'default';
+    public int    $tries   = 3;
+    public array  $backoff = [30, 60, 120];
 
     public function handleUserLoggedIn(UserLoggedIn $event): void
     {
@@ -75,5 +79,13 @@ class LogLoginActivity implements ShouldQueue
         }
 
         LoginHistory::create($data);
+    }
+
+    public function failed(mixed $event, Throwable $exception): void
+    {
+        Log::error('LogLoginActivity failed permanently after all retries', [
+            'event'     => get_class($event),
+            'exception' => $exception->getMessage(),
+        ]);
     }
 }
