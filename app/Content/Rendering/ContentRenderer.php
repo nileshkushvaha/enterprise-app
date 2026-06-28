@@ -10,6 +10,7 @@ use App\Models\Page;
 use App\Models\Post;
 use App\Services\BlockRenderer;
 use App\Settings\GeneralSettings;
+use App\Settings\SeoSettings;
 use Illuminate\Support\Collection;
 
 /**
@@ -26,6 +27,7 @@ class ContentRenderer
         private readonly BlockRenderer $blockRenderer,
         private readonly SeoManager $seoManager,
         private readonly GeneralSettings $generalSettings,
+        private readonly SeoSettings $seoSettings,
     ) {}
 
     // ── Generalised API (new, for any HasContentBlocks owner) ────────────
@@ -220,20 +222,28 @@ class ContentRenderer
 
         if (! $general) {
             return [
-                'app_name'          => config('app.name'),
-                'logo'              => null,
-                'favicon'           => null,
-                'footer_text'       => null,
-                'footer_copyright'  => null,
+                'app_name'                            => config('app.name'),
+                'logo'                                => null,
+                'favicon'                             => null,
+                'footer_text'                         => null,
+                'footer_copyright'                    => null,
+                'google_analytics_id'                 => null,
+                'google_tag_manager_id'               => null,
+                'facebook_pixel_id'                   => null,
+                'google_search_console_verification'  => null,
             ];
         }
 
         return [
-            'app_name'         => $general->app_name,
-            'logo'             => $general->logo,
-            'favicon'          => $general->favicon,
-            'footer_text'      => $general->footer_text,
-            'footer_copyright' => $general->footer_copyright,
+            'app_name'                            => $general->app_name,
+            'logo'                                => $general->logo,
+            'favicon'                             => $general->favicon,
+            'footer_text'                         => $general->footer_text,
+            'footer_copyright'                    => $general->footer_copyright,
+            'google_analytics_id'                 => $this->seoSettings->google_analytics_id,
+            'google_tag_manager_id'               => $this->seoSettings->google_tag_manager_id,
+            'facebook_pixel_id'                   => $this->seoSettings->facebook_pixel_id,
+            'google_search_console_verification'  => $this->seoSettings->google_search_console_verification,
         ];
     }
 }

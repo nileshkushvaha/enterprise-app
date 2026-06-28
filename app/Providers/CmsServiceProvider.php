@@ -8,6 +8,8 @@ use App\Content\Models\ContentBlock;
 use App\Content\Rendering\ContentRenderer;
 use App\Models\Page;
 use App\Models\Post;
+use App\Models\PostCategory;
+use App\Models\Tag;
 use App\Observers\ContentBlockObserver;
 use App\Policies\ContentBlockPolicy;
 use App\Services\PageRenderService;
@@ -41,9 +43,10 @@ class CmsServiceProvider extends ServiceProvider
     private function registerMorphMap(): void
     {
         Relation::morphMap([
-            'page' => Page::class,
-            'post' => Post::class,
-            // Future: 'menu_item' => MenuItem::class,
+            'page'     => Page::class,
+            'post'     => Post::class,
+            'category' => PostCategory::class,
+            'tag'      => Tag::class,
         ]);
     }
 

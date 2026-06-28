@@ -1,9 +1,11 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers;
 
+use App\Content\Rendering\ContentRenderer;
 use App\Models\Post;
-use App\Services\PageRenderService;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\Response;
 
@@ -17,30 +19,18 @@ class PostController extends Controller
             ->latest('published_at')
             ->paginate(12);
 
-        return view('blog.index', [
-            'posts' => $posts,
-        ]);
+        return view('blog.index', compact('posts'));
     }
 
-    public function show(string $slug, PageRenderService $renderService): Response
+    public function show(string $slug, ContentRenderer $renderer): Response
     {
         $post = Post::query()
             ->published()
             ->where('slug', $slug)
-            ->with([
-                'author',
-                'blocks' => fn ($query) => $query
-                    ->where('is_active', true)
-                    ->orderBy('sort_order'),
-            ])
+            ->with(['blocks' => fn ($q) => $q->where('is_active', true)->orderBy('sort_order')])
             ->firstOrFail();
 
-        if ($post->published_at && $post->published_at->isFuture()) {
-            abort(404);
-        }
-
-        return response($renderService->renderPost($post), 200)
+        return response($renderer->renderPost($post), 200)
             ->header('Content-Type', 'text/html; charset=UTF-8');
     }
 }
-

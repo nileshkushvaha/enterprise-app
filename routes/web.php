@@ -26,6 +26,8 @@ Route::get('/robots.txt', [App\Http\Controllers\SeoController::class, 'robots'])
 
 // ── Blog ─────────────────────────────────────────────────────────────
 Route::get('/blog', [App\Http\Controllers\PostController::class, 'index'])->name('blog.index');
+Route::get('/blog/category/{category:slug}', [App\Http\Controllers\CategoryController::class, 'show'])->name('blog.category');
+Route::get('/blog/tag/{tag:slug}', [App\Http\Controllers\TagController::class, 'show'])->name('blog.tag');
 Route::get('/blog/{slug}', [App\Http\Controllers\PostController::class, 'show'])->name('blog.show');
 
 // ── Contact Form Submission ─────────────────────────────────────────

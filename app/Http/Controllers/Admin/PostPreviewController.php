@@ -2,9 +2,9 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Content\Rendering\ContentRenderer;
 use App\Http\Controllers\Controller;
 use App\Models\Post;
-use App\Services\PageRenderService;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -15,7 +15,7 @@ class PostPreviewController extends Controller
     /**
      * @throws AuthorizationException
      */
-    public function __invoke(Request $request, Post $post, PageRenderService $renderService): Response
+    public function __invoke(Request $request, Post $post, ContentRenderer $renderService): Response
     {
         $this->authorize('view', $post);
 

@@ -22,6 +22,10 @@ class EditPage extends EditRecord
     {
         $featuredImage = $this->form->getRawState()['featured_image'] ?? null;
 
+        if (is_array($featuredImage)) {
+            $featuredImage = array_values($featuredImage)[0] ?? null;
+        }
+
         if ($featuredImage) {
             $this->record->clearMediaCollection('featured-image');
             $this->record->addMedia($featuredImage)

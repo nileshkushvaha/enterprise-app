@@ -2,9 +2,9 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Content\Rendering\ContentRenderer;
 use App\Http\Controllers\Controller;
 use App\Models\Page;
-use App\Services\PageRenderService;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -14,10 +14,10 @@ class PagePreviewController extends Controller
 {
     /**
      * Preview a page (draft, scheduled, or archived)
-     * 
+     *
      * @throws AuthorizationException
      */
-    public function __invoke(Request $request, Page $page, PageRenderService $renderService): Response
+    public function __invoke(Request $request, Page $page, ContentRenderer $renderService): Response
     {
         $this->authorize('view', $page);
 

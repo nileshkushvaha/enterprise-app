@@ -9,6 +9,7 @@
         "php": "^8.3",
         "bezhansalleh/filament-shield": "^4.2",
         "filament/filament": "^4.0",
+        "kalnoy/nestedset": "^7.0",
         "laravel/framework": "^13.8",
         "laravel/pulse": "^1.7",
         "laravel/tinker": "^3.0",
@@ -34,7 +35,10 @@
             "App\\": "app/",
             "Database\\Factories\\": "database/factories/",
             "Database\\Seeders\\": "database/seeders/"
-        }
+        },
+        "files": [
+            "app/Navigation/helpers.php"
+        ]
     },
     "autoload-dev": {
         "psr-4": {

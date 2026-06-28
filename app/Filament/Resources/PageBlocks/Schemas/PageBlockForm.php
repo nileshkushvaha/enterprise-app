@@ -2,7 +2,7 @@
 
 namespace App\Filament\Resources\PageBlocks\Schemas;
 
-use Filament\Forms\Get;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Section;
 use Filament\Forms\Components\Select;
 use Filament\Schemas\Components\Tabs;
