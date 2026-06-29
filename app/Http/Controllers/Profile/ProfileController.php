@@ -48,7 +48,14 @@ class ProfileController extends Controller
     {
         $this->profileService->changePassword(
             auth()->user(),
-            $request->validated('password')
+            $request->validated('password'),
+            $request->ip() ?? '127.0.0.1',
+        );
+
+        // Rebind session password hash so user stays logged in
+        $request->session()->put(
+            'password_hash_web',
+            auth()->user()->getAuthPassword(),
         );
 
         return back()

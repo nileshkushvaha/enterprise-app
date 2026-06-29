@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Auth;
 
+use App\Exceptions\Auth\RegistrationException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\RegisterRequest;
 use App\Services\Auth\RegistrationService;
@@ -19,19 +20,42 @@ final class RegisterController extends Controller
 
     public function showForm(): View
     {
+        // EnsureRegistrationEnabled middleware already redirects when disabled.
         return view('auth.register');
     }
 
     public function store(RegisterRequest $request): RedirectResponse
     {
-        $user = $this->registrationService->register(
-            data: $request->validated(),
-            ipAddress: $request->ip() ?? '',
-            userAgent: $request->userAgent() ?? '',
-        );
+        try {
+            $result = $this->registrationService->register(
+                data: $request->validated(),
+                ipAddress: $request->ip() ?? '',
+                userAgent: $request->userAgent() ?? '',
+            );
+        } catch (RegistrationException $e) {
+            return back()
+                ->withInput($request->only('first_name', 'last_name', 'email', 'phone'))
+                ->with('error', $e->getMessage());
+        }
 
-        // Log the user in so the signed verification link works when clicked
-        Auth::login($user);
+        // Pending admin approval — do NOT log the user in; they cannot access the app yet
+        if ($result->requiresApproval) {
+            return redirect()->route('auth.login')
+                ->with('success', 'Your account has been created and is awaiting administrator approval. You will be notified by email.');
+        }
+
+        // Email was auto-verified — user is fully active, log them in immediately
+        if ($result->autoVerified) {
+            Auth::login($result->user);
+            $request->session()->regenerate();
+
+            return redirect()->intended(route('dashboard'))
+                ->with('success', 'Welcome to '.config('app.name').'! Your account is ready.');
+        }
+
+        // Normal flow: log in temporarily so the signed verification URL works,
+        // then redirect to the verification notice.
+        Auth::login($result->user);
 
         return redirect()
             ->route('auth.verification.notice')

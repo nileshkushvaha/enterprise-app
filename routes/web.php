@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Http\Controllers\Admin\PagePreviewController;
 use App\Http\Controllers\Admin\PostPreviewController;
 use App\Http\Controllers\Auth\AccountUnlockController;
+use App\Http\Controllers\Auth\ForcePasswordChangeController;
 use App\Http\Controllers\Auth\ForgotPasswordController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\LogoutController;
@@ -51,23 +52,23 @@ Route::get('/login', [LoginController::class, 'showForm'])->name('login');
 
 // ── Dashboard (authenticated users) ─────────────────────────────────
 Route::get('/dashboard', fn () => view('dashboard'))->name('dashboard')
-    ->middleware(['auth', 'verified', EnsureAccountIsActive::class, 'session.track']);
+    ->middleware(['auth', 'email.verify.if.required', EnsureAccountIsActive::class, 'password.change.required', 'session.track']);
 
 // ── Frontend Auth (guests only) ─────────────────────────────────────
 Route::name('auth.')->middleware('guest')->group(function (): void {
 
-    // Registration
-    Route::get('/register', [RegisterController::class, 'showForm'])->name('register');
-    Route::post('/register', [RegisterController::class, 'store'])->name('register.store');
+    // Registration — both routes guarded at the middleware layer
+    Route::get('/register', [RegisterController::class, 'showForm'])->middleware('registration.enabled')->name('register');
+    Route::post('/register', [RegisterController::class, 'store'])->middleware('registration.enabled')->name('register.store');
 
-    // Login
+    // Login — EnsureLoginEnabled blocks POST when login is disabled
     Route::get('/login', [LoginController::class, 'showForm'])->name('login');
-    Route::post('/login', [LoginController::class, 'store'])->name('login.store');
+    Route::post('/login', [LoginController::class, 'store'])->middleware('login.enabled', 'throttle:login')->name('login.store');
 
     // Forgot Password
     Route::get('/forgot-password', [ForgotPasswordController::class, 'showForm'])->name('password.request');
     Route::post('/forgot-password', [ForgotPasswordController::class, 'store'])->name('password.email')
-        ->middleware('throttle:5,1');
+        ->middleware('throttle:password.reset');
 
     // Reset Password
     Route::get('/reset-password/{token}', [ResetPasswordController::class, 'showForm'])->name('password.reset');
@@ -133,6 +134,10 @@ Route::name('auth.')->middleware('auth')->group(function (): void {
     // Verification success page
     Route::get('/email-verified', fn () => view('auth.verified'))->name('verified');
 
+    // ── Force password change (no email.verify or password.change middlewares — avoids loop) ──
+    Route::get('/password/change-required', [ForcePasswordChangeController::class, 'showForm'])->name('password.change-required');
+    Route::post('/password/change-required', [ForcePasswordChangeController::class, 'store'])->name('password.change-required.store');
+
     // ── 2FA Challenge (session key set by LoginService) ──────────────
     Route::get('/two-factor/challenge', [TwoFactorController::class, 'challenge'])->name('two-factor.challenge')
         ->withoutMiddleware('auth');
@@ -140,11 +145,12 @@ Route::name('auth.')->middleware('auth')->group(function (): void {
         ->withoutMiddleware('auth');
 });
 
-// ── 2FA Management (auth + verified + active) ────────────────────────
+// ── 2FA Management (auth + conditional email verification + active + password) ──
 Route::prefix('two-factor')->name('auth.two-factor.')->middleware([
     'auth',
-    'verified',
+    'email.verify.if.required',
     EnsureAccountIsActive::class,
+    'password.change.required',
 ])->group(function (): void {
     Route::get('/setup', [TwoFactorController::class, 'setup'])->name('setup');
     Route::post('/confirm', [TwoFactorController::class, 'confirm'])->name('confirm');
@@ -152,11 +158,12 @@ Route::prefix('two-factor')->name('auth.two-factor.')->middleware([
     Route::post('/recovery-codes', [TwoFactorController::class, 'regenerateCodes'])->name('regenerate-codes');
 });
 
-// ── Profile (auth + verified + active) ──────────────────────────────
+// ── Profile (auth + conditional email verification + active + password) ─────────
 Route::prefix('profile')->name('profile.')->middleware([
     'auth',
-    'verified',
+    'email.verify.if.required',
     EnsureAccountIsActive::class,
+    'password.change.required',
     'session.track',
 ])->group(function (): void {
 
@@ -174,11 +181,12 @@ Route::prefix('profile')->name('profile.')->middleware([
     Route::post('/security/alerts', [SecurityController::class, 'updateAlerts'])->name('security.alerts');
 });
 
-// ── Admin Routes (auth + verified + active) ────────────────────────────
+// ── Admin Routes (auth + conditional email verification + active + password) ─────
 Route::prefix('admin')->name('admin.')->middleware([
     'auth',
-    'verified',
+    'email.verify.if.required',
     EnsureAccountIsActive::class,
+    'password.change.required',
     'session.track',
 ])->group(function (): void {
     // Page Preview

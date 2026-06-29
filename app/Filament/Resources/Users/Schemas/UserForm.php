@@ -6,6 +6,7 @@ use App\Services\Security\PasswordRuleBuilder;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Resources\Pages\CreateRecord;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
@@ -81,6 +82,12 @@ class UserForm
                                                 ->default('active')
                                                 ->required()
                                                 ->native(false),
+
+                                            Toggle::make('must_change_password')
+                                                ->label('Require Password Change on Next Login')
+                                                ->helperText('User will be forced to set a new password before accessing the application.')
+                                                ->default(false)
+                                                ->visible(! $isCreate),
                                         ]),
                                     ]),
                             ]),

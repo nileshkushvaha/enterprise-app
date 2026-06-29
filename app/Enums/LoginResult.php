@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Enums;
 
+use App\Settings\AccountProtectionSettings;
 use App\Settings\LoginSecuritySettings;
 
 enum LoginResult: string
@@ -22,7 +23,17 @@ enum LoginResult: string
         return match ($this) {
             self::Success => 'Welcome back!',
             self::InvalidCredentials => 'These credentials do not match our records.',
-            self::AccountLocked => 'Your account has been temporarily locked due to too many failed attempts. Please check your email to unlock it, or try again in '.app(LoginSecuritySettings::class)->lockout_duration.' minutes.',
+            self::AccountLocked => (static function (): string {
+                $ap = app(AccountProtectionSettings::class);
+                if ($ap->disable_after_failed_attempts && $ap->auto_unlock_after === 0) {
+                    return 'Your account has been locked. Please check your email for an unlock link, or contact an administrator.';
+                }
+                $minutes = $ap->disable_after_failed_attempts && $ap->auto_unlock_after > 0
+                    ? $ap->auto_unlock_after
+                    : app(LoginSecuritySettings::class)->lockout_duration;
+
+                return 'Your account has been temporarily locked due to too many failed login attempts. Please check your email to unlock it, or try again in '.$minutes.' minutes.';
+            })(),
             self::AccountBlocked => 'Your account has been suspended. Please contact support.',
             self::EmailUnverified => 'Please verify your email address before signing in.',
             self::AccountInactive => 'Your account is inactive. Please contact support.',

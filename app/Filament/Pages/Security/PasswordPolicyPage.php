@@ -83,6 +83,7 @@ class PasswordPolicyPage extends Page
             'password_history_count' => $s->password_history_count,
             'expiry_enabled' => $s->expiry_enabled,
             'expiry_days' => $s->expiry_days,
+            'force_change_on_first_login' => $s->force_change_on_first_login,
         ]);
     }
 
@@ -174,14 +175,13 @@ class PasswordPolicyPage extends Page
                             ->suffix('days'),
                     ]),
 
-                Section::make('Future Options')
-                    ->description('These options are not yet enforced.')
+                Section::make('First Login')
+                    ->description('When enabled, newly created users must change their password before accessing the application.')
                     ->columnSpanFull()
                     ->schema([
-                        Toggle::make('_future_force_change')
+                        Toggle::make('force_change_on_first_login')
                             ->label('Force Password Change On First Login')
-                            ->disabled()
-                            ->helperText('Coming soon'),
+                            ->helperText('New users created by an administrator will be required to set a new password on their first login.'),
                     ]),
 
             ]),

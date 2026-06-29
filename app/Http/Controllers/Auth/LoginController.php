@@ -56,9 +56,21 @@ class LoginController extends Controller
                 ->with('unverified_email', $request->input('email'));
         }
 
+        $errorMessage = $result->message();
+
+        // Append remaining-attempts hint when credentials were wrong
+        if ($result === LoginResult::InvalidCredentials) {
+            $remaining = session('login_remaining_attempts');
+
+            if ($remaining !== null && $remaining > 0) {
+                $word = $remaining === 1 ? 'attempt' : 'attempts';
+                $errorMessage .= " {$remaining} {$word} remaining.";
+            }
+        }
+
         return back()
             ->withInput($request->only('email', 'remember'))
-            ->withErrors(['email' => $result->message()])
+            ->withErrors(['email' => $errorMessage])
             ->with('login_result', $result->value);
     }
 }

@@ -19,18 +19,17 @@ class PasswordPolicySettings extends Settings
 
     public bool $require_special;
 
-    // History — enforcement requires the user_password_histories table (future)
+    // History — user_password_histories table
     public bool $prevent_reuse;
 
     public int $password_history_count;
 
-    // Expiry — enforcement requires password_expires_at on users (future)
+    // Expiry — uses password_changed_at on users
     public bool $expiry_enabled;
 
     public int $expiry_days;
 
-    // Future placeholder
-    public bool $force_change_on_first_login; // future
+    public bool $force_change_on_first_login;
 
     public static function group(): string
     {

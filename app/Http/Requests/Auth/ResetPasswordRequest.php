@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\Auth;
 
+use App\Services\Security\PasswordRuleBuilder;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rules\Password;
 
 class ResetPasswordRequest extends FormRequest
 {
@@ -23,10 +23,7 @@ class ResetPasswordRequest extends FormRequest
                 'required',
                 'string',
                 'confirmed',
-                Password::min(8)
-                    ->mixedCase()
-                    ->numbers()
-                    ->symbols(),
+                app(PasswordRuleBuilder::class)->build(),
             ],
         ];
     }
@@ -38,7 +35,6 @@ class ResetPasswordRequest extends FormRequest
             'email.required' => 'Email address is required.',
             'password.required' => 'Please enter your new password.',
             'password.confirmed' => 'Password confirmation does not match.',
-            'password.min' => 'Password must be at least 8 characters.',
         ];
     }
 }

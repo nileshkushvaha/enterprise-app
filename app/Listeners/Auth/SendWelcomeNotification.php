@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Listeners\Auth;
 
 use App\Notifications\Auth\WelcomeNotification;
+use App\Settings\RegistrationSettings;
 use Illuminate\Auth\Events\Verified;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Support\Facades\Log;
@@ -20,6 +21,10 @@ final class SendWelcomeNotification implements ShouldQueue
 
     public function handle(Verified $event): void
     {
+        if (! app(RegistrationSettings::class)->send_welcome_email) {
+            return;
+        }
+
         $event->user->notify(new WelcomeNotification);
     }
 

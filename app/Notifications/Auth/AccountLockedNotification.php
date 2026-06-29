@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Notifications\Auth;
 
-use App\Settings\LoginSecuritySettings;
+use App\Settings\AccountProtectionSettings;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
@@ -16,6 +16,7 @@ final class AccountLockedNotification extends Notification implements ShouldQueu
 
     public function __construct(
         private readonly string $unlockToken,
+        private readonly int $attempts = 0,
     ) {
         $this->onQueue('notifications');
         $this->afterCommit();
@@ -43,7 +44,8 @@ final class AccountLockedNotification extends Notification implements ShouldQueu
                 'unlockUrl' => $unlockUrl,
                 'appName' => $appName,
                 'appUrl' => $appUrl,
-                'minutes' => app(LoginSecuritySettings::class)->lockout_duration,
+                'minutes' => app(AccountProtectionSettings::class)->auto_unlock_after,
+                'attempts' => $this->attempts,
             ]);
     }
 }

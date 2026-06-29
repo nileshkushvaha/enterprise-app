@@ -4,9 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
-use App\Notifications\Auth\AccountLockedNotification;
 use App\Notifications\Auth\VerifyEmailNotification;
-use App\Settings\LoginSecuritySettings;
 use Filament\Models\Contracts\FilamentUser;
 use Filament\Panel;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
@@ -53,13 +51,16 @@ class User extends Authenticatable implements FilamentUser, MustVerifyEmail
         'avatar',
         'email_verified_at',
         'failed_login_count',
+        'locked_at',
         'locked_until',
+        'lock_reason',
         'unlock_token',
         'unlock_token_expires_at',
         'last_login_at',
         'last_login_ip',
         'last_login_user_agent',
         'password_changed_at',
+        'must_change_password',
         'two_factor_secret',
         'two_factor_recovery_codes',
         'two_factor_confirmed_at',
@@ -79,10 +80,12 @@ class User extends Authenticatable implements FilamentUser, MustVerifyEmail
     {
         return [
             'email_verified_at' => 'datetime',
+            'locked_at' => 'datetime',
             'locked_until' => 'datetime',
             'unlock_token_expires_at' => 'datetime',
             'last_login_at' => 'datetime',
             'password_changed_at' => 'datetime',
+            'must_change_password' => 'boolean',
             'two_factor_confirmed_at' => 'datetime',
             'login_alerts_enabled' => 'boolean',
             'new_device_alerts_enabled' => 'boolean',
@@ -129,7 +132,23 @@ class User extends Authenticatable implements FilamentUser, MustVerifyEmail
 
     public function isLocked(): bool
     {
+        // New-style lock: locked_at is set by AccountProtectionService / LoginSecurityService
+        if ($this->locked_at !== null) {
+            // locked_until = null means manual-unlock-only (no auto-expiry)
+            if ($this->locked_until === null) {
+                return true;
+            }
+
+            return $this->locked_until->isFuture();
+        }
+
+        // Legacy: only locked_until set (pre-migration records, test fixtures, self-unlock flow)
         return $this->locked_until !== null && $this->locked_until->isFuture();
+    }
+
+    public function isManualLock(): bool
+    {
+        return $this->locked_at !== null && $this->locked_until === null;
     }
 
     public function isBlocked(): bool
@@ -143,33 +162,15 @@ class User extends Authenticatable implements FilamentUser, MustVerifyEmail
     {
         $this->updateQuietly([
             'failed_login_count' => 0,
+            'locked_at' => null,
             'locked_until' => null,
+            'lock_reason' => null,
             'unlock_token' => null,
             'unlock_token_expires_at' => null,
             'last_login_at' => now(),
             'last_login_ip' => $ip,
             'last_login_user_agent' => $userAgent,
         ]);
-    }
-
-    public function recordFailedLogin(): void
-    {
-        $settings = app(LoginSecuritySettings::class);
-        $newCount = $this->failed_login_count + 1;
-        $data = ['failed_login_count' => $newCount];
-
-        if ($newCount >= $settings->max_failed_attempts) {
-            $token = Str::random(64);
-            $data['locked_until'] = now()->addMinutes($settings->lockout_duration);
-            $data['unlock_token'] = hash('sha256', $token);
-            $data['unlock_token_expires_at'] = now()->addMinutes(self::UNLOCK_TOKEN_MINUTES);
-            $this->updateQuietly($data);
-            $this->notify(new AccountLockedNotification($token));
-
-            return;
-        }
-
-        $this->updateQuietly($data);
     }
 
     // ── Account unlock (self-service) ────────────────────────────────
@@ -189,7 +190,9 @@ class User extends Authenticatable implements FilamentUser, MustVerifyEmail
     {
         $this->updateQuietly([
             'failed_login_count' => 0,
+            'locked_at' => null,
             'locked_until' => null,
+            'lock_reason' => null,
             'unlock_token' => null,
             'unlock_token_expires_at' => null,
         ]);

@@ -20,11 +20,15 @@ use App\Policies\ProfilePolicy;
 use App\Policies\QueueMonitorPolicy;
 use App\Policies\SchedulerMonitorPolicy;
 use App\Policies\Security\SecurityPolicy;
+use App\Settings\LoginSecuritySettings;
+use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Console\Events\ScheduledTaskFailed;
 use Illuminate\Console\Events\ScheduledTaskFinished;
 use Illuminate\Console\Events\ScheduledTaskSkipped;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Spatie\Activitylog\Models\Activity;
 use Spatie\Permission\Models\Permission;
@@ -44,6 +48,7 @@ class AppServiceProvider extends ServiceProvider
         $this->registerPolicies();
         $this->registerObservers();
         $this->registerSchedulerHistoryListeners();
+        $this->registerRateLimiters();
     }
 
     private function registerObservers(): void
@@ -156,6 +161,33 @@ class AppServiceProvider extends ServiceProvider
             if ($superAdmin) {
                 $superAdmin->givePermissionTo($permission);
             }
+        });
+    }
+
+    /**
+     * Named rate limiters — evaluated per request so settings changes take effect immediately.
+     * Routes reference these by name: throttle:login and throttle:password.reset
+     */
+    private function registerRateLimiters(): void
+    {
+        RateLimiter::for('login', function (Request $request) {
+            $settings = app(LoginSecuritySettings::class);
+
+            if (! $settings->throttling_enabled) {
+                return [];
+            }
+
+            return Limit::perMinute(10)->by($request->input('email').'|'.$request->ip());
+        });
+
+        RateLimiter::for('password.reset', function (Request $request) {
+            $settings = app(LoginSecuritySettings::class);
+
+            if (! $settings->reset_throttling_enabled) {
+                return [];
+            }
+
+            return Limit::perMinute(5)->by($request->ip());
         });
     }
 }

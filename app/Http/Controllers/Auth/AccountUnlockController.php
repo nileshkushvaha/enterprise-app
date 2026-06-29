@@ -6,12 +6,15 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Services\Auth\AccountProtectionService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 final class AccountUnlockController extends Controller
 {
+    public function __construct(private readonly AccountProtectionService $accountProtection) {}
+
     /**
      * Show the unlock confirmation page.
      */
@@ -43,12 +46,7 @@ final class AccountUnlockController extends Controller
                 ->withErrors(['email' => 'This unlock link is invalid or has expired.']);
         }
 
-        $user->unlock();
-
-        activity('security')
-            ->causedBy($user)
-            ->withProperties(['ip' => $request->ip()])
-            ->log('Account unlocked via self-service email link');
+        $this->accountProtection->manualUnlock($user, actor: $user, method: 'self_service');
 
         return redirect()->route('auth.login')
             ->with('success', 'Your account has been unlocked. You can now sign in.');

@@ -45,6 +45,7 @@ class SecuritySettingsService
             'password_history_count' => $settings->password_history_count,
             'expiry_enabled' => $settings->expiry_enabled,
             'expiry_days' => $settings->expiry_days,
+            'force_change_on_first_login' => $settings->force_change_on_first_login,
         ];
 
         $settings->min_length = max(1, (int) ($data['min_length'] ?? 8));
@@ -56,6 +57,7 @@ class SecuritySettingsService
         $settings->password_history_count = max(1, (int) ($data['password_history_count'] ?? 5));
         $settings->expiry_enabled = (bool) ($data['expiry_enabled'] ?? false);
         $settings->expiry_days = max(1, (int) ($data['expiry_days'] ?? 90));
+        $settings->force_change_on_first_login = (bool) ($data['force_change_on_first_login'] ?? false);
         $settings->save();
 
         $this->logSettingsChange('password_policy', $old, array_intersect_key($data, $old));

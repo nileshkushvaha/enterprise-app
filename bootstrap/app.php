@@ -1,6 +1,10 @@
 <?php
 
 use App\Http\Middleware\EnsureAccountIsActive;
+use App\Http\Middleware\EnsureEmailVerifiedIfRequired;
+use App\Http\Middleware\EnsureLoginEnabled;
+use App\Http\Middleware\EnsurePasswordChangeRequired;
+use App\Http\Middleware\EnsureRegistrationEnabled;
 use App\Http\Middleware\TrackUserSession;
 use App\Providers\EventServiceProvider;
 use Illuminate\Foundation\Application;
@@ -21,10 +25,20 @@ return Application::configure(basePath: dirname(__DIR__))
         EventServiceProvider::class,
     ])
     ->withMiddleware(function (Middleware $middleware): void {
-        $middleware->redirectGuestsTo(fn () => route('auth.login'));
+        $middleware->redirectGuestsTo(function (Request $request) {
+            if ($request->is('admin') || $request->is('admin/*')) {
+                return route('filament.admin.auth.login');
+            }
+
+            return route('auth.login');
+        });
 
         $middleware->alias([
             'account.active' => EnsureAccountIsActive::class,
+            'login.enabled' => EnsureLoginEnabled::class,
+            'registration.enabled' => EnsureRegistrationEnabled::class,
+            'email.verify.if.required' => EnsureEmailVerifiedIfRequired::class,
+            'password.change.required' => EnsurePasswordChangeRequired::class,
             'session.track' => TrackUserSession::class,
         ]);
     })

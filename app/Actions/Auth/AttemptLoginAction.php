@@ -11,7 +11,8 @@ use Illuminate\Support\Facades\Hash;
 
 /**
  * Performs the raw credential check against the guard.
- * Does NOT handle pre-checks (locking, status) — that is LoginService's job.
+ * Does NOT handle pre-checks (locking, status) or failed-attempt tracking —
+ * that is LoginService's responsibility via LoginSecurityService.
  */
 final class AttemptLoginAction
 {
@@ -20,9 +21,6 @@ final class AttemptLoginAction
         $user = User::where('email', strtolower($email))->first();
 
         if (! $user || ! Hash::check($password, $user->password)) {
-            // Increment failed counter if user exists
-            $user?->recordFailedLogin();
-
             return LoginResult::InvalidCredentials;
         }
 

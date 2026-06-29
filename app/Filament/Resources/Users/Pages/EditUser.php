@@ -2,7 +2,10 @@
 
 namespace App\Filament\Resources\Users\Pages;
 
+use App\Events\Auth\UserApproved;
 use App\Filament\Resources\Users\UserResource;
+use App\Models\User;
+use App\Services\Auth\PasswordHistoryService;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\ViewAction;
 use Filament\Resources\Pages\EditRecord;
@@ -38,15 +41,24 @@ class EditUser extends EditRecord
         return $data;
     }
 
+    protected bool $wasMustChangePassword = false;
+
+    protected string $previousPasswordHash = '';
+
+    protected string $previousStatus = '';
+
     protected function beforeSave(): void
     {
-        // Capture roles before Filament syncs the relationship so we can diff in afterSave.
         $this->oldRoles = $this->record->roles->pluck('name')->toArray();
+        $this->wasMustChangePassword = (bool) $this->record->must_change_password;
+        $this->previousPasswordHash = $this->record->password ?? '';
+        $this->previousStatus = $this->record->status ?? '';
     }
 
     protected function afterSave(): void
     {
-        $newRoles = $this->record->fresh()->roles->pluck('name')->toArray();
+        $fresh = $this->record->fresh();
+        $newRoles = $fresh->roles->pluck('name')->toArray();
 
         $added = array_values(array_diff($newRoles, $this->oldRoles));
         $removed = array_values(array_diff($this->oldRoles, $newRoles));
@@ -62,6 +74,39 @@ class EditUser extends EditRecord
                     'current_roles' => $newRoles,
                 ])
                 ->log('User roles updated');
+        }
+
+        // If admin set a new password, store old hash and reset the expiry clock
+        if ($this->previousPasswordHash && $fresh->password !== $this->previousPasswordHash) {
+            app(PasswordHistoryService::class)->store($this->record, $this->previousPasswordHash);
+            $this->record->update(['password_changed_at' => now()]);
+        }
+
+        // Detect approval: admin changed status from INACTIVE (pending approval) → ACTIVE
+        if ($this->previousStatus === User::STATUS_INACTIVE && $fresh->status === User::STATUS_ACTIVE) {
+            UserApproved::dispatch($fresh, auth()->user());
+
+            activity('users')
+                ->performedOn($this->record)
+                ->causedBy(auth()->user())
+                ->event('account_approved')
+                ->log('User account approved by administrator');
+        }
+
+        $isMustChange = (bool) $fresh->must_change_password;
+
+        if ($isMustChange && ! $this->wasMustChangePassword) {
+            activity('users')
+                ->performedOn($this->record)
+                ->causedBy(auth()->user())
+                ->event('password_change_required')
+                ->log('Administrator required password change on next login');
+        } elseif (! $isMustChange && $this->wasMustChangePassword) {
+            activity('users')
+                ->performedOn($this->record)
+                ->causedBy(auth()->user())
+                ->event('password_change_cleared')
+                ->log('Password change requirement cleared by administrator');
         }
     }
 }

@@ -10,12 +10,16 @@ use App\Events\Auth\LoginFailed;
 use App\Events\Auth\UserLoggedIn;
 use App\Models\User;
 use App\Notifications\Auth\SuspiciousLoginNotification;
+use App\Settings\AuthenticationSettings;
 use App\Support\UserAgentParser;
 
 final class LoginService
 {
     public function __construct(
         private readonly AttemptLoginAction $attemptLogin,
+        private readonly AuthenticationSettings $authSettings,
+        private readonly LoginSecurityService $loginSecurity,
+        private readonly AccountProtectionService $accountProtection,
     ) {}
 
     public function attempt(
@@ -32,6 +36,14 @@ final class LoginService
             // Block admin/super_admin from signing in via the frontend portal
             if ($user->hasRole('super_admin') || $user->hasAnyRole(['admin', 'super_admin'])) {
                 return LoginResult::AdminAccountOnly;
+            }
+
+            // Auto-unlock: new-style lock (locked_at set) whose duration has expired.
+            // This resets the failed-attempt counter so the user gets fresh attempts,
+            // and logs the auto-unlock event for the audit trail.
+            if ($user->locked_at !== null && ! $user->isLocked()) {
+                $this->accountProtection->processAutoUnlock($user, $ipAddress);
+                $user->refresh();
             }
 
             if ($user->isLocked()) {
@@ -53,10 +65,21 @@ final class LoginService
             }
         }
 
-        // Credential check
+        // Strip remember flag when the feature is disabled server-side
+        if (! $this->authSettings->remember_me_enabled) {
+            $remember = false;
+        }
+
+        // Credential check (no side-effects inside the action)
         $result = $this->attemptLogin->execute($email, $password, $remember);
 
         if (! $result->isSuccessful()) {
+            // Track the failure (lock / notify / log) for known users
+            if ($user) {
+                $remaining = $this->loginSecurity->recordFailedAttempt($user, $ipAddress);
+                session()->flash('login_remaining_attempts', $remaining);
+            }
+
             LoginFailed::dispatch($user, $email, $ipAddress, $userAgent, $result->value);
 
             return $result;
@@ -66,7 +89,7 @@ final class LoginService
         $authenticated = auth()->user();
 
         // Check email verification AFTER successful credential check
-        if (! $authenticated->hasVerifiedEmail()) {
+        if ($this->authSettings->email_verification_required && ! $authenticated->hasVerifiedEmail()) {
             auth()->logout();
             LoginFailed::dispatch($authenticated, $email, $ipAddress, $userAgent, LoginResult::EmailUnverified->value);
 

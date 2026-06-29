@@ -8,6 +8,7 @@ use App\Filament\Pages\Security\AuthenticationPage;
 use App\Models\User;
 use App\Settings\AuthenticationSettings;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cookie;
 use Livewire\Livewire;
 use Spatie\Activitylog\Models\Activity;
 use Spatie\Permission\Models\Permission;
@@ -187,6 +188,173 @@ class AuthenticationSettingsTest extends TestCase
         $this->assertArrayHasKey('login_enabled', $changes);
         $this->assertTrue($changes['login_enabled']['old']);
         $this->assertFalse($changes['login_enabled']['new']);
+    }
+
+    // ── login_enabled enforcement ───────────────────────────────────────────
+
+    public function test_login_post_blocked_when_login_disabled(): void
+    {
+        $settings = app(AuthenticationSettings::class);
+        $settings->login_enabled = false;
+        $settings->save();
+
+        $this->post(route('auth.login.store'), [
+            'email' => 'user@example.com',
+            'password' => 'password',
+        ])->assertRedirect()->assertSessionHasErrors('email');
+    }
+
+    public function test_login_get_accessible_when_login_disabled(): void
+    {
+        $settings = app(AuthenticationSettings::class);
+        $settings->login_enabled = false;
+        $settings->save();
+
+        $this->get(route('auth.login'))->assertOk();
+    }
+
+    public function test_login_post_succeeds_when_login_enabled(): void
+    {
+        $settings = app(AuthenticationSettings::class);
+        $settings->login_enabled = true;
+        $settings->email_verification_required = false;
+        $settings->remember_me_enabled = false;
+        $settings->save();
+
+        $user = User::factory()->create([
+            'status' => 'active',
+            'email_verified_at' => now(),
+        ]);
+
+        $this->post(route('auth.login.store'), [
+            'email' => $user->email,
+            'password' => 'password',
+        ])->assertRedirect(route('dashboard'));
+    }
+
+    // ── remember_me_enabled enforcement ────────────────────────────────────
+
+    public function test_remember_cookie_absent_when_remember_me_disabled(): void
+    {
+        $settings = app(AuthenticationSettings::class);
+        $settings->login_enabled = true;
+        $settings->remember_me_enabled = false;
+        $settings->email_verification_required = false;
+        $settings->save();
+
+        $user = User::factory()->create([
+            'status' => 'active',
+            'email_verified_at' => now(),
+        ]);
+
+        $response = $this->post(route('auth.login.store'), [
+            'email' => $user->email,
+            'password' => 'password',
+            'remember' => '1',
+        ]);
+
+        // When remember_me is disabled, no remember_web_* cookie should be set
+        $cookies = collect($response->headers->getCookies())
+            ->filter(fn ($c) => str_starts_with($c->getName(), 'remember_web_'));
+
+        $this->assertCount(0, $cookies);
+    }
+
+    public function test_remember_cookie_present_when_remember_me_enabled(): void
+    {
+        $settings = app(AuthenticationSettings::class);
+        $settings->login_enabled = true;
+        $settings->remember_me_enabled = true;
+        $settings->email_verification_required = false;
+        $settings->save();
+
+        $user = User::factory()->create([
+            'status' => 'active',
+            'email_verified_at' => now(),
+        ]);
+
+        $response = $this->post(route('auth.login.store'), [
+            'email' => $user->email,
+            'password' => 'password',
+            'remember' => '1',
+        ]);
+
+        $cookies = collect($response->headers->getCookies())
+            ->filter(fn ($c) => str_starts_with($c->getName(), 'remember_web_'));
+
+        $this->assertGreaterThan(0, $cookies->count());
+    }
+
+    // ── email_verification_required enforcement ─────────────────────────────
+
+    public function test_unverified_user_blocked_when_verification_required(): void
+    {
+        $settings = app(AuthenticationSettings::class);
+        $settings->login_enabled = true;
+        $settings->remember_me_enabled = false;
+        $settings->email_verification_required = true;
+        $settings->save();
+
+        $user = User::factory()->create([
+            'status' => 'active',
+            'email_verified_at' => null,
+        ]);
+
+        $this->post(route('auth.login.store'), [
+            'email' => $user->email,
+            'password' => 'password',
+        ])->assertSessionHas('unverified');
+    }
+
+    public function test_unverified_user_can_login_when_verification_not_required(): void
+    {
+        $settings = app(AuthenticationSettings::class);
+        $settings->login_enabled = true;
+        $settings->remember_me_enabled = false;
+        $settings->email_verification_required = false;
+        $settings->save();
+
+        $user = User::factory()->create([
+            'status' => 'active',
+            'email_verified_at' => null,
+        ]);
+
+        $this->post(route('auth.login.store'), [
+            'email' => $user->email,
+            'password' => 'password',
+        ])->assertRedirect(route('dashboard'));
+    }
+
+    public function test_unverified_user_can_access_dashboard_when_verification_not_required(): void
+    {
+        $settings = app(AuthenticationSettings::class);
+        $settings->email_verification_required = false;
+        $settings->save();
+
+        $user = User::factory()->create([
+            'status' => 'active',
+            'email_verified_at' => null,
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('dashboard'))
+            ->assertOk();
+    }
+
+    public function test_unverified_user_redirected_from_dashboard_when_verification_required(): void
+    {
+        $settings = app(AuthenticationSettings::class);
+        $settings->email_verification_required = true;
+        $settings->save();
+
+        $user = User::factory()->create([
+            'status' => 'active',
+            'email_verified_at' => null,
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('dashboard'))
+            ->assertRedirect(route('auth.verification.notice'));
     }
 
     // ── Update permission enforcement ───────────────────────────────────────

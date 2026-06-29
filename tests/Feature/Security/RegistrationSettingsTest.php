@@ -115,4 +115,40 @@ class RegistrationSettingsTest extends TestCase
 
         $this->assertNull($settings->default_role);
     }
+
+    // ── self_registration_enabled enforcement ───────────────────────────────
+
+    public function test_register_post_blocked_when_registration_disabled(): void
+    {
+        $settings = app(RegistrationSettings::class);
+        $settings->self_registration_enabled = false;
+        $settings->save();
+
+        $this->post(route('auth.register.store'), [
+            'first_name' => 'Test',
+            'email' => 'new@example.com',
+            'password' => 'Password1!',
+            'password_confirmation' => 'Password1!',
+            'terms' => '1',
+        ])->assertForbidden();
+    }
+
+    public function test_register_get_redirects_when_registration_disabled(): void
+    {
+        $settings = app(RegistrationSettings::class);
+        $settings->self_registration_enabled = false;
+        $settings->save();
+
+        $this->get(route('auth.register'))
+            ->assertRedirect(route('auth.login'));
+    }
+
+    public function test_register_get_accessible_when_registration_enabled(): void
+    {
+        $settings = app(RegistrationSettings::class);
+        $settings->self_registration_enabled = true;
+        $settings->save();
+
+        $this->get(route('auth.register'))->assertOk();
+    }
 }

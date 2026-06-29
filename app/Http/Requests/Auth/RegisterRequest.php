@@ -5,13 +5,14 @@ declare(strict_types=1);
 namespace App\Http\Requests\Auth;
 
 use App\Services\Security\PasswordRuleBuilder;
+use App\Settings\RegistrationSettings;
 use Illuminate\Foundation\Http\FormRequest;
 
 class RegisterRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return true;
+        return app(RegistrationSettings::class)->self_registration_enabled;
     }
 
     public function rules(): array

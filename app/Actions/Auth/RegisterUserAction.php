@@ -14,9 +14,12 @@ use Illuminate\Support\Facades\DB;
  */
 final class RegisterUserAction
 {
-    public function execute(array $data): User
-    {
-        return DB::transaction(function () use ($data): User {
+    public function execute(
+        array $data,
+        string $status = User::STATUS_PENDING,
+        bool $mustChangePassword = false,
+    ): User {
+        return DB::transaction(function () use ($data, $status, $mustChangePassword): User {
             $fullName = trim(($data['first_name'] ?? '').' '.($data['last_name'] ?? ''));
 
             $user = User::create([
@@ -24,11 +27,11 @@ final class RegisterUserAction
                 'first_name' => $data['first_name'],
                 'last_name' => $data['last_name'] ?? null,
                 'email' => strtolower(trim($data['email'])),
-                'password' => $data['password'], // cast hashes automatically
-                'status' => User::STATUS_PENDING,
+                'password' => $data['password'],
+                'status' => $status,
+                'must_change_password' => $mustChangePassword,
             ]);
 
-            // Eager-create profile with phone if provided
             UserProfile::create([
                 'user_id' => $user->id,
                 'phone' => $data['phone'] ?? null,

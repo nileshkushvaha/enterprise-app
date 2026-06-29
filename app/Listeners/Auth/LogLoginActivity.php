@@ -72,7 +72,7 @@ class LogLoginActivity implements ShouldQueue
 
         if ($event->user) {
             $data['user_id'] = $event->user->id;
-            $data['status'] = $event->reason;
+            $data['status'] = $this->mapReasonToStatus($event->reason);
 
             activity('auth')
                 ->causedBy($event->user)
@@ -81,6 +81,16 @@ class LogLoginActivity implements ShouldQueue
         }
 
         LoginHistory::create($data);
+    }
+
+    private function mapReasonToStatus(string $reason): string
+    {
+        return match ($reason) {
+            'account_locked' => 'locked',
+            'account_blocked' => 'blocked',
+            'email_unverified' => 'unverified',
+            default => 'failed',
+        };
     }
 
     public function failed(mixed $event, Throwable $exception): void

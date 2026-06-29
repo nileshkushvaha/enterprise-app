@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace App\Providers;
 
 use App\Events\Auth\LoginFailed;
+use App\Events\Auth\UserApproved;
 use App\Events\Auth\UserLoggedIn;
 use App\Events\Auth\UserLoggedOut;
 use App\Events\Auth\UserRegistered;
 use App\Listeners\Auth\LogLoginActivity;
+use App\Listeners\Auth\SendApprovalNotification;
 use App\Listeners\Auth\SendRegistrationNotifications;
 use App\Listeners\Auth\SendWelcomeNotification;
 use Illuminate\Auth\Events\Verified;
@@ -23,6 +25,10 @@ class EventServiceProvider extends ServiceProvider
         // Welcome email fires only after the user clicks the verification link
         Verified::class => [
             SendWelcomeNotification::class,
+        ],
+        // Fired from EditUser when admin changes status from INACTIVE → ACTIVE
+        UserApproved::class => [
+            SendApprovalNotification::class,
         ],
         UserLoggedIn::class => [
             [LogLoginActivity::class, 'handleUserLoggedIn'],

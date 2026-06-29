@@ -13,6 +13,7 @@ use App\Filament\Pages\SchedulerMonitorPage;
 use App\Filament\Widgets\RecentLoginsWidget;
 use App\Filament\Widgets\RecentUsersWidget;
 use App\Filament\Widgets\StatsOverviewWidget;
+use App\Http\Middleware\EnsurePasswordChangeRequired;
 use BezhanSalleh\FilamentShield\FilamentShieldPlugin;
 use Filament\Actions\Action;
 use Filament\Http\Middleware\Authenticate;
@@ -98,6 +99,7 @@ class AdminPanelProvider extends PanelProvider
             ])
             ->authMiddleware([
                 Authenticate::class,
+                EnsurePasswordChangeRequired::class,
             ]);
     }
 }

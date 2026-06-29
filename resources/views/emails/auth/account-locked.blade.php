@@ -8,7 +8,7 @@
 
 <p>
   Your <strong>{{ $appName }}</strong> account has been temporarily locked after
-  <strong>{{ \App\Models\User::MAX_FAILED_ATTEMPTS }} consecutive failed login attempts</strong>.
+  <strong>{{ $attempts }} consecutive failed login attempts</strong>.
 </p>
 
 <div class="hb" style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.20);border-radius:14px;padding:20px 24px;margin:24px 0;">

@@ -5,7 +5,12 @@ declare(strict_types=1);
 namespace App\Listeners\Auth;
 
 use App\Events\Auth\UserRegistered;
+use App\Models\User;
+use App\Notifications\Auth\AdminNewRegistrationNotification;
+use App\Notifications\Auth\RegistrationPendingNotification;
 use App\Notifications\Auth\VerifyEmailNotification;
+use App\Notifications\Auth\WelcomeNotification;
+use App\Settings\RegistrationSettings;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
@@ -16,17 +21,68 @@ final class SendRegistrationNotifications implements ShouldQueue
 {
     public string $queue = 'notifications';
 
-    /** Retry up to 3 times before marking as failed */
     public int $tries = 3;
 
-    /** Wait 30s, 60s, 120s between retries */
     public array $backoff = [30, 60, 120];
 
     public function handle(UserRegistered $event): void
     {
         $user = $event->user;
+        $settings = app(RegistrationSettings::class);
 
-        // Send verification email (queued notification)
+        // ── Activity: user registered ────────────────────────────────────────
+        activity('auth')
+            ->causedBy($user)
+            ->performedOn($user)
+            ->withProperties(['ip' => $event->ipAddress])
+            ->log('User registered');
+
+        // ── Branch: pending admin approval ───────────────────────────────────
+        if ($settings->require_admin_approval) {
+            $user->notify(new RegistrationPendingNotification);
+
+            User::role('super_admin')
+                ->where('id', '!=', $user->id)
+                ->each(function (User $admin) use ($user, $event): void {
+                    $admin->notify(new AdminNewRegistrationNotification($user, $event->ipAddress));
+                });
+
+            activity('auth')
+                ->causedBy($user)
+                ->performedOn($user)
+                ->event('registration_pending_approval')
+                ->withProperties(['ip' => $event->ipAddress])
+                ->log('New registration pending admin approval');
+
+            return;
+        }
+
+        // ── Branch: email auto-verified ──────────────────────────────────────
+        if ($settings->auto_verify_email) {
+            activity('auth')
+                ->causedBy($user)
+                ->performedOn($user)
+                ->event('email_auto_verified')
+                ->withProperties(['ip' => $event->ipAddress])
+                ->log('Email auto-verified during registration');
+
+            // Send welcome email immediately — Verified event won't fire since
+            // we used forceFill rather than markEmailAsVerified()
+            if ($settings->send_welcome_email) {
+                $user->notify(new WelcomeNotification);
+
+                activity('auth')
+                    ->causedBy($user)
+                    ->performedOn($user)
+                    ->event('welcome_email_queued')
+                    ->withProperties(['ip' => $event->ipAddress])
+                    ->log('Welcome email queued');
+            }
+
+            return;
+        }
+
+        // ── Default: send email verification link ────────────────────────────
         $notification = new VerifyEmailNotification;
         $notification->verificationUrl = URL::temporarySignedRoute(
             'auth.verification.verify',
@@ -37,16 +93,6 @@ final class SendRegistrationNotifications implements ShouldQueue
             ]
         );
         $user->notify($notification);
-
-        // Activity log
-        activity('auth')
-            ->causedBy($user)
-            ->performedOn($user)
-            ->withProperties([
-                'ip' => $event->ipAddress,
-                'user_agent' => $event->userAgent,
-            ])
-            ->log('User registered');
     }
 
     public function failed(UserRegistered $event, Throwable $exception): void

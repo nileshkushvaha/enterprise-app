@@ -3,6 +3,11 @@
 
 @section('title', 'Sign In — ' . config('app.name'))
 
+@php
+    $authSettings = app(\App\Settings\AuthenticationSettings::class);
+    $regSettings  = app(\App\Settings\RegistrationSettings::class);
+@endphp
+
 @section('content')
 <div class="auth-page" x-data="{
     showPass: false,
@@ -119,7 +124,9 @@
             {{-- Heading --}}
             <div class="mb-8">
                 <h2 class="text-3xl font-bold text-white mb-2">Sign in</h2>
+                @if($regSettings->self_registration_enabled)
                 <p class="text-slate-400 text-sm">Don't have an account? <a href="{{ route('auth.register') }}" class="text-indigo-400 hover:text-indigo-300 font-medium transition">Create one free →</a></p>
+                @endif
             </div>
 
             {{-- Session messages --}}
@@ -165,6 +172,17 @@
                 </form>
             </div>
             @endif
+
+            @if(! $authSettings->login_enabled)
+            {{-- Login disabled — maintenance message --}}
+            <div class="flex items-start gap-3 rounded-xl bg-amber-500/10 border border-amber-500/25 p-5 mb-6">
+                <svg class="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                <div>
+                    <p class="text-amber-300 text-sm font-semibold">Login temporarily unavailable</p>
+                    <p class="text-amber-300/80 text-xs mt-1">We're performing maintenance. Please check back shortly.</p>
+                </div>
+            </div>
+            @else
 
             {{-- Login Form --}}
             <form method="POST" action="{{ route('auth.login') }}" @submit="submit($event)" class="space-y-5">
@@ -222,12 +240,14 @@
                 </div>
 
                 {{-- Remember me --}}
+                @if($authSettings->remember_me_enabled)
                 <div class="flex items-center gap-3">
                     <input type="checkbox" id="remember" name="remember"
                         class="w-4 h-4 rounded bg-white/5 border border-white/15 text-indigo-500 focus:ring-indigo-500/30 focus:ring-2 cursor-pointer"
                         {{ old('remember') ? 'checked' : '' }}>
                     <label for="remember" class="text-sm text-slate-400 cursor-pointer select-none hover:text-slate-300 transition">Keep me signed in for 30 days</label>
                 </div>
+                @endif
 
                 {{-- Submit --}}
                 <button type="submit" class="auth-btn-primary" :disabled="loading">
@@ -240,10 +260,13 @@
                 </button>
             </form>
 
+            @endif {{-- /login_enabled --}}
+
+            @if($regSettings->self_registration_enabled)
             {{-- Divider --}}
             <div class="my-7 flex items-center gap-3">
                 <div class="flex-1 h-px bg-white/[0.07]"></div>
-                <span class="text-xs text-slate-600 font-medium">NEW TO EDUSPHERE?</span>
+                <span class="text-xs text-slate-600 font-medium">NEW TO {{ strtoupper(config('app.name')) }}?</span>
                 <div class="flex-1 h-px bg-white/[0.07]"></div>
             </div>
 
@@ -252,6 +275,7 @@
                class="block w-full text-center px-5 py-3 rounded-xl border border-white/[0.12] text-slate-300 hover:bg-white/[0.05] hover:text-white transition font-medium text-sm">
                 Create your free account
             </a>
+            @endif
 
             <p class="text-center text-xs text-slate-600 mt-6">
                 By signing in, you agree to our

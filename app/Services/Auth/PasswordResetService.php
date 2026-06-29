@@ -10,10 +10,13 @@ use App\Notifications\Auth\PasswordResetNotification;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Password;
-use Illuminate\Support\Facades\URL;
 
 final class PasswordResetService
 {
+    public function __construct(
+        private readonly PasswordHistoryService $historyService,
+    ) {}
+
     /**
      * Generate + store a reset token, then send the notification.
      * Always returns 'success' to the controller to prevent email enumeration.
@@ -51,6 +54,7 @@ final class PasswordResetService
     /**
      * Validate token, reset password, queue changed notification.
      * Returns null on success, error string on failure.
+     * Throws ValidationException if the new password was recently used.
      */
     public function resetPassword(
         string $email,
@@ -66,10 +70,18 @@ final class PasswordResetService
                 'token' => $token,
             ],
             function (User $user, string $password) use ($ipAddress): void {
+                $oldHash = $user->password;
+
+                // Throws ValidationException if password was recently used
+                $this->historyService->assertNotReused($user, $password);
+
                 $user->forceFill([
                     'password' => Hash::make($password),
                     'password_changed_at' => now(),
+                    'must_change_password' => false,
                 ])->save();
+
+                $this->historyService->store($user, $oldHash);
 
                 // Send "your password was changed" alert email
                 $user->notify(new PasswordChangedNotification(

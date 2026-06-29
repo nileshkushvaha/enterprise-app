@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Filament\Pages;
 
+use App\Services\Auth\PasswordHistoryService;
 use App\Services\Security\PasswordRuleBuilder;
+use App\Settings\PasswordPolicySettings;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Facades\Filament;
@@ -133,11 +135,35 @@ class AdminChangePassword extends Page
         }
 
         $user = Filament::auth()->user();
+        $oldHash = $user->password;
 
-        $user->update([
+        $historyService = app(PasswordHistoryService::class);
+
+        if ($historyService->isReused($user, $data['password'])) {
+            $count = app(PasswordPolicySettings::class)->password_history_count;
+            Notification::make()
+                ->title('Password recently used')
+                ->body("Please choose a password you have not used in your last {$count} passwords.")
+                ->danger()
+                ->send();
+
+            return;
+        }
+
+        $user->forceFill([
             'password' => Hash::make($data['password']),
             'password_changed_at' => now(),
-        ]);
+            'must_change_password' => false,
+        ])->save();
+
+        $historyService->store($user, $oldHash);
+
+        activity('auth')
+            ->causedBy($user)
+            ->performedOn($user)
+            ->event('password_changed')
+            ->withProperties(['ip' => request()->ip()])
+            ->log('Admin password changed');
 
         // Re-hash session so user stays logged in after password change
         if (request()->hasSession()) {

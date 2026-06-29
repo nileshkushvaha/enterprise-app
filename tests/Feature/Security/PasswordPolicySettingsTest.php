@@ -85,6 +85,7 @@ class PasswordPolicySettingsTest extends TestCase
             ->set('data.password_history_count', 10)
             ->set('data.expiry_enabled', true)
             ->set('data.expiry_days', 60)
+            ->set('data.force_change_on_first_login', true)
             ->call('save');
 
         $settings = app()->make(PasswordPolicySettings::class)->refresh();
@@ -95,6 +96,7 @@ class PasswordPolicySettingsTest extends TestCase
         $this->assertSame(10, $settings->password_history_count);
         $this->assertTrue($settings->expiry_enabled);
         $this->assertSame(60, $settings->expiry_days);
+        $this->assertTrue($settings->force_change_on_first_login);
     }
 
     public function test_save_shows_success_notification(): void
