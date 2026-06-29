@@ -1,0 +1,226 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Services\Admin;
+
+use App\DTOs\NotificationPayload;
+use Spatie\Activitylog\Models\Activity;
+
+/**
+ * Notification Policy / Mapper.
+ *
+ * Given an Activity, decides WHETHER to notify and returns a fully-built
+ * NotificationPayload — or null if the activity should be silently ignored.
+ *
+ * This is the single place where the notification policy lives.
+ * No other class needs to know which activities are "important".
+ *
+ * Adding a new notifiable event = adding one case to the match below.
+ */
+final class NotificationMapper
+{
+    public function __construct(
+        private readonly ActivityUrlResolver $urlResolver,
+    ) {}
+
+    public function map(Activity $activity): ?NotificationPayload
+    {
+        $config = $this->getConfig($activity);
+
+        if ($config === null) {
+            return null;
+        }
+
+        return new NotificationPayload(
+            activityId: $activity->id,
+            title: $config['title'],
+            body: $this->buildBody($activity, $config),
+            icon: $config['icon'],
+            color: $config['color'],
+            severity: $config['color'],
+            category: $activity->log_name ?? 'general',
+            priority: $config['priority'],
+            url: $this->urlResolver->resolve($activity),
+        );
+    }
+
+    // ── Private ───────────────────────────────────────────────────────────
+
+    /** Returns the static config for a notifiable activity, or null to silence it. */
+    private function getConfig(Activity $activity): ?array
+    {
+        $log = $activity->log_name;
+        $event = $activity->event;
+
+        return match (true) {
+
+            // ── Users ─────────────────────────────────────────────────────
+            $log === 'users' && $event === 'created' => [
+                'title' => 'New User Created',
+                'actor_label' => 'Created by',
+                'icon' => 'heroicon-o-user-plus',
+                'color' => 'success',
+                'priority' => 2,
+            ],
+
+            $log === 'users' && $event === 'roles_updated' => [
+                'title' => 'User Roles Changed',
+                'actor_label' => 'Changed by',
+                'icon' => 'heroicon-o-shield-check',
+                'color' => 'warning',
+                'priority' => 2,
+            ],
+
+            $log === 'users' && $event === 'account_approved' => [
+                'title' => 'User Account Approved',
+                'actor_label' => 'Approved by',
+                'icon' => 'heroicon-o-check-badge',
+                'color' => 'success',
+                'priority' => 2,
+            ],
+
+            $log === 'users' && $event === 'password_change_required' => [
+                'title' => 'Password Change Required',
+                'actor_label' => 'Set by',
+                'icon' => 'heroicon-o-key',
+                'color' => 'info',
+                'priority' => 1,
+            ],
+
+            // ── Roles ─────────────────────────────────────────────────────
+            $log === 'roles' && $event === 'created' => [
+                'title' => 'Role Created',
+                'actor_label' => 'Created by',
+                'icon' => 'heroicon-o-identification',
+                'color' => 'success',
+                'priority' => 2,
+            ],
+
+            $log === 'roles' && $event === 'updated' => [
+                'title' => 'Role Updated',
+                'actor_label' => 'Updated by',
+                'icon' => 'heroicon-o-pencil-square',
+                'color' => 'warning',
+                'priority' => 2,
+            ],
+
+            $log === 'roles' && $event === 'deleted' => [
+                'title' => 'Role Deleted',
+                'actor_label' => 'Deleted by',
+                'icon' => 'heroicon-o-trash',
+                'color' => 'danger',
+                'priority' => 3,
+            ],
+
+            // ── Security settings ─────────────────────────────────────────
+            $log === 'security' && $event === 'settings_updated' => [
+                'title' => 'Security Settings Changed',
+                'actor_label' => 'Changed by',
+                'icon' => 'heroicon-o-cog-6-tooth',
+                'color' => 'warning',
+                'priority' => 3,
+            ],
+
+            $log === 'security' && $event === '2fa_disabled' => [
+                'title' => '2FA Disabled',
+                'actor_label' => 'Disabled by',
+                'icon' => 'heroicon-o-shield-exclamation',
+                'color' => 'warning',
+                'priority' => 2,
+            ],
+
+            // ── Auth — account lock lifecycle ─────────────────────────────
+            $log === 'auth' && $event === 'account_locked' => [
+                'title' => 'Account Locked',
+                'actor_label' => 'Locked account of',
+                'icon' => 'heroicon-o-lock-closed',
+                'color' => 'warning',
+                'priority' => 2,
+            ],
+
+            $log === 'auth' && $event === 'manual_lock' => [
+                'title' => 'Account Manually Locked',
+                'actor_label' => 'Locked by',
+                'icon' => 'heroicon-o-lock-closed',
+                'color' => 'danger',
+                'priority' => 3,
+            ],
+
+            $log === 'auth' && $event === 'manual_unlock' => [
+                'title' => 'Account Unlocked',
+                'actor_label' => 'Unlocked by',
+                'icon' => 'heroicon-o-lock-open',
+                'color' => 'info',
+                'priority' => 1,
+            ],
+
+            $log === 'auth' && $event === 'self_service_unlock' => [
+                'title' => 'Account Self-Service Unlocked',
+                'actor_label' => 'Self-unlocked by',
+                'icon' => 'heroicon-o-lock-open',
+                'color' => 'info',
+                'priority' => 1,
+            ],
+
+            // Registration pending approval
+            $log === 'auth' && $event === 'registration_pending_approval' => [
+                'title' => 'New Registration Awaiting Approval',
+                'actor_label' => 'Registered by',
+                'icon' => 'heroicon-o-user-group',
+                'color' => 'info',
+                'priority' => 2,
+            ],
+
+            // ── CMS ───────────────────────────────────────────────────────
+            $log === 'cms' && $event === 'auto_published' => [
+                'title' => 'Content Auto-Published',
+                'actor_label' => null,
+                'icon' => 'heroicon-o-document-check',
+                'color' => 'success',
+                'priority' => 1,
+            ],
+
+            // ── Contact ───────────────────────────────────────────────────
+            $log === 'contact' && $event === 'contact_form_submitted' => [
+                'title' => 'New Contact Form Submission',
+                'actor_label' => null,
+                'icon' => 'heroicon-o-envelope',
+                'color' => 'info',
+                'priority' => 2,
+            ],
+
+            // ── Everything else: silence ──────────────────────────────────
+            default => null,
+        };
+    }
+
+    private function buildBody(Activity $activity, array $config): string
+    {
+        $parts = [];
+
+        // Subject name (the thing acted upon)
+        $subject = $activity->subject;
+        if ($subject && method_exists($subject, 'getFilamentName')) {
+            $parts[] = $subject->getFilamentName();
+        } elseif ($subject && isset($subject->name)) {
+            $parts[] = $subject->name;
+        } elseif ($subject && isset($subject->email)) {
+            $parts[] = $subject->email;
+        }
+
+        // Actor line
+        if ($config['actor_label'] !== null) {
+            $causer = $activity->causer;
+            $actorName = $causer?->name ?? $causer?->email ?? 'System';
+            $parts[] = $config['actor_label'].': '.$actorName;
+        }
+
+        // Activity description as fallback when nothing else
+        if (empty($parts) && $activity->description) {
+            $parts[] = $activity->description;
+        }
+
+        return implode(' · ', array_filter($parts));
+    }
+}

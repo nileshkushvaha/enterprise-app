@@ -17,5 +17,7 @@ final class UserLoggedIn
         public readonly string $ipAddress,
         public readonly string $userAgent,
         public readonly bool $remember,
+        public readonly ?string $sessionId = null,
+        public readonly string $loginMethod = 'password',
     ) {}
 }

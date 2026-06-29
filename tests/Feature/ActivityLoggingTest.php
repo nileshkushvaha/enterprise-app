@@ -6,10 +6,10 @@ namespace Tests\Feature;
 
 use App\Content\Models\ContentBlock;
 use App\Enums\BlockType;
+use App\Models\Activity;
 use App\Models\Page;
 use App\Models\Post;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Spatie\Activitylog\Models\Activity;
 use Tests\TestCase;
 
 class ActivityLoggingTest extends TestCase

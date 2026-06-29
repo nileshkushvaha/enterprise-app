@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Models\Activity;
 use App\Models\NavigationMenu;
 use App\Models\Page;
 use App\Models\Post;
@@ -9,6 +10,7 @@ use App\Models\PostCategory;
 use App\Models\SchedulerHistory;
 use App\Models\Tag;
 use App\Models\User;
+use App\Observers\ActivityObserver;
 use App\Observers\PageObserver;
 use App\Observers\PostCategoryObserver;
 use App\Observers\PostObserver;
@@ -30,7 +32,6 @@ use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
-use Spatie\Activitylog\Models\Activity;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 
@@ -53,6 +54,7 @@ class AppServiceProvider extends ServiceProvider
 
     private function registerObservers(): void
     {
+        Activity::observe(ActivityObserver::class);
         Page::observe(PageObserver::class);
         Post::observe(PostObserver::class);
         PostCategory::observe(PostCategoryObserver::class);
@@ -90,6 +92,8 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('security.registration.update', [SecurityPolicy::class, 'updateRegistration']);
         Gate::define('security.account_protection.view', [SecurityPolicy::class, 'viewAccountProtection']);
         Gate::define('security.account_protection.update', [SecurityPolicy::class, 'updateAccountProtection']);
+
+        Gate::define('security.login_history.view', [SecurityPolicy::class, 'viewLoginHistory']);
     }
 
     /**

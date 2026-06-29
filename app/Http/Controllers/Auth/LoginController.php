@@ -35,6 +35,7 @@ class LoginController extends Controller
             remember: (bool) $request->input('remember', false),
             ipAddress: $request->ip() ?? '127.0.0.1',
             userAgent: $request->userAgent() ?? '',
+            sessionId: $request->session()->getId(),
         );
 
         if ($result->isSuccessful()) {

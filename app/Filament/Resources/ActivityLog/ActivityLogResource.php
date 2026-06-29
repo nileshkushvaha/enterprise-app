@@ -8,13 +8,13 @@ use App\Filament\Resources\ActivityLog\Pages\ListActivityLogs;
 use App\Filament\Resources\ActivityLog\Pages\ViewActivityLog;
 use App\Filament\Resources\ActivityLog\Schemas\ActivityLogInfolist;
 use App\Filament\Resources\ActivityLog\Tables\ActivityLogTable;
+use App\Models\Activity;
 use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Model;
-use Spatie\Activitylog\Models\Activity;
 
 class ActivityLogResource extends Resource
 {
@@ -30,7 +30,7 @@ class ActivityLogResource extends Resource
 
     protected static string|\UnitEnum|null $navigationGroup = 'System';
 
-    protected static ?int $navigationSort = 2;
+    protected static ?int $navigationSort = 4;
 
     protected static ?string $slug = 'activity-logs';
 

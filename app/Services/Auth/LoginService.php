@@ -28,6 +28,8 @@ final class LoginService
         bool $remember,
         string $ipAddress,
         string $userAgent,
+        ?string $sessionId = null,
+        string $loginMethod = 'password',
     ): LoginResult {
         $user = User::where('email', strtolower($email))->first();
 
@@ -47,19 +49,19 @@ final class LoginService
             }
 
             if ($user->isLocked()) {
-                LoginFailed::dispatch($user, $email, $ipAddress, $userAgent, LoginResult::AccountLocked->value);
+                LoginFailed::dispatch($user, $email, $ipAddress, $userAgent, LoginResult::AccountLocked->value, $sessionId);
 
                 return LoginResult::AccountLocked;
             }
 
             if ($user->isBlocked()) {
-                LoginFailed::dispatch($user, $email, $ipAddress, $userAgent, LoginResult::AccountBlocked->value);
+                LoginFailed::dispatch($user, $email, $ipAddress, $userAgent, LoginResult::AccountBlocked->value, $sessionId);
 
                 return LoginResult::AccountBlocked;
             }
 
             if (! $user->isActive()) {
-                LoginFailed::dispatch($user, $email, $ipAddress, $userAgent, LoginResult::AccountInactive->value);
+                LoginFailed::dispatch($user, $email, $ipAddress, $userAgent, LoginResult::AccountInactive->value, $sessionId);
 
                 return LoginResult::AccountInactive;
             }
@@ -80,7 +82,7 @@ final class LoginService
                 session()->flash('login_remaining_attempts', $remaining);
             }
 
-            LoginFailed::dispatch($user, $email, $ipAddress, $userAgent, $result->value);
+            LoginFailed::dispatch($user, $email, $ipAddress, $userAgent, $result->value, $sessionId);
 
             return $result;
         }
@@ -91,7 +93,7 @@ final class LoginService
         // Check email verification AFTER successful credential check
         if ($this->authSettings->email_verification_required && ! $authenticated->hasVerifiedEmail()) {
             auth()->logout();
-            LoginFailed::dispatch($authenticated, $email, $ipAddress, $userAgent, LoginResult::EmailUnverified->value);
+            LoginFailed::dispatch($authenticated, $email, $ipAddress, $userAgent, LoginResult::EmailUnverified->value, $sessionId);
 
             return LoginResult::EmailUnverified;
         }
@@ -115,7 +117,7 @@ final class LoginService
         // Login alert email (if enabled)
         $this->dispatchLoginAlert($authenticated, $ipAddress, $userAgent);
 
-        UserLoggedIn::dispatch($authenticated, $ipAddress, $userAgent, $remember);
+        UserLoggedIn::dispatch($authenticated, $ipAddress, $userAgent, $remember, $sessionId, $loginMethod);
 
         return LoginResult::Success;
     }

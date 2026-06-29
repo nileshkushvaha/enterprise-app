@@ -22,6 +22,8 @@ class LoginHistory extends Model
         'location_city',
         'logged_in_at',
         'logged_out_at',
+        'session_id',
+        'login_method',
     ];
 
     protected function casts(): array

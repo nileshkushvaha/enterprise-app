@@ -18,5 +18,6 @@ final class LoginFailed
         public readonly string $ipAddress,
         public readonly string $userAgent,
         public readonly string $reason,
+        public readonly ?string $sessionId = null,
     ) {}
 }

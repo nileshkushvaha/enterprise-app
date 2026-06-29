@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Models\User;
 use Illuminate\Support\Facades\Artisan;
 use Symfony\Component\Console\Output\BufferedOutput;
 
@@ -134,17 +135,16 @@ class CacheManagerService
 
     private function logActivity(string $command, string $output, int $exitCode): void
     {
-        $logger = activity('cache_manager')
-            ->withProperties([
-                'command' => $command,
-                'exit_code' => $exitCode,
-                'output' => $output,
-            ]);
+        $props = ['command' => $command, 'exit_code' => $exitCode, 'output' => $output];
+        $audit = app(AuditTrailService::class);
 
-        if ($user = auth()->user()) {
-            $logger = $logger->causedBy($user);
+        /** @var User|null $user */
+        $user = auth()->user();
+
+        if ($user instanceof User) {
+            $audit->logUser($user, 'cache_manager', 'cleared', "Executed artisan {$command}", properties: $props);
+        } else {
+            $audit->logSystem('cache_manager', 'cleared', "Executed artisan {$command}", properties: $props);
         }
-
-        $logger->log("Executed artisan {$command}");
     }
 }

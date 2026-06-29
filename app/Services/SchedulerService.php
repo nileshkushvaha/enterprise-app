@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Models\SchedulerHistory;
+use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Console\Scheduling\CallbackEvent;
 use Illuminate\Console\Scheduling\Event;
@@ -102,19 +103,16 @@ class SchedulerService
             'ran_at' => now(),
         ]);
 
+        /** @var User|null $user */
         $user = auth()->user();
-        $logger = activity('scheduler_monitor')
-            ->withProperties([
-                'task' => $this->displayName($event),
-                'status' => $status,
-                'duration_ms' => $durationMs,
-            ]);
+        $props = ['task' => $this->displayName($event), 'status' => $status, 'duration_ms' => $durationMs];
+        $audit = app(AuditTrailService::class);
 
-        if ($user) {
-            $logger = $logger->causedBy($user);
+        if ($user instanceof User) {
+            $audit->logUser($user, 'scheduler_monitor', 'manually_ran', 'Manually ran: '.$this->displayName($event), properties: $props);
+        } else {
+            $audit->logSystem('scheduler_monitor', 'manually_ran', 'Manually ran: '.$this->displayName($event), properties: $props);
         }
-
-        $logger->log('Manually ran: '.$this->displayName($event));
 
         return ['status' => $status, 'duration_ms' => $durationMs, 'output' => $output];
     }

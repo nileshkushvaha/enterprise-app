@@ -10,6 +10,7 @@ use App\Filament\Pages\CacheManagerPage;
 use App\Filament\Pages\Dashboard;
 use App\Filament\Pages\QueueMonitorPage;
 use App\Filament\Pages\SchedulerMonitorPage;
+use App\Filament\Widgets\RecentAuditTrailWidget;
 use App\Filament\Widgets\RecentLoginsWidget;
 use App\Filament\Widgets\RecentUsersWidget;
 use App\Filament\Widgets\StatsOverviewWidget;
@@ -59,6 +60,7 @@ class AdminPanelProvider extends PanelProvider
                     ->sort(1),
             ])
 
+            ->databaseNotifications()
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\Filament\Resources')
             ->discoverClusters(in: app_path('Filament/Clusters'), for: 'App\Filament\Clusters')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\Filament\Pages')
@@ -82,6 +84,7 @@ class AdminPanelProvider extends PanelProvider
                 StatsOverviewWidget::class,
                 RecentUsersWidget::class,
                 RecentLoginsWidget::class,
+                RecentAuditTrailWidget::class,
             ])
             ->middleware([
                 EncryptCookies::class,

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Content\Models\ContentBlock;
 use App\Enums\BlockType;
 use App\Notifications\Cms\ContactFormSubmissionNotification;
+use App\Services\AuditTrailService;
 use App\Settings\GeneralSettings;
 use App\Settings\MailSettings;
 use Illuminate\Http\RedirectResponse;
@@ -100,14 +101,16 @@ class ContactFormController extends Controller
                 ->notifyNow(new ContactFormSubmissionNotification($payload));
         }
 
-        activity('contact')
-            ->performedOn($block)
-            ->event('contact_form_submitted')
-            ->withProperties([
-                'page_id' => $block->blockable_id,
-                'ip' => $request->ip(),
-            ])
-            ->log('Contact form submitted');
+        app(AuditTrailService::class)->logGuest(
+            logName: 'contact',
+            event: 'contact_form_submitted',
+            description: 'Contact form submitted',
+            subject: $block,
+            guestName: (string) ($validated['name'] ?? $validated['full_name'] ?? ''),
+            guestEmail: (string) ($validated['email'] ?? ''),
+            guestPhone: (string) ($validated['phone'] ?? ''),
+            properties: ['page_id' => $block->blockable_id],
+        );
 
         return back()->with('success', $content['success_message'] ?? 'Thank you for your message. We\'ll get back to you soon!');
     }

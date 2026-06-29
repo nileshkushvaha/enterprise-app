@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Filament\Resources\ActivityLog\Schemas;
 
+use App\Enums\ActivityActorType;
+use App\Models\Activity;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
@@ -11,7 +13,6 @@ use Filament\Schemas\Components\Tabs;
 use Filament\Schemas\Components\Tabs\Tab;
 use Filament\Schemas\Schema;
 use Filament\Support\Enums\FontFamily;
-use Spatie\Activitylog\Models\Activity;
 
 class ActivityLogInfolist
 {
@@ -27,7 +28,7 @@ class ActivityLogInfolist
             'login', 'logout', 'password_reset', 'auto_published',
             'manually_ran', 'webhook_received', 'role_created',
             'photo_removed', 'password_reset_requested' => 'info',
-            'previewed', 'contact_form_submitted', 'media_updated' => 'gray',
+            'previewed', 'contact_form_submitted', 'media_updated', 'cleared' => 'gray',
             default => 'gray',
         };
     }
@@ -53,6 +54,7 @@ class ActivityLogInfolist
             ]),
 
             Grid::make(2)->schema([
+
                 Section::make('Subject')
                     ->icon('heroicon-o-document-text')
                     ->schema([
@@ -90,19 +92,26 @@ class ActivityLogInfolist
                 Section::make('Performed By')
                     ->icon('heroicon-o-user')
                     ->schema([
-                        TextEntry::make('causer.name')
-                            ->label('Name')
-                            ->default('System / Unauthenticated'),
+                        TextEntry::make('actor_type')
+                            ->label('Actor Type')
+                            ->badge()
+                            ->color(fn (?ActivityActorType $state): string => $state?->color() ?? 'gray')
+                            ->icon(fn (?ActivityActorType $state): string => $state?->icon() ?? 'heroicon-o-user')
+                            ->formatStateUsing(fn (?ActivityActorType $state): string => $state?->label() ?? '—'),
 
-                        TextEntry::make('causer.email')
+                        TextEntry::make('actor_name_display')
+                            ->label('Name')
+                            ->state(fn (Activity $record): string => $record->actorName()),
+
+                        TextEntry::make('actor_email_display')
                             ->label('Email')
-                            ->default('—')
+                            ->state(fn (Activity $record): string => $record->actorEmail() ?? '—')
                             ->copyable(),
 
-                        TextEntry::make('causer_type')
-                            ->label('Actor Type')
-                            ->formatStateUsing(fn (?string $state): string => $state ? class_basename($state) : 'System')
-                            ->default('System'),
+                        TextEntry::make('guest_phone')
+                            ->label('Phone')
+                            ->default('—')
+                            ->visible(fn (Activity $record): bool => $record->isGuest()),
                     ]),
             ]),
 
@@ -156,16 +165,36 @@ class ActivityLogInfolist
                                 ->copyable()
                                 ->helperText('Groups related log entries created in a single operation.'),
 
-                            TextEntry::make('properties_ip')
+                            TextEntry::make('ip_address')
                                 ->label('IP Address')
-                                ->state(fn (Activity $record): string => data_get($record->properties, 'ip') ?? data_get($record->properties, 'ip_address') ?? '—')
+                                ->state(fn (Activity $record): string => $record->ip_address
+                                    ?? data_get($record->properties, 'ip')
+                                    ?? data_get($record->properties, 'ip_address')
+                                    ?? '—')
                                 ->copyable(),
 
-                            TextEntry::make('properties_ua')
+                            TextEntry::make('method')
+                                ->label('HTTP Method')
+                                ->default('—'),
+
+                            TextEntry::make('route')
+                                ->label('Route / Path')
+                                ->default('—'),
+
+                            TextEntry::make('session_id')
+                                ->label('Session ID')
+                                ->default('—')
+                                ->copyable(),
+
+                            TextEntry::make('user_agent_display')
                                 ->label('User Agent')
-                                ->state(fn (Activity $record): string => data_get($record->properties, 'user_agent') ?? '—')
+                                ->state(fn (Activity $record): string => $record->user_agent
+                                    ?? data_get($record->properties, 'user_agent')
+                                    ?? '—')
                                 ->limit(120)
-                                ->tooltip(fn (Activity $record): string => data_get($record->properties, 'user_agent') ?? ''),
+                                ->tooltip(fn (Activity $record): string => $record->user_agent
+                                    ?? data_get($record->properties, 'user_agent')
+                                    ?? ''),
 
                             TextEntry::make('properties_raw')
                                 ->label('Full Properties (JSON)')

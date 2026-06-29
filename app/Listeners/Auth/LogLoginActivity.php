@@ -34,6 +34,8 @@ class LogLoginActivity implements ShouldQueue
             'platform' => $ua['platform'],
             'device_type' => $ua['device_type'],
             'logged_in_at' => now(),
+            'session_id' => $event->sessionId,
+            'login_method' => $event->loginMethod,
         ]);
 
         activity('auth')
@@ -68,6 +70,8 @@ class LogLoginActivity implements ShouldQueue
             'platform' => $ua['platform'],
             'device_type' => $ua['device_type'],
             'logged_in_at' => now(),
+            'session_id' => $event->sessionId,
+            'login_method' => 'password',
         ];
 
         if ($event->user) {

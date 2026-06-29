@@ -95,6 +95,13 @@ class SecurityPolicy
         return $this->isSuperAdmin($user) || $this->hasPermission($user, 'security.account_protection.update');
     }
 
+    // ── Login History ────────────────────────────────────────────────────
+
+    public function viewLoginHistory(AuthUser $user): bool
+    {
+        return $this->isSuperAdmin($user) || $this->hasPermission($user, 'security.login_history.view');
+    }
+
     // ── Shared helpers ───────────────────────────────────────────────────
 
     private function isSuperAdmin(AuthUser $user): bool

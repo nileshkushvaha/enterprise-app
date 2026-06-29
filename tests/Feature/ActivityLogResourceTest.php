@@ -6,13 +6,13 @@ namespace Tests\Feature;
 
 use App\Filament\Resources\ActivityLog\ActivityLogResource;
 use App\Filament\Resources\ActivityLog\Pages\ListActivityLogs;
+use App\Models\Activity;
 use App\Models\Country;
 use App\Models\Page;
 use App\Models\User;
 use App\Policies\ActivityLogPolicy;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
-use Spatie\Activitylog\Models\Activity;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;

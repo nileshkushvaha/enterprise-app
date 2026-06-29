@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Filament\Resources\ActivityLog\Tables;
 
+use App\Enums\ActivityActorType;
+use App\Models\Activity;
 use App\Models\User;
 use Filament\Actions\ViewAction;
 use Filament\Forms\Components\DatePicker;
@@ -13,7 +15,6 @@ use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Cache;
-use Spatie\Activitylog\Models\Activity;
 
 class ActivityLogTable
 {
@@ -29,7 +30,7 @@ class ActivityLogTable
             'login', 'logout', 'password_reset', 'auto_published',
             'manually_ran', 'webhook_received', 'role_created',
             'photo_removed', 'password_reset_requested' => 'info',
-            'previewed', 'contact_form_submitted', 'media_updated' => 'gray',
+            'previewed', 'contact_form_submitted', 'media_updated', 'cleared' => 'gray',
             default => 'gray',
         };
     }
@@ -68,12 +69,25 @@ class ActivityLogTable
                     ->searchable()
                     ->toggleable(),
 
-                TextColumn::make('causer.name')
+                TextColumn::make('actor_type')
+                    ->label('Actor')
+                    ->badge()
+                    ->color(fn (?ActivityActorType $state): string => $state?->color() ?? 'gray')
+                    ->icon(fn (?ActivityActorType $state): string => $state?->icon() ?? 'heroicon-o-user')
+                    ->formatStateUsing(fn (?ActivityActorType $state): string => $state?->label() ?? '—')
+                    ->sortable(),
+
+                TextColumn::make('actor_display')
                     ->label('By')
-                    ->default('System')
-                    ->searchable()
-                    ->sortable()
-                    ->description(fn (Activity $record): ?string => $record->causer?->email),
+                    ->state(fn (Activity $record): string => $record->actorName())
+                    ->description(fn (Activity $record): ?string => $record->actorEmail())
+                    ->searchable(query: fn (Builder $query, string $search): Builder => $query->where(
+                        fn (Builder $q) => $q
+                            ->whereHas('causer', fn (Builder $q) => $q->where('name', 'like', "%{$search}%")
+                                ->orWhere('email', 'like', "%{$search}%"))
+                            ->orWhere('guest_name', 'like', "%{$search}%")
+                            ->orWhere('guest_email', 'like', "%{$search}%")
+                    )),
 
                 TextColumn::make('created_at')
                     ->label('When')
@@ -84,6 +98,15 @@ class ActivityLogTable
             ])
 
             ->filters([
+                SelectFilter::make('actor_type')
+                    ->label('Actor Type')
+                    ->options(
+                        collect(ActivityActorType::cases())
+                            ->mapWithKeys(fn (ActivityActorType $t) => [$t->value => $t->label()])
+                            ->toArray()
+                    )
+                    ->placeholder('All actors'),
+
                 SelectFilter::make('event')
                     ->label('Event')
                     ->options(fn (): array => Cache::remember(

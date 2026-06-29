@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Providers;
 
+use App\Events\ActivityCreated;
 use App\Events\Auth\LoginFailed;
 use App\Events\Auth\UserApproved;
 use App\Events\Auth\UserLoggedIn;
@@ -13,12 +14,16 @@ use App\Listeners\Auth\LogLoginActivity;
 use App\Listeners\Auth\SendApprovalNotification;
 use App\Listeners\Auth\SendRegistrationNotifications;
 use App\Listeners\Auth\SendWelcomeNotification;
+use App\Listeners\NotifyAdminsOnActivity;
 use Illuminate\Auth\Events\Verified;
 use Illuminate\Foundation\Support\Providers\EventServiceProvider as ServiceProvider;
 
 class EventServiceProvider extends ServiceProvider
 {
     protected $listen = [
+        ActivityCreated::class => [
+            NotifyAdminsOnActivity::class,
+        ],
         UserRegistered::class => [
             SendRegistrationNotifications::class,
         ],
