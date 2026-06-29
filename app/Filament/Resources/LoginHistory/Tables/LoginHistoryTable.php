@@ -6,6 +6,7 @@ namespace App\Filament\Resources\LoginHistory\Tables;
 
 use App\Models\LoginHistory;
 use App\Models\User;
+use App\Support\LoginHistoryColors;
 use Filament\Actions\ViewAction;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\TextInput;
@@ -17,17 +18,6 @@ use Illuminate\Database\Eloquent\Builder;
 
 class LoginHistoryTable
 {
-    private static function statusColor(string $status): string
-    {
-        return match ($status) {
-            'success' => 'success',
-            'locked' => 'warning',
-            'blocked' => 'danger',
-            'unverified' => 'info',
-            default => 'gray',
-        };
-    }
-
     public static function configure(Table $table): Table
     {
         return $table
@@ -42,7 +32,7 @@ class LoginHistoryTable
                 TextColumn::make('status')
                     ->label('Status')
                     ->badge()
-                    ->color(fn (string $state): string => self::statusColor($state))
+                    ->color(fn (string $state): string => LoginHistoryColors::forStatus($state))
                     ->formatStateUsing(fn (string $state): string => ucfirst($state)),
 
                 TextColumn::make('login_method')

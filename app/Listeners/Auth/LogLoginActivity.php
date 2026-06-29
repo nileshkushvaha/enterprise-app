@@ -40,6 +40,7 @@ class LogLoginActivity implements ShouldQueue
 
         activity('auth')
             ->causedBy($event->user)
+            ->event('login')
             ->withProperties(['ip' => $event->ipAddress, 'remember' => $event->remember])
             ->log('User logged in');
     }
@@ -54,6 +55,7 @@ class LogLoginActivity implements ShouldQueue
 
         activity('auth')
             ->causedBy($event->user)
+            ->event('logout')
             ->withProperties(['ip' => $event->ipAddress])
             ->log('User logged out');
     }
@@ -80,6 +82,7 @@ class LogLoginActivity implements ShouldQueue
 
             activity('auth')
                 ->causedBy($event->user)
+                ->event('login_failed')
                 ->withProperties(['ip' => $event->ipAddress, 'reason' => $event->reason])
                 ->log('Login attempt failed: '.$event->reason);
         }

@@ -5,11 +5,14 @@ declare(strict_types=1);
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\MassPrunable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class LoginHistory extends Model
 {
+    use MassPrunable;
+
     protected $fillable = [
         'user_id',
         'status',
@@ -32,6 +35,13 @@ class LoginHistory extends Model
             'logged_in_at' => 'datetime',
             'logged_out_at' => 'datetime',
         ];
+    }
+
+    // ── Pruning ──────────────────────────────────────────────────────
+
+    public function prunable(): Builder
+    {
+        return static::where('logged_in_at', '<', now()->subDays(90));
     }
 
     // ── Relationships ────────────────────────────────────────────────

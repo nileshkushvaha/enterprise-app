@@ -6,7 +6,6 @@ namespace App\Filament\Widgets;
 
 use App\Models\LoginHistory;
 use Filament\Support\Enums\FontWeight;
-use Filament\Tables\Columns\BadgeColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Filament\Widgets\TableWidget as BaseWidget;
@@ -35,13 +34,17 @@ class RecentLoginsWidget extends BaseWidget
                     ->weight(FontWeight::Medium)
                     ->searchable(),
 
-                BadgeColumn::make('status')
-                    ->colors([
+                TextColumn::make('status')
+                    ->label('Status')
+                    ->badge()
+                    ->color(fn (string $state): string => match ($state) {
                         'success' => 'success',
-                        'danger' => 'failed',
-                        'warning' => 'suspicious',
-                    ])
-                    ->formatStateUsing(fn ($state) => ucfirst($state ?? 'unknown')),
+                        'locked' => 'warning',
+                        'blocked' => 'danger',
+                        'unverified' => 'info',
+                        default => 'gray',
+                    })
+                    ->formatStateUsing(fn (string $state): string => ucfirst($state)),
 
                 TextColumn::make('ip_address')
                     ->label('IP Address')

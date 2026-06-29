@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Admin;
 
 use App\DTOs\NotificationPayload;
-use Spatie\Activitylog\Models\Activity;
+use App\Models\Activity;
 
 /**
  * Notification Policy / Mapper.
@@ -209,11 +209,9 @@ final class NotificationMapper
             $parts[] = $subject->email;
         }
 
-        // Actor line
+        // Actor line — use model helper so guest/system actors render correctly
         if ($config['actor_label'] !== null) {
-            $causer = $activity->causer;
-            $actorName = $causer?->name ?? $causer?->email ?? 'System';
-            $parts[] = $config['actor_label'].': '.$actorName;
+            $parts[] = $config['actor_label'].': '.$activity->actorName();
         }
 
         // Activity description as fallback when nothing else

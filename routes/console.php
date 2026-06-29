@@ -1,6 +1,7 @@
 <?php
 
 use App\Console\Commands\PublishScheduledContent;
+use App\Models\LoginHistory;
 use App\Models\SchedulerHistory;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Inspiring;
@@ -23,6 +24,12 @@ app(Schedule::class)
 // Prune scheduler_histories older than 30 days (MassPrunable trait on the model).
 app(Schedule::class)
     ->command('model:prune', ['--model' => SchedulerHistory::class])
+    ->daily()
+    ->appendOutputTo(storage_path('logs/model-prune.log'));
+
+// Prune login_histories older than 90 days (MassPrunable trait on the model).
+app(Schedule::class)
+    ->command('model:prune', ['--model' => LoginHistory::class])
     ->daily()
     ->appendOutputTo(storage_path('logs/model-prune.log'));
 

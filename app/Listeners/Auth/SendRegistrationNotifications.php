@@ -6,7 +6,6 @@ namespace App\Listeners\Auth;
 
 use App\Events\Auth\UserRegistered;
 use App\Models\User;
-use App\Notifications\Auth\AdminNewRegistrationNotification;
 use App\Notifications\Auth\RegistrationPendingNotification;
 use App\Notifications\Auth\VerifyEmailNotification;
 use App\Notifications\Auth\WelcomeNotification;
@@ -39,14 +38,13 @@ final class SendRegistrationNotifications implements ShouldQueue
 
         // ── Branch: pending admin approval ───────────────────────────────────
         if ($settings->require_admin_approval) {
+            // Tell the registrant their account is pending review
             $user->notify(new RegistrationPendingNotification);
 
-            User::role('super_admin')
-                ->where('id', '!=', $user->id)
-                ->each(function (User $admin) use ($user, $event): void {
-                    $admin->notify(new AdminNewRegistrationNotification($user, $event->ipAddress));
-                });
-
+            // Log the event — ActivityObserver fires ActivityCreated which routes
+            // through NotificationMapper → AdminNotificationService → bell notification
+            // for every super_admin. Do NOT send AdminNewRegistrationNotification here
+            // directly; that would create a duplicate notification for the same event.
             activity('auth')
                 ->causedBy($user)
                 ->performedOn($user)

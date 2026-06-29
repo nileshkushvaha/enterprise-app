@@ -7,6 +7,7 @@ namespace Tests\Feature\Notifications;
 use App\DTOs\NotificationPayload;
 use App\Events\ActivityCreated;
 use App\Listeners\NotifyAdminsOnActivity;
+use App\Models\Activity;
 use App\Models\User;
 use App\Services\Admin\ActivityUrlResolver;
 use App\Services\Admin\AdminNotificationService;
@@ -15,7 +16,6 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Notifications\DatabaseNotification;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Hash;
-use Spatie\Activitylog\Models\Activity;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 

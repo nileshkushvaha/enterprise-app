@@ -7,6 +7,7 @@ namespace App\Filament\Resources\ActivityLog\Tables;
 use App\Enums\ActivityActorType;
 use App\Models\Activity;
 use App\Models\User;
+use App\Support\ActivityLogColors;
 use Filament\Actions\ViewAction;
 use Filament\Forms\Components\DatePicker;
 use Filament\Tables\Columns\TextColumn;
@@ -18,23 +19,6 @@ use Illuminate\Support\Facades\Cache;
 
 class ActivityLogTable
 {
-    /** Maps event names to Filament badge colors. */
-    private static function eventColor(?string $event): string
-    {
-        return match ($event) {
-            'created', 'registered' => 'success',
-            'updated', 'roles_updated', 'profile_updated',
-            'password_changed', 'photo_updated', 'role_updated',
-            '2fa_enabled', '2fa_disabled', 'account_unlocked' => 'warning',
-            'deleted', 'login_failed' => 'danger',
-            'login', 'logout', 'password_reset', 'auto_published',
-            'manually_ran', 'webhook_received', 'role_created',
-            'photo_removed', 'password_reset_requested' => 'info',
-            'previewed', 'contact_form_submitted', 'media_updated', 'cleared' => 'gray',
-            default => 'gray',
-        };
-    }
-
     public static function configure(Table $table): Table
     {
         return $table
@@ -51,7 +35,7 @@ class ActivityLogTable
                 TextColumn::make('event')
                     ->label('Event')
                     ->badge()
-                    ->color(fn (?string $state): string => self::eventColor($state))
+                    ->color(fn (?string $state): string => ActivityLogColors::forEvent($state))
                     ->sortable(),
 
                 TextColumn::make('description')
@@ -151,17 +135,20 @@ class ActivityLogTable
 
                 SelectFilter::make('causer_id')
                     ->label('User')
-                    ->options(fn (): array => User::query()
-                        ->whereIn('id', Activity::query()
-                            ->where('causer_type', User::class)
-                            ->whereNotNull('causer_id')
-                            ->distinct()
-                            ->pluck('causer_id')
-                        )
-                        ->orderBy('name')
-                        ->pluck('name', 'id')
-                        ->toArray()
-                    )
+                    ->options(fn (): array => Cache::remember(
+                        'activity_log_filter_users',
+                        300,
+                        fn (): array => User::query()
+                            ->whereIn('id', Activity::query()
+                                ->where('causer_type', User::class)
+                                ->whereNotNull('causer_id')
+                                ->distinct()
+                                ->pluck('causer_id')
+                            )
+                            ->orderBy('name')
+                            ->pluck('name', 'id')
+                            ->toArray()
+                    ))
                     ->searchable()
                     ->placeholder('All users'),
 

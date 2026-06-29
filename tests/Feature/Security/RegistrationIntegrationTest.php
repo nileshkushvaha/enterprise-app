@@ -7,7 +7,6 @@ namespace Tests\Feature\Security;
 use App\Events\Auth\UserApproved;
 use App\Models\User;
 use App\Notifications\Auth\AccountApprovedNotification;
-use App\Notifications\Auth\AdminNewRegistrationNotification;
 use App\Notifications\Auth\RegistrationPendingNotification;
 use App\Notifications\Auth\VerifyEmailNotification;
 use App\Notifications\Auth\WelcomeNotification;
@@ -180,26 +179,30 @@ class RegistrationIntegrationTest extends TestCase
         $this->assertGuest();
     }
 
-    public function test_admin_notification_sent_when_approval_required(): void
+    public function test_pipeline_activity_logged_when_approval_required(): void
     {
-        Notification::fake();
         $this->requireAdminApproval();
 
-        $superAdmin = $this->createSuperAdmin();
-
         $this->post(route('auth.register.store'), $this->validPayload());
 
-        Notification::assertSentTo($superAdmin, AdminNewRegistrationNotification::class);
+        $user = User::where('email', 'newuser@gmail.com')->firstOrFail();
+        // The pipeline activity drives the admin bell notification via ActivityObserver →
+        // ActivityCreated → NotifyAdminsOnActivity → AdminNotificationService.
+        $this->assertDatabaseHas('activity_log', [
+            'log_name' => 'auth',
+            'event' => 'registration_pending_approval',
+            'causer_id' => $user->id,
+        ]);
     }
 
-    public function test_admin_notification_not_sent_when_approval_not_required(): void
+    public function test_pipeline_activity_not_logged_when_approval_not_required(): void
     {
-        Notification::fake();
-        $superAdmin = $this->createSuperAdmin();
-
         $this->post(route('auth.register.store'), $this->validPayload());
 
-        Notification::assertNotSentTo($superAdmin, AdminNewRegistrationNotification::class);
+        $this->assertDatabaseMissing('activity_log', [
+            'log_name' => 'auth',
+            'event' => 'registration_pending_approval',
+        ]);
     }
 
     public function test_pending_notification_sent_to_user_when_approval_required(): void
@@ -597,8 +600,6 @@ class RegistrationIntegrationTest extends TestCase
 
     private function requireAdminApproval(): void
     {
-        // The listener calls User::role('super_admin') when approval is required;
-        // ensure the role exists even if no admin user is needed in this test.
         Role::firstOrCreate(['name' => 'super_admin', 'guard_name' => 'web']);
         $s = app(RegistrationSettings::class);
         $s->require_admin_approval = true;

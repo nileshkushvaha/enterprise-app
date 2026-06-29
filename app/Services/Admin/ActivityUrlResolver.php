@@ -13,7 +13,7 @@ use App\Filament\Pages\Security\SessionPage;
 use App\Filament\Resources\ActivityLog\ActivityLogResource;
 use App\Filament\Resources\Roles\RoleResource;
 use App\Filament\Resources\Users\UserResource;
-use Spatie\Activitylog\Models\Activity;
+use App\Models\Activity;
 use Throwable;
 
 /**

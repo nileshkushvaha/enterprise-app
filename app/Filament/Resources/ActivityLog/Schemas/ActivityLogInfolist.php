@@ -6,6 +6,7 @@ namespace App\Filament\Resources\ActivityLog\Schemas;
 
 use App\Enums\ActivityActorType;
 use App\Models\Activity;
+use App\Support\ActivityLogColors;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
@@ -16,23 +17,6 @@ use Filament\Support\Enums\FontFamily;
 
 class ActivityLogInfolist
 {
-    /** Maps event names to Filament badge colors (mirrors ActivityLogTable). */
-    private static function eventColor(?string $event): string
-    {
-        return match ($event) {
-            'created', 'registered' => 'success',
-            'updated', 'roles_updated', 'profile_updated',
-            'password_changed', 'photo_updated', 'role_updated',
-            '2fa_enabled', '2fa_disabled', 'account_unlocked' => 'warning',
-            'deleted', 'login_failed' => 'danger',
-            'login', 'logout', 'password_reset', 'auto_published',
-            'manually_ran', 'webhook_received', 'role_created',
-            'photo_removed', 'password_reset_requested' => 'info',
-            'previewed', 'contact_form_submitted', 'media_updated', 'cleared' => 'gray',
-            default => 'gray',
-        };
-    }
-
     public static function configure(Schema $schema): Schema
     {
         return $schema->components([
@@ -46,7 +30,7 @@ class ActivityLogInfolist
                 TextEntry::make('event')
                     ->label('Event')
                     ->badge()
-                    ->color(fn (?string $state): string => self::eventColor($state)),
+                    ->color(fn (?string $state): string => ActivityLogColors::forEvent($state)),
 
                 TextEntry::make('created_at')
                     ->label('Performed At')
