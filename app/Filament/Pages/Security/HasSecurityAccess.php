@@ -18,7 +18,7 @@ trait HasSecurityAccess
             return false;
         }
 
-        if ($user->hasRole('super_admin')) {
+        if ($user->isSuperAdmin()) {
             return true;
         }
 

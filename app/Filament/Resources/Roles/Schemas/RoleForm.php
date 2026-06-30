@@ -82,9 +82,14 @@ class RoleForm
                     ->columnSpanFull(),
 
                 // ── Section 2: Permission Matrix ──────────────────────────
+                // Gated separately from Update:Role — being able to rename/
+                // describe a role does not imply being able to see or change
+                // what it can do. Server-side enforcement lives in
+                // EditRole::afterSave() / CreateRole::afterCreate().
                 Section::make('Permission Assignment')
                     ->description('Select the permissions for this role. Changes take effect immediately on save.')
                     ->icon('heroicon-o-key')
+                    ->visible(fn (): bool => auth()->user()?->can('AssignPermissions:Role') ?? false)
                     ->schema([
                         View::make('filament.roles.permission-matrix')
                             ->viewData([

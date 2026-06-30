@@ -43,8 +43,11 @@ class EditRole extends EditRecord
 
     protected function mutateFormDataBeforeFill(array $data): array
     {
-        // Pre-populate selectedPermissions so Alpine matrix reads correct state
-        $this->selectedPermissions = $this->record->permissions->pluck('name')->toArray();
+        // Only expose the role's current permission list to the browser if the
+        // user is allowed to see/change it — otherwise leave the matrix empty.
+        if ($this->userCanAssignPermissions()) {
+            $this->selectedPermissions = $this->record->permissions->pluck('name')->toArray();
+        }
 
         return $data;
     }
@@ -63,37 +66,50 @@ class EditRole extends EditRecord
 
         $data = $this->data;
 
-        // Capture old permissions for activity log diff
-        $oldPermissions = $role->permissions->pluck('name')->toArray();
-
         // Set extra columns directly
         $role->description = $data['description'] ?? null;
         $role->status = $data['status'] ?? 'active';
         $role->remarks = $data['remarks'] ?? null;
         $role->saveQuietly();
 
-        // Sync permissions from the matrix state
-        $role->syncPermissions($this->selectedPermissions);
+        // Authoritative server-side guard — even a tampered Livewire payload
+        // cannot change permissions without AssignPermissions:Role. The hidden
+        // Section in RoleForm is UI convenience only, not the real boundary.
+        if ($this->userCanAssignPermissions()) {
+            $oldPermissions = $role->permissions->pluck('name')->toArray();
 
-        // Activity log with diff
-        $added = array_diff($this->selectedPermissions, $oldPermissions);
-        $removed = array_diff($oldPermissions, $this->selectedPermissions);
+            $role->syncPermissions($this->selectedPermissions);
 
-        activity('roles')
-            ->performedOn($role)
-            ->causedBy(auth()->user())
-            ->event('updated')
-            ->withProperties([
-                'permissions_added' => array_values($added),
-                'permissions_removed' => array_values($removed),
-                'total_permissions' => count($this->selectedPermissions),
-            ])
-            ->log('Role updated');
+            $added = array_diff($this->selectedPermissions, $oldPermissions);
+            $removed = array_diff($oldPermissions, $this->selectedPermissions);
+
+            activity('roles')
+                ->performedOn($role)
+                ->causedBy(auth()->user())
+                ->event('updated')
+                ->withProperties([
+                    'permissions_added' => array_values($added),
+                    'permissions_removed' => array_values($removed),
+                    'total_permissions' => count($this->selectedPermissions),
+                ])
+                ->log('Role updated');
+        } else {
+            activity('roles')
+                ->performedOn($role)
+                ->causedBy(auth()->user())
+                ->event('updated')
+                ->log('Role updated');
+        }
 
         Notification::make()
             ->title('Role saved')
-            ->body("Role \"{$role->name}\" updated with ".count($this->selectedPermissions).' permissions.')
+            ->body("Role \"{$role->name}\" updated.")
             ->success()
             ->send();
+    }
+
+    private function userCanAssignPermissions(): bool
+    {
+        return auth()->user()?->can('AssignPermissions:Role') ?? false;
     }
 }

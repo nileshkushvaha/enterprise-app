@@ -22,6 +22,10 @@ class SuperAdminSeeder extends Seeder
             ['name' => 'super_admin', 'guard_name' => 'web']
         );
 
+        // Custom permission not covered by shield:generate's standard CRUD
+        // verbs — gates the Permission Assignment matrix on the Role form.
+        Permission::firstOrCreate(['name' => 'AssignPermissions:Role', 'guard_name' => 'web']);
+
         // 2. Sync ALL permissions to super_admin role
         $allPermissions = Permission::all();
         $superAdmin->syncPermissions($allPermissions);

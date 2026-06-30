@@ -9,14 +9,14 @@ use App\Models\User;
 /**
  * Single source of truth for dashboard routing decisions.
  *
- * Role 1+2 (super_admin / user ID 1) → Filament /admin
- * Role 3+ (student, etc.)            → frontend /dashboard
+ * super_admin → Filament /admin
+ * Everyone else → frontend /dashboard
  */
 final class DashboardResolver
 {
     public function isAdminPanel(User $user): bool
     {
-        return $user->hasRole('super_admin') || $user->id === 1;
+        return $user->isSuperAdmin();
     }
 
     public function redirectAfterLogin(User $user): string

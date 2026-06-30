@@ -81,6 +81,6 @@ class CacheManagerPolicy
 
     private function isSuperAdmin(AuthUser $user): bool
     {
-        return method_exists($user, 'hasRole') && $user->hasRole('super_admin');
+        return method_exists($user, 'isSuperAdmin') && $user->isSuperAdmin();
     }
 }

@@ -71,7 +71,7 @@ final class AdminNotificationService
         try {
             return User::role('super_admin')
                 ->where('status', User::STATUS_ACTIVE)
-                ->when($actor?->id && $actor->hasRole('super_admin'), fn ($q) => $q->where('id', '!=', $actor->id))
+                ->when($actor?->id && $actor->isSuperAdmin(), fn ($q) => $q->where('id', '!=', $actor->id))
                 ->get();
         } catch (RoleDoesNotExist) {
             return new Collection;

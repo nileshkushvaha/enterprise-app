@@ -36,7 +36,7 @@ final class LoginService
         // Pre-flight checks before touching Auth guard
         if ($user) {
             // Block admin/super_admin from signing in via the frontend portal
-            if ($user->hasRole('super_admin') || $user->hasAnyRole(['admin', 'super_admin'])) {
+            if ($user->isSuperAdmin() || $user->hasAnyRole(['admin', 'super_admin'])) {
                 return LoginResult::AdminAccountOnly;
             }
 

@@ -117,7 +117,7 @@ class UsersTable
                 EditAction::make(),
                 DeleteAction::make()
                     ->hidden(fn ($record): bool => $record->id === auth()->id()
-                        || $record->hasRole('super_admin')
+                        || $record->isSuperAdmin()
                     ),
             ])
 
@@ -127,7 +127,7 @@ class UsersTable
                         ->action(function (DeleteBulkAction $action, Collection $records): void {
                             $records
                                 ->reject(fn ($record) => $record->id === auth()->id()
-                                    || $record->hasRole('super_admin')
+                                    || $record->isSuperAdmin()
                                 )
                                 ->each->delete();
 

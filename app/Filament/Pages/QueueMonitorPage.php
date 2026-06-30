@@ -36,7 +36,7 @@ class QueueMonitorPage extends Page
             return false;
         }
 
-        if (method_exists($user, 'hasRole') && $user->hasRole('super_admin')) {
+        if (method_exists($user, 'isSuperAdmin') && $user->isSuperAdmin()) {
             return true;
         }
 
@@ -105,7 +105,7 @@ class QueueMonitorPage extends Page
 
         return $rows->map(function ($row) {
             $oldest = $row->oldest ? Carbon::createFromTimestamp($row->oldest) : null;
-            $ageMinutes = $oldest ? $oldest->diffInMinutes(now()) : null;
+            $ageMinutes = $oldest ? (int) $oldest->diffInMinutes(now()) : null;
 
             return [
                 'queue' => $row->queue,

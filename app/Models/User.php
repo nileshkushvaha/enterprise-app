@@ -118,6 +118,20 @@ class User extends Authenticatable implements FilamentUser, MustVerifyEmail
             ?: $this->name;
     }
 
+    // ── Authorization helpers ────────────────────────────────────────
+
+    /**
+     * Single source of truth for "is this user a super admin". The roles
+     * table is the source of truth — every authorization path in the app
+     * (Gate::before(), policies, Filament pages/resources, DashboardResolver,
+     * notification recipients) must call this method instead of checking
+     * hasRole('super_admin') or any role ID directly.
+     */
+    public function isSuperAdmin(): bool
+    {
+        return $this->hasRole('super_admin');
+    }
+
     // ── Status helpers ───────────────────────────────────────────────
 
     public function isActive(): bool
@@ -252,7 +266,7 @@ class User extends Authenticatable implements FilamentUser, MustVerifyEmail
 
     public function canAccessPanel(Panel $panel): bool
     {
-        if ($this->hasRole('super_admin') || $this->id === 1) {
+        if ($this->isSuperAdmin()) {
             return $this->isActive();
         }
 

@@ -45,7 +45,7 @@ class CacheManagerPage extends Page
             return false;
         }
 
-        if (method_exists($user, 'hasRole') && $user->hasRole('super_admin')) {
+        if (method_exists($user, 'isSuperAdmin') && $user->isSuperAdmin()) {
             return true;
         }
 
@@ -189,7 +189,7 @@ class CacheManagerPage extends Page
             return false;
         }
 
-        if (method_exists($user, 'hasRole') && $user->hasRole('super_admin')) {
+        if (method_exists($user, 'isSuperAdmin') && $user->isSuperAdmin()) {
             return true;
         }
 

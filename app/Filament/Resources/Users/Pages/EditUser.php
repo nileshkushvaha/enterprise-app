@@ -23,7 +23,7 @@ class EditUser extends EditRecord
             ViewAction::make(),
             DeleteAction::make()
                 ->hidden(fn (): bool => $this->record->id === auth()->id()
-                    || $this->record->hasRole('super_admin')
+                    || $this->record->isSuperAdmin()
                 ),
         ];
     }

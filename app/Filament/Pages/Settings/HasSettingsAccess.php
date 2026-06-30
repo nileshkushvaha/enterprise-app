@@ -20,7 +20,7 @@ trait HasSettingsAccess
         }
 
         // Super admins always have access
-        if ($user->hasRole('super_admin')) {
+        if ($user->isSuperAdmin()) {
             return true;
         }
 

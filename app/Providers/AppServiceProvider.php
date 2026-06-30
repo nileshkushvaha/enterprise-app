@@ -18,8 +18,10 @@ use App\Observers\TagObserver;
 use App\Policies\ActivityLogPolicy;
 use App\Policies\CacheManagerPolicy;
 use App\Policies\NavigationMenuPolicy;
+use App\Policies\PermissionPolicy;
 use App\Policies\ProfilePolicy;
 use App\Policies\QueueMonitorPolicy;
+use App\Policies\RolePolicy;
 use App\Policies\SchedulerMonitorPolicy;
 use App\Policies\Security\SecurityPolicy;
 use App\Settings\LoginSecuritySettings;
@@ -75,9 +77,17 @@ class AppServiceProvider extends ServiceProvider
 
     private function registerPolicies(): void
     {
-        Gate::policy(User::class, ProfilePolicy::class);
+        // App\Models\User is auto-discovered to App\Policies\UserPolicy by Laravel's
+        // policy convention — do not bind it to ProfilePolicy here. ProfilePolicy only
+        // implements view/update/changePassword (for the profile.* named gates below);
+        // binding it as the model policy shadows UserPolicy's CRUD checks and made
+        // Filament default-allow full User management (view/create/delete any account)
+        // to every authenticated user, since Filament treats "no matching policy method"
+        // as allowed rather than denied.
         Gate::policy(NavigationMenu::class, NavigationMenuPolicy::class);
         Gate::policy(Activity::class, ActivityLogPolicy::class);
+        Gate::policy(Role::class, RolePolicy::class);
+        Gate::policy(Permission::class, PermissionPolicy::class);
 
         Gate::define('cache_manager.view', [CacheManagerPolicy::class, 'viewPage']);
         Gate::define('cache_manager.clear', [CacheManagerPolicy::class, 'clearApplicationCache']);
@@ -156,7 +166,7 @@ class AppServiceProvider extends ServiceProvider
     private function registerSuperAdminGate(): void
     {
         Gate::before(function ($user, string $ability): ?bool {
-            if (method_exists($user, 'hasRole') && $user->hasRole('super_admin')) {
+            if (method_exists($user, 'isSuperAdmin') && $user->isSuperAdmin()) {
                 return true;
             }
 
@@ -165,13 +175,16 @@ class AppServiceProvider extends ServiceProvider
     }
 
     /**
-     * Auto-assign every newly created permission to the super_admin role (ID 1).
+     * Auto-assign every newly created permission to the super_admin role.
      * This ensures super_admin always has all permissions, even after shield:generate.
+     *
+     * Looked up by name, not ID — the roles table is the single source of
+     * truth for "what is super_admin", and role IDs are never authoritative.
      */
     private function registerPermissionObserver(): void
     {
         Permission::created(function (Permission $permission): void {
-            $superAdmin = Role::find(1);
+            $superAdmin = Role::where('name', 'super_admin')->first();
 
             if ($superAdmin) {
                 $superAdmin->givePermissionTo($permission);

@@ -19,8 +19,14 @@ class CreateRole extends CreateRecord
 
     protected function mutateFormDataBeforeCreate(array $data): array
     {
-        // Store permissions for afterCreate - they're not in Spatie Role's fillable
-        $this->selectedPermissions = $data['selected_permissions'] ?? [];
+        // selectedPermissions is the Alpine-entangled Livewire property (see
+        // permission-matrix.blade.php: $wire.entangle('selectedPermissions')) —
+        // it is not part of $data, which only carries registered form fields.
+        // Only honoured if the user has AssignPermissions:Role — a tampered
+        // payload from a user without it is ignored, not just hidden in the UI.
+        if (! $this->userCanAssignPermissions()) {
+            $this->selectedPermissions = [];
+        }
 
         // Only pass Spatie-fillable fields
         return Arr::only($data, ['name', 'guard_name']);
@@ -38,7 +44,7 @@ class CreateRole extends CreateRecord
         $role->remarks = $data['remarks'] ?? null;
         $role->saveQuietly();
 
-        // Sync permissions
+        // Sync permissions (empty unless the user has AssignPermissions:Role)
         $role->syncPermissions($this->selectedPermissions);
 
         // Activity log
@@ -61,5 +67,10 @@ class CreateRole extends CreateRecord
     protected function getRedirectUrl(): string
     {
         return $this->getResource()::getUrl('index');
+    }
+
+    private function userCanAssignPermissions(): bool
+    {
+        return auth()->user()?->can('AssignPermissions:Role') ?? false;
     }
 }

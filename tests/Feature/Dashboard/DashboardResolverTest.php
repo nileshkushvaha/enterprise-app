@@ -33,15 +33,16 @@ class DashboardResolverTest extends TestCase
         $this->assertTrue($this->resolver->isAdminPanel($user));
     }
 
-    public function test_user_id_1_goes_to_admin_panel(): void
+    public function test_user_id_1_without_super_admin_role_does_not_go_to_admin_panel(): void
     {
-        // Create user so the DB auto-increments to ID 1
+        // Authorization is decided by role name, never by user ID — a user
+        // occupying ID 1 without the super_admin role must not get admin access.
         $user = User::factory()->create([
             'id' => 1,
             'password' => Hash::make('password'),
         ]);
 
-        $this->assertTrue($this->resolver->isAdminPanel($user));
+        $this->assertFalse($this->resolver->isAdminPanel($user));
     }
 
     public function test_student_goes_to_frontend_dashboard(): void

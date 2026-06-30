@@ -32,6 +32,6 @@ class ActivityLogPolicy
 
     private function isSuperAdmin(User $user): bool
     {
-        return $user->hasRole('super_admin');
+        return $user->isSuperAdmin();
     }
 }
