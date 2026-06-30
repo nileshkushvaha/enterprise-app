@@ -14,6 +14,7 @@ use App\Http\Controllers\Auth\ResetPasswordController;
 use App\Http\Controllers\Auth\TwoFactorController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\ContactFormController;
+use App\Http\Controllers\Dashboard\DashboardController;
 use App\Http\Controllers\PageController;
 use App\Http\Controllers\PostController;
 use App\Http\Controllers\Profile\ProfileController;
@@ -51,7 +52,7 @@ Route::post('/contact/submit', [ContactFormController::class, 'submit'])
 Route::get('/login', [LoginController::class, 'showForm'])->name('login');
 
 // ── Dashboard (authenticated users) ─────────────────────────────────
-Route::get('/dashboard', fn () => view('dashboard'))->name('dashboard')
+Route::get('/dashboard', DashboardController::class)->name('dashboard')
     ->middleware(['auth', 'email.verify.if.required', EnsureAccountIsActive::class, 'password.change.required', 'session.track']);
 
 // ── Frontend Auth (guests only) ─────────────────────────────────────

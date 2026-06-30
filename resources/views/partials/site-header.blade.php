@@ -66,15 +66,7 @@
                     </a>
 
                     @auth
-                        @if(Route::has('dashboard'))
-                        <a href="{{ route('dashboard') }}"
-                           class="ml-1 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-white btn-gradient">
-                            <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
-                            </svg>
-                            Dashboard
-                        </a>
-                        @endif
+                        <x-dashboard.profile-dropdown />
                     @else
                         @if(Route::has('auth.login'))
                         <a href="{{ route('auth.login') }}"
@@ -128,10 +120,20 @@
                 @auth
                     @if(Route::has('dashboard'))
                     <a href="{{ route('dashboard') }}"
-                       class="col-span-2 flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-bold text-white btn-gradient">
+                       class="flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-bold text-white btn-gradient">
+                        <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
+                        </svg>
                         Dashboard
                     </a>
                     @endif
+                    <form method="POST" action="{{ route('auth.logout') }}" class="contents">
+                        @csrf
+                        <button type="submit"
+                                class="flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold text-rose-600 border border-rose-200 hover:bg-rose-50 transition-all">
+                            Sign Out
+                        </button>
+                    </form>
                 @else
                     @if(Route::has('auth.login'))
                     <a href="{{ route('auth.login') }}"

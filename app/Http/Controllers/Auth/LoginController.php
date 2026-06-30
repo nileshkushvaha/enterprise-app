@@ -8,6 +8,7 @@ use App\Enums\LoginResult;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
 use App\Services\Auth\LoginService;
+use App\Services\DashboardResolver;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -16,6 +17,7 @@ class LoginController extends Controller
 {
     public function __construct(
         private readonly LoginService $loginService,
+        private readonly DashboardResolver $resolver,
     ) {}
 
     public function showForm(Request $request): View|RedirectResponse
@@ -41,7 +43,7 @@ class LoginController extends Controller
         if ($result->isSuccessful()) {
             $request->session()->regenerate();
 
-            return redirect()->intended(route('dashboard'));
+            return redirect()->intended($this->resolver->redirectAfterLogin(auth()->user()));
         }
 
         // Redirect to 2FA challenge

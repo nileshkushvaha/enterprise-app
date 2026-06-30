@@ -6,9 +6,17 @@ use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 
 abstract class TestCase extends BaseTestCase
 {
-    protected function setUp(): void
+    /**
+     * Overridden (not setUp()) because the base TestCase's setUp() boots the app via
+     * refreshApplication() and *then* runs setUpTraits(), which is what fires
+     * RefreshDatabase's migrate:fresh. Checking in setUp() after parent::setUp() runs
+     * too late — the database would already be wiped by the time the guard fires.
+     * refreshApplication() is the last point where config() is available but no trait
+     * (RefreshDatabase, DatabaseMigrations, etc.) has run yet.
+     */
+    protected function refreshApplication()
     {
-        parent::setUp();
+        parent::refreshApplication();
 
         $this->guardAgainstProductionDatabase();
     }
@@ -21,7 +29,9 @@ abstract class TestCase extends BaseTestCase
      *   2. DB_DATABASE must not be the development database — catches the case where someone
      *      sets APP_ENV=testing but still points at enterprise_app (e.g. a misconfigured .env.testing).
      *
-     * RefreshDatabase runs migrate:fresh, which drops all tables. enterprise_app is not recoverable.
+     * Defense-in-depth: AppServiceProvider::guardAgainstDestructiveDatabaseCommands() is the
+     * primary guard (blocks the destructive commands themselves via DB::prohibitDestructiveCommands()).
+     * This check fails fast with a clear message before that guard would otherwise just abort silently.
      */
     private function guardAgainstProductionDatabase(): void
     {

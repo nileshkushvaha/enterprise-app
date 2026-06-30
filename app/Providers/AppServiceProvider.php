@@ -28,6 +28,7 @@ use Illuminate\Console\Events\ScheduledTaskFailed;
 use Illuminate\Console\Events\ScheduledTaskFinished;
 use Illuminate\Console\Events\ScheduledTaskSkipped;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
@@ -50,6 +51,17 @@ class AppServiceProvider extends ServiceProvider
         $this->registerObservers();
         $this->registerSchedulerHistoryListeners();
         $this->registerRateLimiters();
+        $this->guardAgainstDestructiveDatabaseCommands();
+    }
+
+    /**
+     * Block migrate:fresh, migrate:refresh, migrate:reset, migrate:rollback, and db:wipe
+     * outside the testing environment, regardless of how they're triggered (CLI, IDE test
+     * runner, RefreshDatabase, etc.) — enterprise_app is not recoverable.
+     */
+    private function guardAgainstDestructiveDatabaseCommands(): void
+    {
+        DB::prohibitDestructiveCommands(! $this->app->environment('testing'));
     }
 
     private function registerObservers(): void
@@ -133,20 +145,19 @@ class AppServiceProvider extends ServiceProvider
     }
 
     /**
-     * Grant super_admin (role ID 1) unrestricted access to every Gate ability.
+     * Grant the super_admin role unrestricted access to every Gate ability.
      * This runs before any policy or Gate check, so it short-circuits everything.
+     *
+     * Deliberately keyed on role NAME, not database ID — an ID-based check
+     * (e.g. "role id 1") would silently grant unrestricted access to whatever
+     * role happens to occupy that row after a reseed/migration, regardless of
+     * its actual name or assigned permissions.
      */
     private function registerSuperAdminGate(): void
     {
         Gate::before(function ($user, string $ability): ?bool {
-            if (method_exists($user, 'hasRole')) {
-                if ($user->hasRole('super_admin')) {
-                    return true;
-                }
-
-                if ($user->roles()->where('id', 1)->exists()) {
-                    return true;
-                }
+            if (method_exists($user, 'hasRole') && $user->hasRole('super_admin')) {
+                return true;
             }
 
             return null;
