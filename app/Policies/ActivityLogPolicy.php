@@ -19,7 +19,7 @@ class ActivityLogPolicy
         }
 
         try {
-            return $user->hasPermissionTo('activity_log.view');
+            return $user->hasPermissionTo('ViewAny:Activity');
         } catch (PermissionDoesNotExist) {
             return false;
         }

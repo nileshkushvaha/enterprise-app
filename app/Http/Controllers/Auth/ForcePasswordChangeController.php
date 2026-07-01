@@ -9,6 +9,7 @@ use App\Http\Requests\Auth\ForcePasswordChangeRequest;
 use App\Notifications\Auth\PasswordChangedNotification;
 use App\Services\Auth\PasswordHistoryService;
 use App\Services\Auth\PasswordLifecycleService;
+use App\Services\PortalResolver;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Hash;
@@ -19,6 +20,7 @@ class ForcePasswordChangeController extends Controller
     public function __construct(
         private readonly PasswordLifecycleService $lifecycle,
         private readonly PasswordHistoryService $historyService,
+        private readonly PortalResolver $portal,
     ) {}
 
     public function showForm(): View|RedirectResponse
@@ -26,7 +28,7 @@ class ForcePasswordChangeController extends Controller
         $user = auth()->user();
 
         if (! $this->lifecycle->mustChange($user)) {
-            return redirect()->intended(route('dashboard'));
+            return redirect()->intended($this->portal->loginRedirect(auth()->user()));
         }
 
         return view('auth.force-password-change');

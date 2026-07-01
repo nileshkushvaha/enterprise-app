@@ -1,7 +1,9 @@
 <?php
 
 use App\Http\Middleware\EnsureAccountIsActive;
+use App\Http\Middleware\EnsureAdminPortal;
 use App\Http\Middleware\EnsureEmailVerifiedIfRequired;
+use App\Http\Middleware\EnsureFrontendPortal;
 use App\Http\Middleware\EnsureLoginEnabled;
 use App\Http\Middleware\EnsurePasswordChangeRequired;
 use App\Http\Middleware\EnsureRegistrationEnabled;
@@ -40,6 +42,8 @@ return Application::configure(basePath: dirname(__DIR__))
             'email.verify.if.required' => EnsureEmailVerifiedIfRequired::class,
             'password.change.required' => EnsurePasswordChangeRequired::class,
             'session.track' => TrackUserSession::class,
+            'frontend.portal' => EnsureFrontendPortal::class,
+            'admin.portal' => EnsureAdminPortal::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

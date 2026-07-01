@@ -42,11 +42,16 @@ class SchedulerMonitorTest extends TestCase
         }
 
         $superAdminRole = Role::firstOrCreate(['name' => 'super_admin', 'guard_name' => 'web']);
+        $managerRole = Role::firstOrCreate(['name' => 'manager', 'guard_name' => 'web']);
 
         $this->superAdmin = User::factory()->create(['status' => 'active']);
         $this->superAdmin->assignRole($superAdminRole);
 
+        // manager is required for Admin Portal access (PortalResolver) — this
+        // user is still denied each test below until/unless it also grants the
+        // specific resource permission, so the policy layer stays covered.
         $this->regularUser = User::factory()->create(['status' => 'active']);
+        $this->regularUser->assignRole($managerRole);
 
         SchedulerHistory::query()->delete();
     }

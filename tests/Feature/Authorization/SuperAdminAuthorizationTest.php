@@ -6,7 +6,7 @@ namespace Tests\Feature\Authorization;
 
 use App\Models\User;
 use App\Policies\RolePolicy;
-use App\Services\DashboardResolver;
+use App\Services\PortalResolver;
 use Filament\Facades\Filament;
 use Filament\Panel;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -18,7 +18,7 @@ use Tests\TestCase;
 /**
  * Locks in the single-source-of-truth authorization standard: the roles
  * table (by role name, never role ID) decides super-admin status — and
- * every authorization path (Gate::before, policies, DashboardResolver)
+ * every authorization path (Gate::before, policies, PortalResolver)
  * agrees, via User::isSuperAdmin().
  */
 class SuperAdminAuthorizationTest extends TestCase
@@ -187,25 +187,29 @@ class SuperAdminAuthorizationTest extends TestCase
         $this->assertTrue($manager->canAccessPanel($this->adminPanel()));
     }
 
-    // ── DashboardResolver ───────────────────────────────────────────────
+    // ── PortalResolver ───────────────────────────────────────────────
 
-    public function test_dashboard_resolver_routes_super_admin_to_admin_panel(): void
+    public function test_portal_resolver_routes_super_admin_and_manager_to_admin_portal(): void
     {
-        $resolver = app(DashboardResolver::class);
-        $superAdmin = $this->makeUser(self::SUPER_ADMIN);
+        $resolver = app(PortalResolver::class);
 
-        $this->assertTrue($resolver->isAdminPanel($superAdmin));
-        $this->assertSame('/admin', $resolver->redirectAfterLogin($superAdmin));
-    }
-
-    public function test_dashboard_resolver_routes_non_super_admins_to_frontend_dashboard(): void
-    {
-        $resolver = app(DashboardResolver::class);
-
-        foreach ([self::MANAGER, self::INSTRUCTOR, self::STUDENT] as $role) {
+        foreach ([self::SUPER_ADMIN, self::MANAGER] as $role) {
             $user = $this->makeUser($role);
 
-            $this->assertFalse($resolver->isAdminPanel($user), "{$role} must not resolve to the admin panel");
+            $this->assertTrue($resolver->usesAdminPortal($user), "{$role} must use the Admin Portal");
+            $this->assertSame('/admin', $resolver->loginRedirect($user));
+        }
+    }
+
+    public function test_portal_resolver_routes_instructor_and_student_to_frontend_portal(): void
+    {
+        $resolver = app(PortalResolver::class);
+
+        foreach ([self::INSTRUCTOR, self::STUDENT] as $role) {
+            $user = $this->makeUser($role);
+
+            $this->assertFalse($resolver->usesAdminPortal($user), "{$role} must use the Frontend Portal");
+            $this->assertTrue($resolver->usesFrontendPortal($user));
         }
     }
 

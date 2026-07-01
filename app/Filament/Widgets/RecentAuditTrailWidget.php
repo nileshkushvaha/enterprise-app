@@ -16,6 +16,11 @@ class RecentAuditTrailWidget extends BaseWidget
 {
     protected static ?int $sort = 4;
 
+    public static function canView(): bool
+    {
+        return (bool) auth()->user()?->can('View:RecentAuditTrailWidget');
+    }
+
     protected int|string|array $columnSpan = 'full';
 
     protected static ?string $heading = 'Recent Audit Trail';

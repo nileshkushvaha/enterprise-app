@@ -74,6 +74,14 @@ class DefaultRolesAndUsersSeeder extends Seeder
                     'ViewAny:LoginHistory', 'View:LoginHistory',
                     'ViewAny:Post', 'View:Post',
                     'ViewAny:Page', 'View:Page',
+                    // Dashboard widgets — granted to match the underlying
+                    // data permissions above (manager can already see this
+                    // data via the resources, so the dashboard summary
+                    // widgets should be visible too).
+                    'View:StatsOverviewWidget',
+                    'View:RecentUsersWidget',
+                    'View:RecentLoginsWidget',
+                    'View:RecentAuditTrailWidget',
                 ])
                 ->get()
         );

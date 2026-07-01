@@ -18,6 +18,11 @@ class RecentUsersWidget extends BaseWidget
 {
     protected static ?int $sort = 2;
 
+    public static function canView(): bool
+    {
+        return (bool) auth()->user()?->can('View:RecentUsersWidget');
+    }
+
     protected int|string|array $columnSpan = 'full';
 
     protected static ?string $heading = 'Recent Registrations';

@@ -32,8 +32,8 @@
             <a href="{{ url()->previous() }}" class="inline-flex items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.03] px-5 py-2.5 text-sm font-medium text-slate-300 hover:bg-white/[0.06] transition-all">
                 Go back
             </a>
-            @elseif(Route::has('login'))
-            <a href="{{ route('login') }}" class="inline-flex items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.03] px-5 py-2.5 text-sm font-medium text-slate-300 hover:bg-white/[0.06] transition-all">
+            @elseif(Route::has('auth.login'))
+            <a href="{{ route('auth.login') }}" class="inline-flex items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.03] px-5 py-2.5 text-sm font-medium text-slate-300 hover:bg-white/[0.06] transition-all">
                 Sign in
             </a>
             @endauth

@@ -35,11 +35,6 @@ final class LoginService
 
         // Pre-flight checks before touching Auth guard
         if ($user) {
-            // Block admin/super_admin from signing in via the frontend portal
-            if ($user->isSuperAdmin() || $user->hasAnyRole(['admin', 'super_admin'])) {
-                return LoginResult::AdminAccountOnly;
-            }
-
             // Auto-unlock: new-style lock (locked_at set) whose duration has expired.
             // This resets the failed-attempt counter so the user gets fresh attempts,
             // and logs the auto-unlock event for the audit trail.

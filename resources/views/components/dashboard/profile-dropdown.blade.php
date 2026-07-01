@@ -1,4 +1,4 @@
-@inject('resolver', 'App\Services\DashboardResolver')
+@inject('resolver', 'App\Services\PortalResolver')
 
 @auth
 @php

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Filament\Pages;
 
+use App\Filament\Widgets\QuickActionsWidget;
+use App\Filament\Widgets\RecentAuditTrailWidget;
 use App\Filament\Widgets\RecentLoginsWidget;
 use App\Filament\Widgets\RecentUsersWidget;
 use App\Filament\Widgets\StatsOverviewWidget;
@@ -22,6 +24,21 @@ class Dashboard extends BaseDashboard
     protected static ?string $title = 'Dashboard';
 
     protected static ?int $navigationSort = -2;
+
+    /**
+     * Registered widget classes in display order.
+     *
+     * Extensibility: to add a new widget, append its class here and implement
+     * canView() on the widget. Filament calls canView() automatically before
+     * rendering — nothing else needs to change.
+     */
+    private const WIDGETS = [
+        QuickActionsWidget::class,
+        StatsOverviewWidget::class,
+        RecentUsersWidget::class,
+        RecentLoginsWidget::class,
+        RecentAuditTrailWidget::class,
+    ];
 
     public function getHeading(): string|Htmlable
     {
@@ -44,9 +61,7 @@ class Dashboard extends BaseDashboard
 
     public function getBreadcrumbs(): array
     {
-        return [
-            '#' => 'Dashboard',
-        ];
+        return ['#' => 'Dashboard'];
     }
 
     protected function getHeaderActions(): array
@@ -61,13 +76,18 @@ class Dashboard extends BaseDashboard
         ];
     }
 
+    /**
+     * Returns only the widgets the current user is authorised to see.
+     * Filament also calls canView() before rendering each widget, so this
+     * filter is defence-in-depth — it prevents invisible widgets from
+     * executing their queries at all.
+     */
     public function getWidgets(): array
     {
-        return [
-            StatsOverviewWidget::class,
-            RecentUsersWidget::class,
-            RecentLoginsWidget::class,
-        ];
+        return collect(self::WIDGETS)
+            ->filter(fn (string $widget) => $widget::canView())
+            ->values()
+            ->all();
     }
 
     public function getColumns(): int|array

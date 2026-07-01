@@ -32,17 +32,21 @@ class ActivityLogResourceTest extends TestCase
         parent::setUp();
 
         // Seed permissions needed by all sidebar items to avoid Spatie exceptions
-        foreach (['activity_log.view', 'cache_manager.view', 'cache_manager.clear', 'cache_manager.optimize'] as $perm) {
+        foreach (['ViewAny:Activity', 'cache_manager.view', 'cache_manager.clear', 'cache_manager.optimize'] as $perm) {
             Permission::firstOrCreate(['name' => $perm, 'guard_name' => 'web']);
         }
 
         $superAdminRole = Role::firstOrCreate(['name' => 'super_admin', 'guard_name' => 'web']);
+        $managerRole = Role::firstOrCreate(['name' => 'manager', 'guard_name' => 'web']);
 
         $this->superAdmin = User::factory()->create(['status' => 'active']);
         $this->superAdmin->assignRole($superAdminRole);
 
+        // Admin Portal access requires super_admin or manager (PortalResolver)
+        // in addition to the specific resource permission.
         $this->logViewer = User::factory()->create(['status' => 'active']);
-        $this->logViewer->givePermissionTo('activity_log.view');
+        $this->logViewer->assignRole($managerRole);
+        $this->logViewer->givePermissionTo('ViewAny:Activity');
 
         $this->regularUser = User::factory()->create(['status' => 'active']);
 
@@ -214,8 +218,8 @@ class ActivityLogResourceTest extends TestCase
 
     public function test_policy_denies_when_permission_does_not_exist(): void
     {
-        // Create a user with no role/permission and no 'activity_log.view' permission seeded
-        Permission::where('name', 'activity_log.view')->delete();
+        // Create a user with no role/permission and no 'ViewAny:Activity' permission seeded
+        Permission::where('name', 'ViewAny:Activity')->delete();
 
         $policy = new ActivityLogPolicy;
         $this->assertFalse($policy->viewAny($this->regularUser));

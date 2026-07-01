@@ -8,6 +8,7 @@ use App\Exceptions\Auth\RegistrationException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\RegisterRequest;
 use App\Services\Auth\RegistrationService;
+use App\Services\PortalResolver;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\View\View;
@@ -16,6 +17,7 @@ final class RegisterController extends Controller
 {
     public function __construct(
         private readonly RegistrationService $registrationService,
+        private readonly PortalResolver $portal,
     ) {}
 
     public function showForm(): View
@@ -49,7 +51,7 @@ final class RegisterController extends Controller
             Auth::login($result->user);
             $request->session()->regenerate();
 
-            return redirect()->intended(route('dashboard'))
+            return redirect()->intended($this->portal->loginRedirect($result->user))
                 ->with('success', 'Welcome to '.config('app.name').'! Your account is ready.');
         }
 

@@ -42,14 +42,19 @@ class RolePermissionAssignmentTest extends TestCase
         }
 
         $superAdminRole = Role::firstOrCreate(['name' => 'super_admin', 'guard_name' => 'web']);
+        $managerRole = Role::firstOrCreate(['name' => 'manager', 'guard_name' => 'web']);
 
         $this->superAdmin = User::factory()->create(['status' => 'active']);
         $this->superAdmin->assignRole($superAdminRole);
 
+        // Both manager users need the manager role for Admin Portal access
+        // (PortalResolver); they differ only in the AssignPermissions:Role gate.
         $this->managerWithAssign = User::factory()->create(['status' => 'active']);
+        $this->managerWithAssign->assignRole($managerRole);
         $this->managerWithAssign->givePermissionTo(['ViewAny:Role', 'View:Role', 'Create:Role', 'Update:Role', 'AssignPermissions:Role']);
 
         $this->managerWithoutAssign = User::factory()->create(['status' => 'active']);
+        $this->managerWithoutAssign->assignRole($managerRole);
         $this->managerWithoutAssign->givePermissionTo(['ViewAny:Role', 'View:Role', 'Create:Role', 'Update:Role']);
 
         $this->targetRole = Role::create(['name' => 'editable-role', 'guard_name' => 'web']);

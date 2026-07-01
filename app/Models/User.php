@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Models;
 
 use App\Notifications\Auth\VerifyEmailNotification;
+use App\Services\PortalResolver;
 use Filament\Models\Contracts\FilamentUser;
 use Filament\Panel;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
@@ -123,7 +124,7 @@ class User extends Authenticatable implements FilamentUser, MustVerifyEmail
     /**
      * Single source of truth for "is this user a super admin". The roles
      * table is the source of truth — every authorization path in the app
-     * (Gate::before(), policies, Filament pages/resources, DashboardResolver,
+     * (Gate::before(), policies, Filament pages/resources, PortalResolver,
      * notification recipients) must call this method instead of checking
      * hasRole('super_admin') or any role ID directly.
      */
@@ -264,8 +265,18 @@ class User extends Authenticatable implements FilamentUser, MustVerifyEmail
 
     // ── Filament ─────────────────────────────────────────────────────
 
+    /**
+     * Admin Portal eligibility (super_admin, manager) is decided by
+     * PortalResolver — the single source of truth for portal membership.
+     * This method only adds the account-state checks already required for
+     * any panel session (active, and verified unless super_admin).
+     */
     public function canAccessPanel(Panel $panel): bool
     {
+        if (! app(PortalResolver::class)->usesAdminPortal($this)) {
+            return false;
+        }
+
         if ($this->isSuperAdmin()) {
             return $this->isActive();
         }

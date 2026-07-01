@@ -25,6 +25,7 @@ use App\Http\Controllers\SeoController;
 use App\Http\Controllers\TagController;
 use App\Http\Middleware\EnsureAccountIsActive;
 use App\Models\User;
+use App\Services\PortalResolver;
 use Illuminate\Foundation\Auth\EmailVerificationRequest;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -48,12 +49,9 @@ Route::post('/contact/submit', [ContactFormController::class, 'submit'])
     ->middleware('throttle:10,1')
     ->name('contact.submit');
 
-// ── Login alias — required by Laravel internals (Authenticate middleware, password broker) ──
-Route::get('/login', [LoginController::class, 'showForm'])->name('login');
-
-// ── Dashboard (authenticated users) ─────────────────────────────────
+// ── Dashboard (Frontend Portal — see PortalResolver) ─────────────────
 Route::get('/dashboard', DashboardController::class)->name('dashboard')
-    ->middleware(['auth', 'email.verify.if.required', EnsureAccountIsActive::class, 'password.change.required', 'session.track']);
+    ->middleware(['auth', 'email.verify.if.required', EnsureAccountIsActive::class, 'password.change.required', 'session.track', 'frontend.portal']);
 
 // ── Frontend Auth (guests only) ─────────────────────────────────────
 Route::name('auth.')->middleware('guest')->group(function (): void {
@@ -104,27 +102,31 @@ Route::name('auth.')->middleware('auth')->group(function (): void {
 
     // Email Verification notice — redirect away if already verified
     Route::get('/verify-email', function () {
-        if (auth()->user()->hasVerifiedEmail()) {
-            return redirect()->route('dashboard');
+        $user = auth()->user();
+        if ($user->hasVerifiedEmail()) {
+            return redirect(app(PortalResolver::class)->loginRedirect($user));
         }
 
         return view('auth.verify-email');
     })->name('verification.notice');
 
     Route::get('/verify-email/{id}/{hash}', function (EmailVerificationRequest $request) {
-        if ($request->user()->hasVerifiedEmail()) {
-            return redirect()->route('dashboard')->with('success', 'Your email is already verified.');
+        $user = $request->user();
+        if ($user->hasVerifiedEmail()) {
+            return redirect(app(PortalResolver::class)->loginRedirect($user))
+                ->with('success', 'Your email is already verified.');
         }
 
         $request->fulfill();
-        $request->user()->update(['status' => User::STATUS_ACTIVE]);
+        $user->update(['status' => User::STATUS_ACTIVE]);
 
         return redirect()->route('auth.verified');
     })->middleware('signed')->name('verification.verify');
 
     Route::post('/resend-verification', function (Request $request) {
-        if ($request->user()->hasVerifiedEmail()) {
-            return redirect()->route('dashboard');
+        $user = $request->user();
+        if ($user->hasVerifiedEmail()) {
+            return redirect(app(PortalResolver::class)->loginRedirect($user));
         }
 
         $request->user()->sendEmailVerificationNotification();
@@ -166,6 +168,7 @@ Route::prefix('profile')->name('profile.')->middleware([
     EnsureAccountIsActive::class,
     'password.change.required',
     'session.track',
+    'frontend.portal',
 ])->group(function (): void {
 
     Route::get('/', [ProfileController::class, 'show'])->name('show');

@@ -14,6 +14,11 @@ class RecentLoginsWidget extends BaseWidget
 {
     protected static ?int $sort = 3;
 
+    public static function canView(): bool
+    {
+        return (bool) auth()->user()?->can('View:RecentLoginsWidget');
+    }
+
     protected int|string|array $columnSpan = 'full';
 
     protected static ?string $heading = 'Recent Login Activity';

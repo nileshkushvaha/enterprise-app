@@ -30,6 +30,7 @@ class AccountProtectionSettingsTest extends TestCase
         $this->artisan('migrate', ['--path' => 'database/settings']);
 
         $superAdminRole = Role::firstOrCreate(['name' => 'super_admin', 'guard_name' => 'web']);
+        $managerRole = Role::firstOrCreate(['name' => 'manager', 'guard_name' => 'web']);
         $permission = Permission::firstOrCreate(['name' => 'security.account_protection.view',   'guard_name' => 'web']);
         Permission::firstOrCreate(['name' => 'security.account_protection.update', 'guard_name' => 'web']);
 
@@ -38,7 +39,10 @@ class AccountProtectionSettingsTest extends TestCase
 
         $this->regularUser = User::factory()->create(['status' => 'active']);
 
+        // Admin Portal access requires portal membership (PortalResolver) in
+        // addition to the specific security permission.
         $this->securityUser = User::factory()->create(['status' => 'active']);
+        $this->securityUser->assignRole($managerRole);
         $this->securityUser->givePermissionTo($permission);
     }
 

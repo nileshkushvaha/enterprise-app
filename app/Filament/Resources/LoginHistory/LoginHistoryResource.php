@@ -15,7 +15,6 @@ use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Gate;
 
 class LoginHistoryResource extends Resource
 {
@@ -39,12 +38,12 @@ class LoginHistoryResource extends Resource
 
     public static function canViewAny(): bool
     {
-        return Gate::allows('security.login_history.view');
+        return (bool) auth()->user()?->can('ViewAny:LoginHistory');
     }
 
     public static function canView(Model $record): bool
     {
-        return Gate::allows('security.login_history.view');
+        return (bool) auth()->user()?->can('View:LoginHistory');
     }
 
     public static function canCreate(): bool

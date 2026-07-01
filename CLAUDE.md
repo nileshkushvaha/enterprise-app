@@ -26,6 +26,26 @@ Controller → FormRequest → Service → Repository → Model
 - Reuse existing Services, Repositories, Policies, Settings before creating new ones
 - No duplicate business logic
 
+## Portal Architecture
+
+`PortalResolver` (`app/Services/PortalResolver.php`) is the single source of truth for portal selection.
+
+Portals:
+- **Admin Portal** — Filament `/admin` — `super_admin`, `manager`
+- **Frontend Portal** — Blade `/dashboard` — `instructor`, `student`, future roles
+
+Responsibilities owned exclusively by `PortalResolver`:
+- `usesAdminPortal(User)` / `usesFrontendPortal(User)`
+- `loginRedirect(User)` — where to send after successful login
+- `logoutRedirect(User)` — where to send after logout
+- `dashboardRoute(User)` / `homeRoute(User)`
+
+Do not duplicate portal logic in controllers, middleware, policies, Filament providers, or Blade views. Every routing decision that branches on portal membership must call `PortalResolver`.
+
+The only role helper permitted outside `PortalResolver` is `User::isSuperAdmin()` — used by `Gate::before()` and authorization policies. Do not add `isManager()`, `isInstructor()`, `isStudent()`, or similar helpers; all other portal and business-role checks go through `PortalResolver` or Spatie permissions directly.
+
+Portal selection (`WHERE` a user goes) and authorization (`WHAT` a user may do) are separate concerns. Policies and permissions never decide portal; `PortalResolver` never decides permissions.
+
 ## Before coding
 
 1. Read `docs/index.md`

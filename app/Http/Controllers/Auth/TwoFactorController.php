@@ -7,7 +7,7 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Services\Auth\TwoFactorService;
-use App\Services\DashboardResolver;
+use App\Services\PortalResolver;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -16,7 +16,7 @@ final class TwoFactorController extends Controller
 {
     public function __construct(
         private readonly TwoFactorService $twoFactor,
-        private readonly DashboardResolver $resolver,
+        private readonly PortalResolver $portal,
     ) {}
 
     // ── Setup: show QR code page ──────────────────────────────────────
@@ -141,6 +141,6 @@ final class TwoFactorController extends Controller
         // Record successful login
         $user->recordSuccessfulLogin($request->ip(), $request->userAgent() ?? '');
 
-        return redirect()->intended($this->resolver->redirectAfterLogin(auth()->user()));
+        return redirect()->intended($this->portal->loginRedirect(auth()->user()));
     }
 }
