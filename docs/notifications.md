@@ -41,7 +41,6 @@ Business Action
 | `roles.updated` | Role Updated | warning |
 | `roles.deleted` | Role Deleted | danger |
 | `security.settings_updated` | Security Settings Changed | warning |
-| `security.2fa_disabled` | 2FA Disabled | warning |
 | `auth.account_locked` | Account Locked | warning |
 | `auth.manual_lock` | Account Manually Locked | danger |
 | `auth.manual_unlock` | Account Unlocked | info |

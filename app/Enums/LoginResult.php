@@ -15,7 +15,6 @@ enum LoginResult: string
     case AccountBlocked = 'account_blocked';
     case EmailUnverified = 'email_unverified';
     case AccountInactive = 'account_inactive';
-    case RequiresTwoFactor = 'requires_two_factor';
     case AdminAccountOnly = 'admin_account_only';
 
     public function message(): string
@@ -37,7 +36,6 @@ enum LoginResult: string
             self::AccountBlocked => 'Your account has been suspended. Please contact support.',
             self::EmailUnverified => 'Please verify your email address before signing in.',
             self::AccountInactive => 'Your account is inactive. Please contact support.',
-            self::RequiresTwoFactor => 'Please complete two-factor authentication.',
             self::AdminAccountOnly => 'These credentials do not match our records.',
         };
     }

@@ -144,11 +144,6 @@ class AccountProtectionPage extends Page
                     ->columnSpanFull()
                     ->schema([
                         Grid::make(2)->schema([
-                            Toggle::make('_future_login_history')
-                                ->label('Login History')
-                                ->disabled()
-                                ->helperText('Coming soon'),
-
                             Toggle::make('_future_suspicious_detection')
                                 ->label('Suspicious Login Detection')
                                 ->disabled()

@@ -15,11 +15,12 @@ final class UpdateProfileAction
         return DB::transaction(function () use ($user, $data): User {
 
             // ── Update core user fields ───────────────────────────────
+            // Email is frozen — intentionally never written here, even if a
+            // caller passes one in $data.
             $user->update([
                 'first_name' => $data['first_name'],
                 'last_name' => $data['last_name'] ?? null,
                 'name' => trim(($data['first_name'] ?? '').' '.($data['last_name'] ?? '')),
-                'email' => strtolower($data['email']),
             ]);
 
             // ── Load existing profile (so we can fall back to saved values) ──

@@ -8,6 +8,9 @@ use Illuminate\Support\Facades\Schema;
 //         add_profile_fields_to_users_table
 //         add_two_factor_to_users_table
 //         widen_two_factor_columns_on_users_table
+//         add_must_change_password_to_users_table (must_change_password)
+//         add_lock_fields_to_users_table (locked_at, lock_reason)
+//         drop_two_factor_columns_from_users_table (two_factor_* columns removed)
 return new class extends Migration
 {
     public function up(): void
@@ -20,12 +23,17 @@ return new class extends Migration
             $table->string('email')->unique();
             $table->timestamp('email_verified_at')->nullable();
             $table->string('password');
-            $table->text('two_factor_secret')->nullable();
-            $table->text('two_factor_recovery_codes')->nullable();
-            $table->timestamp('two_factor_confirmed_at')->nullable();
             $table->rememberToken();
             $table->unsignedTinyInteger('failed_login_count')->default(0);
             $table->timestamp('locked_until')->nullable();
+
+            // Timestamp of when the lock was created (null = not locked or legacy lock)
+            $table->timestamp('locked_at')->nullable();
+
+            // Machine-readable reason: 'failed_attempts' | 'manual_admin' | 'manual_self'
+            // Null = not locked or pre-migration legacy lock
+            $table->string('lock_reason', 50)->nullable();
+
             $table->string('unlock_token', 64)->nullable();
             $table->timestamp('unlock_token_expires_at')->nullable();
             $table->boolean('login_alerts_enabled')->default(true);
@@ -34,6 +42,7 @@ return new class extends Migration
             $table->string('last_login_ip', 45)->nullable();
             $table->string('last_login_user_agent')->nullable();
             $table->timestamp('password_changed_at')->nullable();
+            $table->boolean('must_change_password')->default(false);
             $table->enum('status', ['pending_verification', 'active', 'inactive', 'blocked', 'suspended'])
                 ->default('pending_verification');
             $table->string('avatar')->nullable();

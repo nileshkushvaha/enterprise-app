@@ -25,6 +25,7 @@ use App\Policies\RolePolicy;
 use App\Policies\SchedulerMonitorPolicy;
 use App\Policies\Security\SecurityPolicy;
 use App\Settings\LoginSecuritySettings;
+use App\View\Composers\AccountPortalComposer;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Console\Events\ScheduledTaskFailed;
 use Illuminate\Console\Events\ScheduledTaskFinished;
@@ -34,6 +35,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
@@ -54,6 +56,26 @@ class AppServiceProvider extends ServiceProvider
         $this->registerSchedulerHistoryListeners();
         $this->registerRateLimiters();
         $this->guardAgainstDestructiveDatabaseCommands();
+        $this->registerViewComposers();
+    }
+
+    /**
+     * Account Portal pages share their layout/menu/profile-summary data via
+     * this composer instead of each controller repeating the same queries.
+     *
+     * Bound to the concrete page views, not to layouts.account itself:
+     * Blade's @extends evaluates a child view's @section blocks (which
+     * reference $accountMenu / $accountProfileSummary) before the parent
+     * layout is resolved, so a composer registered only on the parent
+     * layout name would fire too late. Composing the child view makes the
+     * data available from the start of that view's render, which then
+     * flows into the parent layout via @extends as normal.
+     *
+     * Add each new Account Portal page's view name here as it's built.
+     */
+    private function registerViewComposers(): void
+    {
+        View::composer(['dashboard.index', 'profile.show'], AccountPortalComposer::class);
     }
 
     /**

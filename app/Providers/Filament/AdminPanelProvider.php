@@ -16,6 +16,7 @@ use App\Filament\Widgets\RecentLoginsWidget;
 use App\Filament\Widgets\RecentUsersWidget;
 use App\Filament\Widgets\StatsOverviewWidget;
 use App\Http\Middleware\EnsurePasswordChangeRequired;
+use App\Settings\GeneralSettings;
 use BezhanSalleh\FilamentShield\FilamentShieldPlugin;
 use Filament\Actions\Action;
 use Filament\Http\Middleware\Authenticate;
@@ -31,6 +32,7 @@ use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Session\Middleware\StartSession;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
 
 class AdminPanelProvider extends PanelProvider
@@ -48,6 +50,7 @@ class AdminPanelProvider extends PanelProvider
             ])
             ->brandName('Sphere Education')
             ->brandLogo(null)
+            ->favicon(fn (): ?string => $this->faviconUrl())
 
             // ── Profile page: adds "My Profile" to user menu automatically ──
             ->profile(AdminProfile::class, isSimple: false)
@@ -105,5 +108,18 @@ class AdminPanelProvider extends PanelProvider
                 Authenticate::class,
                 EnsurePasswordChangeRequired::class,
             ]);
+    }
+
+    private function faviconUrl(): ?string
+    {
+        $path = app(GeneralSettings::class)->favicon ?? null;
+
+        if (blank($path)) {
+            return null;
+        }
+
+        return str_starts_with($path, 'http') || str_starts_with($path, '//')
+            ? $path
+            : Storage::disk('public')->url($path);
     }
 }

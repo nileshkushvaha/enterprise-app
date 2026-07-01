@@ -4,7 +4,7 @@
 
 ```
 POST /login → LoginController → LoginService
-           → checks: locked? blocked? inactive? password? 2FA?
+           → checks: locked? blocked? inactive? password?
            → dispatches UserLoggedIn / LoginFailed event
            → LogLoginActivity listener writes LoginHistory + activity log
 ```
@@ -16,7 +16,6 @@ POST /login → LoginController → LoginService
 | `app/Services/Auth/LoginService.php` | Core login logic, dispatches events |
 | `app/Services/Auth/RegistrationService.php` | Registration, email verification |
 | `app/Services/Auth/PasswordResetService.php` | Token-based reset flow |
-| `app/Services/Auth/TwoFactorService.php` | TOTP setup, verification, recovery codes |
 | `app/Actions/Auth/` | Single-purpose actions called by services |
 | `app/Http/Controllers/Auth/` | Thin controllers, delegate to services |
 | `app/Http/Requests/Auth/` | Form validation |
@@ -31,18 +30,10 @@ A user is locked (too many failed attempts) via `User::$locked_until`. This is s
 
 ## Settings that control auth behaviour
 
-- `LoginSecuritySettings` — max attempts, lockout duration, 2FA config
+- `LoginSecuritySettings` — max attempts, lockout duration
 - `AuthenticationSettings` — login method, remember me, email verification, registration toggle
 - `RegistrationSettings` — open/closed, allowed domains, default role, approval required
 - `AccountProtectionSettings` — auto-lock threshold, suspicious login alerts
-
-## 2FA
-
-Routes: `/two-factor/setup`, `/two-factor/challenge`
-
-`TwoFactorService` handles TOTP generation, QR code, verification, and recovery code consumption.
-
-Recovery codes: `User::RECOVERY_CODES_COUNT = 8`
 
 ## Email notifications triggered by auth events
 

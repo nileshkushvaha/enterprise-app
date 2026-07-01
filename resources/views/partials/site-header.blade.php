@@ -66,7 +66,7 @@
                     </a>
 
                     @auth
-                        <x-dashboard.profile-dropdown />
+                        <x-account.profile-dropdown />
                     @else
                         @if(Route::has('auth.login'))
                         <a href="{{ route('auth.login') }}"

@@ -122,14 +122,6 @@ final class NotificationMapper
                 'priority' => 3,
             ],
 
-            $log === 'security' && $event === '2fa_disabled' => [
-                'title' => '2FA Disabled',
-                'actor_label' => 'Disabled by',
-                'icon' => 'heroicon-o-shield-exclamation',
-                'color' => 'warning',
-                'priority' => 2,
-            ],
-
             // ── Auth — account lock lifecycle ─────────────────────────────
             $log === 'auth' && $event === 'account_locked' => [
                 'title' => 'Account Locked',

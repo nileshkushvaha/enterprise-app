@@ -42,6 +42,5 @@ All Security Gate abilities are defined in `app/Policies/Security/SecurityPolicy
 |---|---|---|
 | `settings_updated` | `security` | Any security settings change, with `page` and `changes` in properties |
 | `force_logout_all` | `security` | Admin forced logout of all sessions |
-| `2fa_enabled` / `2fa_disabled` | `security` | User toggled 2FA |
 
 These events trigger admin bell notifications via the Activity Log pipeline.

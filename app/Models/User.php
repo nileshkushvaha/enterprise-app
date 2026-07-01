@@ -37,9 +37,6 @@ class User extends Authenticatable implements FilamentUser, MustVerifyEmail
     // Unlock email token TTL — no corresponding settings field; keep as constant
     public const UNLOCK_TOKEN_MINUTES = 60;
 
-    // Recovery codes — 2FA is future scope; keep as constant until TwoFactorSettings exists
-    public const RECOVERY_CODES_COUNT = 8;
-
     // ────────────────────────────────────────────────────────────────
 
     protected $fillable = [
@@ -62,9 +59,6 @@ class User extends Authenticatable implements FilamentUser, MustVerifyEmail
         'last_login_user_agent',
         'password_changed_at',
         'must_change_password',
-        'two_factor_secret',
-        'two_factor_recovery_codes',
-        'two_factor_confirmed_at',
         'login_alerts_enabled',
         'new_device_alerts_enabled',
     ];
@@ -72,8 +66,6 @@ class User extends Authenticatable implements FilamentUser, MustVerifyEmail
     protected $hidden = [
         'password',
         'remember_token',
-        'two_factor_secret',
-        'two_factor_recovery_codes',
         'unlock_token',
     ];
 
@@ -87,7 +79,6 @@ class User extends Authenticatable implements FilamentUser, MustVerifyEmail
             'last_login_at' => 'datetime',
             'password_changed_at' => 'datetime',
             'must_change_password' => 'boolean',
-            'two_factor_confirmed_at' => 'datetime',
             'login_alerts_enabled' => 'boolean',
             'new_device_alerts_enabled' => 'boolean',
             'password' => 'hashed',
@@ -211,49 +202,6 @@ class User extends Authenticatable implements FilamentUser, MustVerifyEmail
             'unlock_token' => null,
             'unlock_token_expires_at' => null,
         ]);
-    }
-
-    // ── Two-Factor Authentication ────────────────────────────────────
-
-    public function hasTwoFactorEnabled(): bool
-    {
-        return $this->two_factor_secret !== null
-            && $this->two_factor_confirmed_at !== null;
-    }
-
-    public function twoFactorPending(): bool
-    {
-        return $this->two_factor_secret !== null
-            && $this->two_factor_confirmed_at === null;
-    }
-
-    /** Return decoded recovery codes array. */
-    public function twoFactorRecoveryCodes(): array
-    {
-        if (! $this->two_factor_recovery_codes) {
-            return [];
-        }
-
-        return json_decode(decrypt($this->two_factor_recovery_codes), true) ?? [];
-    }
-
-    /** Replace a used recovery code, return whether one was consumed. */
-    public function consumeRecoveryCode(string $code): bool
-    {
-        $codes = $this->twoFactorRecoveryCodes();
-        $key = array_search(trim($code), $codes, true);
-
-        if ($key === false) {
-            return false;
-        }
-
-        // Replace with a fresh code
-        $codes[$key] = Str::random(10).'-'.Str::random(10);
-        $this->updateQuietly([
-            'two_factor_recovery_codes' => encrypt(json_encode(array_values($codes))),
-        ]);
-
-        return true;
     }
 
     // ── Email Verification notification override ─────────────────────

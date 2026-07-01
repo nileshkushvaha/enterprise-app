@@ -11,7 +11,6 @@ use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\LogoutController;
 use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\Auth\ResetPasswordController;
-use App\Http\Controllers\Auth\TwoFactorController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\ContactFormController;
 use App\Http\Controllers\Dashboard\DashboardController;
@@ -141,24 +140,6 @@ Route::name('auth.')->middleware('auth')->group(function (): void {
     Route::get('/password/change-required', [ForcePasswordChangeController::class, 'showForm'])->name('password.change-required');
     Route::post('/password/change-required', [ForcePasswordChangeController::class, 'store'])->name('password.change-required.store');
 
-    // ── 2FA Challenge (session key set by LoginService) ──────────────
-    Route::get('/two-factor/challenge', [TwoFactorController::class, 'challenge'])->name('two-factor.challenge')
-        ->withoutMiddleware('auth');
-    Route::post('/two-factor/challenge', [TwoFactorController::class, 'verify'])->name('two-factor.verify')
-        ->withoutMiddleware('auth');
-});
-
-// ── 2FA Management (auth + conditional email verification + active + password) ──
-Route::prefix('two-factor')->name('auth.two-factor.')->middleware([
-    'auth',
-    'email.verify.if.required',
-    EnsureAccountIsActive::class,
-    'password.change.required',
-])->group(function (): void {
-    Route::get('/setup', [TwoFactorController::class, 'setup'])->name('setup');
-    Route::post('/confirm', [TwoFactorController::class, 'confirm'])->name('confirm');
-    Route::delete('/disable', [TwoFactorController::class, 'disable'])->name('disable');
-    Route::post('/recovery-codes', [TwoFactorController::class, 'regenerateCodes'])->name('regenerate-codes');
 });
 
 // ── Profile (auth + conditional email verification + active + password) ─────────

@@ -1,16 +1,16 @@
-@extends('layouts.frontend')
+@extends('layouts.account')
 
 @section('title', 'My Profile — ' . config('app.name'))
 
-@section('breadcrumbs')
-    <x-frontend.breadcrumb :crumbs="[
+@section('account-breadcrumbs')
+    <x-account.breadcrumb :crumbs="[
         ['label' => 'Dashboard', 'url' => route('dashboard')],
         ['label' => 'My Profile'],
     ]" />
 @endsection
 
-@section('content')
-<div class="min-h-screen bg-[#05080F]" x-data="{
+@section('account-content')
+<div x-data="{
     activeTab: '{{ session('active_tab', 'general') }}',
     avatarPreview: '{{ $user->avatar ? asset('storage/' . $user->avatar) : '' }}',
     uploading: false,
@@ -44,161 +44,77 @@
     }
 }">
 
-    {{-- Background orbs --}}
-    <div class="fixed inset-0 pointer-events-none overflow-hidden z-0">
-        <div class="absolute top-[-12rem] left-[-12rem] w-[56rem] h-[56rem] rounded-full bg-indigo-600/6 blur-[160px]"></div>
-        <div class="absolute bottom-[-12rem] right-[-12rem] w-[48rem] h-[48rem] rounded-full bg-violet-600/5 blur-[140px]"></div>
-        <div class="absolute top-[40%] left-[30%] w-[32rem] h-[32rem] rounded-full bg-blue-600/4 blur-[120px]"></div>
-    </div>
-
     {{-- ── PROFILE HERO BANNER ───────────────────────────────────────── --}}
-    <div class="relative z-10 border-b border-white/[0.05]" style="background:linear-gradient(135deg,rgba(99,102,241,.08) 0%,rgba(139,92,246,.06) 50%,rgba(59,130,246,.04) 100%);">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-            <div class="flex flex-col sm:flex-row items-start sm:items-center gap-6">
+    <div class="rounded-2xl border border-white/[0.05] p-6 sm:p-8 mb-6" style="background:linear-gradient(135deg,rgba(99,102,241,.08) 0%,rgba(139,92,246,.06) 50%,rgba(59,130,246,.04) 100%);">
+        <x-account.profile-header :summary="$accountProfileSummary" variant="full">
+            <x-slot:avatar>
+                <template x-if="avatarPreview">
+                    <img :src="avatarPreview" class="w-full h-full object-cover" alt="Avatar">
+                </template>
+                <template x-if="!avatarPreview">
+                    <span class="text-3xl font-bold text-white">{{ $accountProfileSummary->initial }}</span>
+                </template>
+            </x-slot:avatar>
+            <x-slot:avatarActions>
+                {{-- Camera overlay --}}
+                <label class="absolute inset-0 rounded-2xl flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity"
+                       :class="{'cursor-not-allowed': uploading}">
+                    <input type="file" class="sr-only" accept="image/*" @change="uploadAvatar($event)" :disabled="uploading">
+                    <svg x-show="!uploading" class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/>
+                    </svg>
+                    <svg x-show="uploading" class="w-6 h-6 text-white animate-spin" fill="none" viewBox="0 0 24 24" style="display:none">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                    </svg>
+                </label>
+            </x-slot:avatarActions>
 
-                {{-- Avatar --}}
-                <div class="relative group flex-shrink-0">
-                    <div class="w-20 h-20 rounded-2xl overflow-hidden border-2 border-white/20 bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-xl shadow-indigo-500/20">
-                        <template x-if="avatarPreview">
-                            <img :src="avatarPreview" class="w-full h-full object-cover" alt="Avatar">
-                        </template>
-                        <template x-if="!avatarPreview">
-                            <span class="text-3xl font-bold text-white">{{ strtoupper(substr($user->first_name ?? $user->name, 0, 1)) }}</span>
-                        </template>
-                    </div>
-                    {{-- Camera overlay --}}
-                    <label class="absolute inset-0 rounded-2xl flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity"
-                           :class="{'cursor-not-allowed': uploading}">
-                        <input type="file" class="sr-only" accept="image/*" @change="uploadAvatar($event)" :disabled="uploading">
-                        <svg x-show="!uploading" class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/>
-                        </svg>
-                        <svg x-show="uploading" class="w-6 h-6 text-white animate-spin" fill="none" viewBox="0 0 24 24" style="display:none">
-                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-                        </svg>
-                    </label>
-                    {{-- Online badge --}}
-                    <span class="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-emerald-400 border-2 border-[#05080F]"></span>
-                </div>
+            @if($user->profile?->country)
+                <p class="text-slate-500 text-xs mt-1">{{ $user->profile->country->flag }} {{ $user->profile->country->name }}</p>
+            @endif
+            <p x-show="uploadError" x-text="uploadError" class="text-xs text-red-400 mt-2"></p>
+            <button x-show="avatarPreview" @click="deleteAvatar()" type="button"
+                class="mt-2 flex items-center gap-1 text-xs text-slate-600 hover:text-red-400 transition-colors"
+                style="display:none">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                Remove photo
+            </button>
 
-                {{-- User info --}}
-                <div class="flex-1 min-w-0">
-                    <div class="flex flex-wrap items-center gap-3 mb-1">
-                        <h1 class="text-2xl font-bold text-white">{{ $user->full_name ?? $user->name }}</h1>
-                        @if($user->email_verified_at)
-                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/25">
-                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
-                            Verified
-                        </span>
-                        @endif
-                        @if($user->hasTwoFactorEnabled())
-                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-500/15 text-indigo-300 border border-indigo-500/25">
-                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
-                            2FA Active
-                        </span>
-                        @endif
-                    </div>
-                    <p class="text-slate-400 text-sm mb-3">{{ $user->email }}@if($user->profile?->country) &nbsp;·&nbsp; {{ $user->profile->country->flag }} {{ $user->profile->country->name }}@endif</p>
-
-                    {{-- Quick stats --}}
-                    <div class="flex flex-wrap gap-4">
-                        <div class="flex items-center gap-1.5 text-xs text-slate-500">
-                            <svg class="w-3.5 h-3.5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-                            Member since {{ $user->created_at->format('M Y') }}
-                        </div>
-                        <div class="flex items-center gap-1.5 text-xs text-slate-500">
-                            <svg class="w-3.5 h-3.5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                            Last login {{ $user->last_login_at?->diffForHumans() ?? 'Recently' }}
-                        </div>
-                        @if($userAvatar ?? false)
-                        <button @click="deleteAvatar()" type="button" class="flex items-center gap-1 text-xs text-slate-600 hover:text-red-400 transition-colors">
-                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-                            Remove photo
-                        </button>
-                        @endif
-                    </div>
-                    <p x-show="uploadError" x-text="uploadError" class="text-xs text-red-400 mt-2"></p>
-                    <button x-show="avatarPreview" @click="deleteAvatar()" type="button"
-                        class="mt-2 flex items-center gap-1 text-xs text-slate-600 hover:text-red-400 transition-colors"
-                        style="display:none">
-                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-                        Remove photo
-                    </button>
-                </div>
-
-                {{-- Right: edit hint --}}
-                <div class="hidden lg:flex flex-col items-end gap-2 flex-shrink-0">
-                    <div class="text-xs text-slate-600 text-right">Hover avatar to change photo</div>
-                    <div class="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-                        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                        <span class="text-xs text-slate-400">Online</span>
-                    </div>
-                </div>
-            </div>
-        </div>
+            <x-slot:actions>
+                <div class="text-xs text-slate-600 text-right">Hover avatar to change photo</div>
+            </x-slot:actions>
+        </x-account.profile-header>
     </div>
 
     {{-- ── MAIN CONTENT ──────────────────────────────────────────────── --}}
-    <div class="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div>
 
-        {{-- Global alerts --}}
-        @if(session('success'))
-        <div class="mb-6 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 p-4 flex items-center gap-3">
-            <div class="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center flex-shrink-0">
-                <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
-            </div>
-            <p class="text-sm text-emerald-300 font-medium">{{ session('success') }}</p>
+        {{-- ── Horizontal Tab Bar ───────────────────────────────────────── --}}
+        {{-- The account sidebar (Dashboard / My Profile) already lives in the
+             layout — this is page-local tab navigation only, so it renders as
+             a horizontal bar rather than a second vertical sidebar. --}}
+        <div class="flex items-center gap-1 overflow-x-auto rounded-2xl border border-white/[0.04] bg-white/[0.025] backdrop-blur-xl p-1.5 mb-6">
+            @foreach([
+                ['general',      'General',       'heroicon-user',    'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z',             'indigo'],
+                ['security',     'Security',      'heroicon-shield',  'M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z', 'emerald'],
+                ['notifications','Notifications', 'heroicon-bell',    'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9', 'sky'],
+            ] as [$tab, $label, $_, $icon, $color])
+            <button type="button" @click="activeTab = '{{ $tab }}'"
+                :class="activeTab === '{{ $tab }}'
+                    ? 'bg-{{ $color }}-600/15 text-{{ $color }}-300'
+                    : 'text-slate-400 hover:text-white hover:bg-white/[0.04]'"
+                class="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all whitespace-nowrap">
+                <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="{{ $icon }}"/>
+                </svg>
+                {{ $label }}
+            </button>
+            @endforeach
         </div>
-        @endif
-        @if(session('error'))
-        <div class="mb-6 rounded-2xl bg-red-500/10 border border-red-500/25 p-4 flex items-center gap-3">
-            <div class="w-8 h-8 rounded-full bg-red-500/20 flex items-center justify-center flex-shrink-0">
-                <svg class="w-4 h-4 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-            </div>
-            <p class="text-sm text-red-300">{{ session('error') }}</p>
-        </div>
-        @endif
 
-        <div class="flex flex-col lg:flex-row gap-6">
-
-            {{-- ── LEFT: Tab Navigation Sidebar ─────────────────────────── --}}
-            <div class="lg:w-56 flex-shrink-0">
-                <div class="rounded-2xl border border-white/[0.04] bg-white/[0.025] backdrop-blur-xl p-2 sticky top-20">
-                    <p class="px-3 py-2 text-xs font-semibold text-slate-600 uppercase tracking-wider">Account</p>
-                    @foreach([
-                        ['general',      'General',       'heroicon-user',    'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z',             'indigo'],
-                        ['security',     'Security',      'heroicon-shield',  'M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z', 'emerald'],
-                        ['preferences',  'Preferences',   'heroicon-cog',     'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z',   'violet'],
-                        ['notifications','Notifications', 'heroicon-bell',    'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9', 'sky'],
-                    ] as [$tab, $label, $_, $icon, $color])
-                    <button type="button" @click="activeTab = '{{ $tab }}'"
-                        :class="activeTab === '{{ $tab }}'
-                            ? 'bg-{{ $color }}-600/15 text-{{ $color }}-300 border-{{ $color }}-500/30'
-                            : 'text-slate-400 hover:text-white hover:bg-white/[0.04] border-transparent'"
-                        class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all border text-left mb-0.5">
-                        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="{{ $icon }}"/>
-                        </svg>
-                        {{ $label }}
-                    </button>
-                    @endforeach
-
-                    {{-- Danger zone separator --}}
-                    <div class="border-t border-white/[0.06] my-2 mx-1"></div>
-                    <p class="px-3 py-1.5 text-xs font-semibold text-slate-600 uppercase tracking-wider">Account</p>
-                    <a href="{{ route('dashboard') }}"
-                       class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-400 hover:text-white hover:bg-white/[0.04] transition-all">
-                        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
-                        </svg>
-                        Dashboard
-                    </a>
-                </div>
-            </div>
-
-            {{-- ── RIGHT: Tab Content ────────────────────────────────────── --}}
-            <div class="flex-1 min-w-0 space-y-5">
+        {{-- ── Tab Content ──────────────────────────────────────────────── --}}
+        <div class="space-y-5">
 
                 {{-- ══════════════════════════════════════════════════════ --}}
                 {{-- TAB: GENERAL                                           --}}
@@ -251,13 +167,17 @@
                                         placeholder="+91 98765 43210">
                                 </div>
 
-                                {{-- Email --}}
+                                {{-- Email (frozen — cannot be changed) --}}
                                 <div class="sm:col-span-2">
-                                    <label class="block text-xs font-semibold text-slate-400 mb-2">Email Address <span class="text-red-400">*</span></label>
-                                    <input type="email" name="email" value="{{ old('email', $user->email) }}"
-                                        class="w-full px-4 py-3 rounded-xl bg-white/[0.05] border @error('email') border-red-500/50 @else border-white/[0.05] @enderror text-slate-200 placeholder-slate-600 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500/30 transition-all"
-                                        placeholder="you@example.com" required>
-                                    @error('email')<p class="mt-1.5 text-xs text-red-400">{{ $message }}</p>@enderror
+                                    <label class="block text-xs font-semibold text-slate-400 mb-2">Email Address</label>
+                                    <div class="relative">
+                                        <input type="email" value="{{ $user->email }}" readonly disabled
+                                            class="w-full px-4 py-3 rounded-xl bg-white/[0.03] border border-white/[0.05] text-slate-500 text-sm cursor-not-allowed pr-10">
+                                        <svg class="w-4 h-4 text-slate-600 absolute right-3.5 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                                        </svg>
+                                    </div>
+                                    <p class="mt-1.5 text-xs text-slate-600">Your email address cannot be changed. Contact support if you need to update it.</p>
                                 </div>
 
                                 {{-- Gender --}}
@@ -353,97 +273,6 @@
                      x-transition:enter-start="opacity-0 translate-y-2"
                      x-transition:enter-end="opacity-100 translate-y-0"
                      style="display:none">
-
-                    {{-- 2FA Status --}}
-                    <div class="rounded-2xl border p-7 mb-5 {{ $user->hasTwoFactorEnabled() ? 'border-emerald-500/25 bg-emerald-500/[0.04]' : 'border-white/[0.04] bg-white/[0.025]' }} backdrop-blur-xl"
-                         x-data="{ showDisable: false, showRegenerate: false }">
-                        <div class="flex items-center gap-3 mb-6 pb-5 border-b {{ $user->hasTwoFactorEnabled() ? 'border-emerald-500/15' : 'border-white/[0.06]' }}">
-                            <div class="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 {{ $user->hasTwoFactorEnabled() ? 'bg-emerald-500/15 border border-emerald-500/25' : 'bg-slate-700/50 border border-white/10' }}">
-                                <svg class="w-4.5 h-4.5 {{ $user->hasTwoFactorEnabled() ? 'text-emerald-400' : 'text-slate-400' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
-                                </svg>
-                            </div>
-                            <div class="flex-1">
-                                <h2 class="text-base font-semibold text-white">Two-Factor Authentication</h2>
-                                <p class="text-xs text-slate-500">Add an extra layer of security to your account</p>
-                            </div>
-                            <div class="flex-shrink-0">
-                                @if($user->hasTwoFactorEnabled())
-                                    <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/25">
-                                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse inline-block"></span>
-                                        <span class="text-xs text-emerald-400 font-medium">Enabled</span>
-                                    </div>
-                                @else
-                                    <span class="px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-xs text-amber-400">Not enabled</span>
-                                @endif
-                            </div>
-                        </div>
-
-                        <div class="flex items-center justify-between gap-4">
-                            <p class="text-sm text-slate-400 max-w-lg">
-                                @if($user->hasTwoFactorEnabled())
-                                    Two-factor authentication is active. Your account requires a code from your authenticator app on each login.
-                                @else
-                                    Two-factor authentication is not enabled. We strongly recommend enabling 2FA to protect your account.
-                                @endif
-                            </p>
-                            @if($user->hasTwoFactorEnabled())
-                            <button type="button" @click="showDisable = !showDisable"
-                                class="flex-shrink-0 px-4 py-2 rounded-xl text-xs font-semibold text-red-400 border border-red-500/30 hover:bg-red-500/10 transition">
-                                Disable 2FA
-                            </button>
-                            @else
-                            <a href="{{ route('auth.two-factor.setup') }}"
-                               class="flex-shrink-0 flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 transition shadow-lg shadow-indigo-500/25">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
-                                Enable 2FA
-                            </a>
-                            @endif
-                        </div>
-
-                        @if($user->hasTwoFactorEnabled())
-                        <div class="mt-6 pt-5 border-t border-white/[0.06]">
-                            <div class="flex items-center justify-between">
-                                <div>
-                                    <p class="text-sm font-medium text-slate-300">Recovery Codes</p>
-                                    <p class="text-xs text-slate-500 mt-0.5">{{ count($user->twoFactorRecoveryCodes()) }} codes remaining — store them safely</p>
-                                </div>
-                                <button type="button" @click="showRegenerate = !showRegenerate"
-                                    class="px-4 py-2 rounded-xl text-xs font-semibold text-indigo-400 border border-indigo-500/30 hover:bg-indigo-500/10 transition">
-                                    Regenerate Codes
-                                </button>
-                            </div>
-                            @if(session('recovery_codes'))
-                            <div class="mt-4 p-4 rounded-xl bg-[#080e1a] border border-indigo-500/20">
-                                <p class="text-xs text-indigo-300 mb-3 font-medium">⚠️ Save these new codes — old ones are invalidated:</p>
-                                <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 font-mono">
-                                    @foreach(session('recovery_codes') as $code)
-                                    <div class="px-2 py-1.5 rounded-lg bg-white/5 text-xs text-indigo-300 text-center tracking-widest select-all">{{ $code }}</div>
-                                    @endforeach
-                                </div>
-                            </div>
-                            @endif
-                            <div x-show="showRegenerate" x-transition class="mt-4 p-5 rounded-xl bg-amber-500/5 border border-amber-500/15">
-                                <p class="text-sm text-amber-300 mb-3 font-medium">Confirm your password to regenerate recovery codes</p>
-                                <form method="POST" action="{{ route('auth.two-factor.regenerate-codes') }}" class="flex gap-2">
-                                    @csrf
-                                    <input type="password" name="password" placeholder="Current password"
-                                        class="flex-1 px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-amber-500/30 transition">
-                                    <button type="submit" class="px-5 py-2.5 rounded-xl text-sm font-semibold text-white bg-amber-600 hover:bg-amber-500 transition">Regenerate</button>
-                                </form>
-                            </div>
-                            <div x-show="showDisable" x-transition class="mt-4 p-5 rounded-xl bg-red-500/5 border border-red-500/15">
-                                <p class="text-sm text-red-300 mb-3 font-medium">Confirm your password to disable two-factor authentication</p>
-                                <form method="POST" action="{{ route('auth.two-factor.disable') }}" class="flex gap-2">
-                                    @csrf @method('DELETE')
-                                    <input type="password" name="password" placeholder="Current password"
-                                        class="flex-1 px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-red-500/30 transition">
-                                    <button type="submit" class="px-5 py-2.5 rounded-xl text-sm font-semibold text-white bg-red-600 hover:bg-red-500 transition">Disable 2FA</button>
-                                </form>
-                            </div>
-                        </div>
-                        @endif
-                    </div>
 
                     {{-- Security Alerts --}}
                     <div class="rounded-2xl border border-white/[0.04] bg-white/[0.025] backdrop-blur-xl p-7 mb-5">
@@ -724,105 +553,6 @@
                 </div>
 
                 {{-- ══════════════════════════════════════════════════════ --}}
-                {{-- TAB: PREFERENCES                                       --}}
-                {{-- ══════════════════════════════════════════════════════ --}}
-                <div x-show="activeTab === 'preferences'"
-                     x-transition:enter="transition ease-out duration-200"
-                     x-transition:enter-start="opacity-0 translate-y-2"
-                     x-transition:enter-end="opacity-100 translate-y-0"
-                     style="display:none">
-                    <form method="POST" action="{{ route('profile.update') }}">
-                        @csrf
-                        <input type="hidden" name="first_name" value="{{ $user->first_name ?? $user->name }}">
-                        <input type="hidden" name="email" value="{{ $user->email }}">
-
-                        <div class="rounded-2xl border border-white/[0.04] bg-white/[0.025] backdrop-blur-xl p-7">
-                            <div class="flex items-center gap-3 mb-6 pb-5 border-b border-white/[0.04]">
-                                <div class="w-9 h-9 rounded-xl bg-violet-500/15 border border-violet-500/25 flex items-center justify-center flex-shrink-0">
-                                    <svg class="w-4.5 h-4.5 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-                                    </svg>
-                                </div>
-                                <div>
-                                    <h2 class="text-base font-semibold text-white">Display Preferences</h2>
-                                    <p class="text-xs text-slate-500">Theme, language, and regional settings</p>
-                                </div>
-                            </div>
-
-                            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                                {{-- Theme --}}
-                                <div>
-                                    <label class="block text-xs font-semibold text-slate-400 mb-2">Theme</label>
-                                    <div class="grid grid-cols-3 gap-2">
-                                        @foreach(['dark' => ['🌙', 'Dark'], 'light' => ['☀️', 'Light'], 'system' => ['💻', 'System']] as $val => [$emoji, $label])
-                                        <label class="cursor-pointer">
-                                            <input type="radio" name="theme" value="{{ $val }}" class="sr-only peer"
-                                                {{ old('theme', $user->profile?->theme ?? 'dark') === $val ? 'checked' : '' }}>
-                                            <div class="px-2 py-2.5 rounded-xl border border-white/[0.06] text-center text-xs text-slate-400 peer-checked:border-indigo-500/60 peer-checked:bg-indigo-600/15 peer-checked:text-indigo-300 hover:border-white/20 transition-all">
-                                                <div class="text-lg mb-0.5">{{ $emoji }}</div>
-                                                {{ $label }}
-                                            </div>
-                                        </label>
-                                        @endforeach
-                                    </div>
-                                </div>
-
-                                {{-- Language --}}
-                                <div>
-                                    <label class="block text-xs font-semibold text-slate-400 mb-2">Language</label>
-                                    <select name="language"
-                                        class="w-full px-4 py-3 rounded-xl bg-white/[0.05] border border-white/[0.05] text-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40 transition-all appearance-none">
-                                        @foreach(['en' => 'English', 'hi' => 'Hindi', 'es' => 'Spanish', 'fr' => 'French', 'de' => 'German', 'ar' => 'Arabic', 'zh' => 'Chinese'] as $code => $name)
-                                            <option value="{{ $code }}" class="bg-[#0d1117]" {{ old('language', $user->profile?->language ?? 'en') === $code ? 'selected' : '' }}>{{ $name }}</option>
-                                        @endforeach
-                                    </select>
-                                </div>
-
-                                {{-- Date Format --}}
-                                <div>
-                                    <label class="block text-xs font-semibold text-slate-400 mb-2">Date Format</label>
-                                    <select name="date_format"
-                                        class="w-full px-4 py-3 rounded-xl bg-white/[0.05] border border-white/[0.05] text-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40 transition-all appearance-none">
-                                        @foreach(['Y-m-d' => 'YYYY-MM-DD', 'd/m/Y' => 'DD/MM/YYYY', 'm/d/Y' => 'MM/DD/YYYY', 'd-m-Y' => 'DD-MM-YYYY'] as $val => $display)
-                                            <option value="{{ $val }}" class="bg-[#0d1117]" {{ old('date_format', $user->profile?->date_format ?? 'Y-m-d') === $val ? 'selected' : '' }}>{{ $display }}</option>
-                                        @endforeach
-                                    </select>
-                                </div>
-
-                                {{-- Timezone --}}
-                                <div class="sm:col-span-2">
-                                    <label class="block text-xs font-semibold text-slate-400 mb-2">Timezone</label>
-                                    <select name="timezone"
-                                        class="w-full px-4 py-3 rounded-xl bg-white/[0.05] border border-white/[0.05] text-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40 transition-all appearance-none">
-                                        @php $currentTz = old('timezone', $user->profile?->timezone ?? 'Asia/Kolkata'); @endphp
-                                        @foreach($timezones as $tz)
-                                            <option value="{{ $tz }}" class="bg-[#0d1117]" {{ $currentTz === $tz ? 'selected' : '' }}>{{ $tz }}</option>
-                                        @endforeach
-                                    </select>
-                                </div>
-
-                                {{-- Time Format --}}
-                                <div>
-                                    <label class="block text-xs font-semibold text-slate-400 mb-2">Time Format</label>
-                                    <select name="time_format"
-                                        class="w-full px-4 py-3 rounded-xl bg-white/[0.05] border border-white/[0.05] text-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40 transition-all appearance-none">
-                                        <option value="H:i" class="bg-[#0d1117]" {{ old('time_format', $user->profile?->time_format ?? 'H:i') === 'H:i' ? 'selected' : '' }}>24-hour (14:30)</option>
-                                        <option value="h:i A" class="bg-[#0d1117]" {{ old('time_format', $user->profile?->time_format) === 'h:i A' ? 'selected' : '' }}>12-hour (2:30 PM)</option>
-                                    </select>
-                                </div>
-                            </div>
-
-                            <div class="mt-6">
-                                <button type="submit"
-                                    class="px-7 py-3 rounded-xl font-semibold text-sm text-white bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 shadow-lg shadow-violet-500/20 transition-all active:scale-[.98]">
-                                    Save Preferences
-                                </button>
-                            </div>
-                        </div>
-                    </form>
-                </div>
-
-                {{-- ══════════════════════════════════════════════════════ --}}
                 {{-- TAB: NOTIFICATIONS                                     --}}
                 {{-- ══════════════════════════════════════════════════════ --}}
                 <div x-show="activeTab === 'notifications'"
@@ -833,7 +563,6 @@
                     <form method="POST" action="{{ route('profile.update') }}">
                         @csrf
                         <input type="hidden" name="first_name" value="{{ $user->first_name ?? $user->name }}">
-                        <input type="hidden" name="email" value="{{ $user->email }}">
 
                         <div class="rounded-2xl border border-white/[0.04] bg-white/[0.025] backdrop-blur-xl p-7">
                             <div class="flex items-center gap-3 mb-6 pb-5 border-b border-white/[0.04]">
@@ -889,8 +618,7 @@
                     </form>
                 </div>
 
-            </div>{{-- /right content --}}
-        </div>{{-- /flex layout --}}
+        </div>{{-- /tab content --}}
 
         {{-- Bottom padding --}}
         <div class="h-8"></div>

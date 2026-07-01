@@ -1,52 +1,40 @@
-@extends('layouts.dashboard')
+@extends('layouts.account')
 
 @section('title', 'Dashboard — ' . config('app.name'))
 
-@section('breadcrumbs')
-    <x-frontend.breadcrumb :crumbs="[['label' => 'Dashboard']]" />
+@section('account-breadcrumbs')
+    <x-account.breadcrumb :crumbs="[['label' => 'Dashboard']]" />
 @endsection
 
-@section('dashboard-content')
-
-    {{-- Flash messages --}}
-    @if(session('success'))
-        <div class="mb-8 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 p-4 flex items-center gap-3">
-            <div class="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center flex-shrink-0">
-                <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>
-                </svg>
-            </div>
-            <p class="text-emerald-300 text-sm">{{ session('success') }}</p>
-        </div>
-    @endif
+@section('account-content')
 
     {{-- ── Page Header ──────────────────────────────────────────────── --}}
-    <x-dashboard.page-header
+    <x-account.page-header
         :date="now()->format('l, F j, Y')"
         :name="auth()->user()->first_name ?? explode(' ', auth()->user()->name)[0]"
     />
 
     {{-- ── Stats Grid ───────────────────────────────────────────────── --}}
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-10">
-        <x-dashboard.stat-card
+        <x-account.stat-card
             label="My Courses"
             value="0"
             gradient="from-indigo-500 to-violet-500"
             icon="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
         />
-        <x-dashboard.stat-card
+        <x-account.stat-card
             label="Completed"
             value="0"
             gradient="from-emerald-500 to-teal-500"
             icon="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
         />
-        <x-dashboard.stat-card
+        <x-account.stat-card
             label="Hours Learned"
             value="0"
             gradient="from-amber-500 to-orange-500"
             icon="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
         />
-        <x-dashboard.stat-card
+        <x-account.stat-card
             label="Certificates"
             value="0"
             gradient="from-pink-500 to-rose-500"
@@ -61,7 +49,7 @@
         <div class="lg:col-span-2 space-y-6">
 
             {{-- Continue Learning --}}
-            <x-dashboard.card title="Continue Learning" link-text="View all →" link-href="#">
+            <x-account.card title="Continue Learning" link-text="View all →" link-href="#">
                 <div class="flex flex-col items-center justify-center py-12 text-center">
                     <div class="w-20 h-20 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center mb-4">
                         <svg class="w-10 h-10 text-indigo-400/50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -74,50 +62,26 @@
                         Browse Courses
                     </a>
                 </div>
-            </x-dashboard.card>
+            </x-account.card>
 
             {{-- Quick Actions --}}
-            <x-dashboard.quick-actions />
+            <x-account.quick-actions />
         </div>
 
         {{-- Right sidebar --}}
         <div class="space-y-6">
 
             {{-- Profile card --}}
-            <x-dashboard.card>
-                <div class="flex items-center gap-3 mb-4">
-                    <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center overflow-hidden flex-shrink-0">
-                        @if(auth()->user()->avatar)
-                            <img src="{{ asset('storage/' . auth()->user()->avatar) }}" class="w-full h-full object-cover" alt="">
-                        @else
-                            <span class="text-white font-bold text-lg">{{ strtoupper(substr(auth()->user()->first_name ?? auth()->user()->name, 0, 1)) }}</span>
-                        @endif
-                    </div>
-                    <div>
-                        <p class="text-white font-semibold text-sm">{{ auth()->user()->first_name ? auth()->user()->first_name . ' ' . auth()->user()->last_name : auth()->user()->name }}</p>
-                        <div class="flex items-center gap-1.5 mt-0.5">
-                            <div class="badge-dot w-1.5 h-1.5"></div>
-                            <span class="text-emerald-400 text-xs">Active</span>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="space-y-2 mb-4">
-                    <div class="flex items-center justify-between text-xs">
-                        <span class="text-slate-500">Profile Complete</span>
-                        <span class="text-slate-300 font-medium">30%</span>
-                    </div>
-                    <div class="h-1.5 bg-white/[0.06] rounded-full overflow-hidden">
-                        <div class="h-full w-[30%] bg-gradient-to-r from-indigo-500 to-violet-500 rounded-full"></div>
-                    </div>
-                    <p class="text-slate-500 text-xs">Add your photo, bio and preferences to complete your profile</p>
-                </div>
-
-                <a href="{{ route('profile.show') }}"
-                   class="block w-full text-center py-2 rounded-xl border border-white/[0.10] text-slate-300 hover:text-white hover:bg-white/[0.05] text-sm font-medium transition-all">
-                    Complete Profile
-                </a>
-            </x-dashboard.card>
+            <x-account.card>
+                <x-account.profile-header :summary="$accountProfileSummary" variant="compact">
+                    <x-slot:actions>
+                        <a href="{{ route('profile.show') }}"
+                           class="block w-full text-center py-2 rounded-xl border border-white/[0.10] text-slate-300 hover:text-white hover:bg-white/[0.05] text-sm font-medium transition-all">
+                            Complete Profile
+                        </a>
+                    </x-slot:actions>
+                </x-account.profile-header>
+            </x-account.card>
 
             {{-- Streak / Motivation --}}
             <div class="rounded-2xl border border-amber-500/20 p-5 relative overflow-hidden"
@@ -137,7 +101,7 @@
             </div>
 
             {{-- Recent Activity --}}
-            <x-dashboard.recent-activity />
+            <x-account.recent-activity />
 
         </div>
     </div>

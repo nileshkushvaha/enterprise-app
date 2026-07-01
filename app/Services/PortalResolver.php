@@ -107,7 +107,7 @@ final class PortalResolver
                 : route('profile.show'),
             'icon' => 'user',
         ];
-        $items[] = ['label' => 'Security', 'url' => route('auth.two-factor.setup'), 'icon' => 'shield'];
+        $items[] = ['label' => 'Security', 'url' => route('profile.show'), 'icon' => 'shield'];
 
         return $items;
     }

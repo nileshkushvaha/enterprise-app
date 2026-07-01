@@ -58,11 +58,6 @@ class LoginController extends Controller
             return redirect()->intended($this->portal->loginRedirect(auth()->user()));
         }
 
-        // Redirect to 2FA challenge
-        if ($result === LoginResult::RequiresTwoFactor) {
-            return redirect()->route('auth.two-factor.challenge');
-        }
-
         // For email unverified — stay on login page with a clear notice + resend link
         if ($result === LoginResult::EmailUnverified) {
             return back()

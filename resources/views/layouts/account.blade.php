@@ -6,11 +6,15 @@
         <div class="flex gap-6">
 
             {{-- ── Left Sidebar ─────────────────────────────────────────── --}}
-            <x-dashboard.sidebar :menu="$frontendMenu ?? []" />
+            <x-account.sidebar :menu="$accountMenu ?? []" />
 
             {{-- ── Main Content ─────────────────────────────────────────── --}}
             <div class="flex-1 min-w-0">
-                @yield('dashboard-content')
+                @hasSection('account-breadcrumbs')
+                    @yield('account-breadcrumbs')
+                @endif
+                <x-account.flash-messages />
+                @yield('account-content')
             </div>
 
         </div>

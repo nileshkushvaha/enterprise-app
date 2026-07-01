@@ -1,6 +1,6 @@
 @props(['menu' => []])
 
-<aside class="hidden lg:flex flex-col w-56 flex-shrink-0">
+<aside class="hidden lg:flex flex-col w-56 flex-shrink-0" data-account-sidebar>
     <nav class="rounded-2xl border border-white/[0.07] p-3 sticky top-24" style="background:rgba(255,255,255,0.03)">
 
         {{-- User mini-card --}}
@@ -22,9 +22,10 @@
         @foreach($menu as $item)
             @php $active = request()->routeIs($item['route'] ?? ''); @endphp
             <a href="{{ $item['url'] }}"
+               data-account-menu-item="{{ $item['route'] ?? '' }}"
                class="flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium transition-all mb-0.5
                       {{ $active
-                           ? 'bg-indigo-500/15 text-indigo-300 border border-indigo-500/25'
+                           ? 'bg-indigo-500/15 text-indigo-300 border border-indigo-500/25 account-menu-active'
                            : 'text-slate-400 hover:text-white hover:bg-white/[0.05]' }}">
                 @if(($item['icon'] ?? '') === 'home')
                     <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -43,8 +44,33 @@
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M4 6h16M4 12h16M4 18h7"/>
                     </svg>
                 @endif
-                {{ $item['label'] }}
+                <span class="flex-1 truncate">{{ $item['label'] }}</span>
+                @if(!empty($item['badge']))
+                    <span class="flex-shrink-0 min-w-[1.25rem] h-5 px-1.5 rounded-full bg-indigo-500/20 text-indigo-300 text-[10px] font-semibold flex items-center justify-center">
+                        {{ $item['badge'] }}
+                    </span>
+                @endif
             </a>
+            @if(!empty($item['children']))
+                <div class="ml-6 mb-0.5 space-y-0.5">
+                    @foreach($item['children'] as $child)
+                        @php $childActive = request()->routeIs($child['route'] ?? ''); @endphp
+                        <a href="{{ $child['url'] }}"
+                           data-account-menu-item="{{ $child['route'] ?? '' }}"
+                           class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all
+                                  {{ $childActive
+                                       ? 'bg-indigo-500/15 text-indigo-300 account-menu-active'
+                                       : 'text-slate-500 hover:text-white hover:bg-white/[0.05]' }}">
+                            <span class="flex-1 truncate">{{ $child['label'] }}</span>
+                            @if(!empty($child['badge']))
+                                <span class="flex-shrink-0 min-w-[1.1rem] h-4 px-1 rounded-full bg-indigo-500/20 text-indigo-300 text-[9px] font-semibold flex items-center justify-center">
+                                    {{ $child['badge'] }}
+                                </span>
+                            @endif
+                        </a>
+                    @endforeach
+                </div>
+            @endif
         @endforeach
 
         {{-- Divider + Logout --}}

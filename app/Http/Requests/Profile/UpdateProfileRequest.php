@@ -19,7 +19,8 @@ class UpdateProfileRequest extends FormRequest
         return [
             'first_name' => ['required', 'string', 'max:100'],
             'last_name' => ['nullable', 'string', 'max:100'],
-            'email' => ['required', 'email:rfc', 'max:255', Rule::unique('users', 'email')->ignore($this->user()->id)],
+            // Email is frozen — never accepted from the profile form. See
+            // UpdateProfileAction, which never writes to users.email.
             'phone' => ['nullable', 'string', 'max:20'],
             'gender' => ['nullable', Rule::in(['male', 'female', 'other', 'prefer_not_to_say'])],
             'date_of_birth' => ['nullable', 'date', 'before:today', 'after:1900-01-01'],
@@ -43,8 +44,6 @@ class UpdateProfileRequest extends FormRequest
     {
         return [
             'first_name.required' => 'First name is required.',
-            'email.required' => 'Email address is required.',
-            'email.unique' => 'This email address is already taken.',
             'date_of_birth.before' => 'Date of birth must be in the past.',
             'timezone.timezone' => 'Please select a valid timezone.',
             'country_id.exists' => 'Please select a valid country.',
