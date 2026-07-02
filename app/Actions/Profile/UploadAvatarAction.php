@@ -6,48 +6,24 @@ namespace App\Actions\Profile;
 
 use App\Models\User;
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
 
+/**
+ * Handles both the 'avatar' and 'cover' Media Library collections on
+ * UserProfile. Both collections are singleFile(), so adding new media
+ * automatically replaces (and deletes the disk file for) whatever was
+ * there before — no manual old-file cleanup needed.
+ */
 final class UploadAvatarAction
 {
-    public function execute(User $user, UploadedFile $file): string
+    public function execute(User $user, UploadedFile $file, string $collection): void
     {
-        // Delete old avatar if it exists
-        $this->deleteOldAvatar($user);
-
-        // Generate a unique path: avatars/{user_id}/{uuid}.webp-or-original-ext
-        $extension = $file->getClientOriginalExtension() ?: 'jpg';
-        $filename = Str::uuid().'.'.$extension;
-        $path = 'avatars/'.$user->id.'/'.$filename;
-
-        // Store to public disk
-        $file->storeAs('avatars/'.$user->id, $filename, 'public');
-
-        // Update both user and profile rows
-        $user->update(['avatar' => $path]);
-        $user->profile()->updateOrCreate(
-            ['user_id' => $user->id],
-            ['avatar' => $path]
-        );
-
-        return $path;
+        $user->profile
+            ->addMedia($file)
+            ->toMediaCollection($collection);
     }
 
-    public function delete(User $user): void
+    public function delete(User $user, string $collection): void
     {
-        $this->deleteOldAvatar($user);
-
-        $user->update(['avatar' => null]);
-        $user->profile()?->update(['avatar' => null]);
-    }
-
-    private function deleteOldAvatar(User $user): void
-    {
-        $existing = $user->avatar ?? $user->profile?->avatar;
-
-        if ($existing && Storage::disk('public')->exists($existing)) {
-            Storage::disk('public')->delete($existing);
-        }
+        $user->profile->clearMediaCollection($collection);
     }
 }

@@ -11,6 +11,9 @@ use Illuminate\Support\Facades\Schema;
 //         add_must_change_password_to_users_table (must_change_password)
 //         add_lock_fields_to_users_table (locked_at, lock_reason)
 //         drop_two_factor_columns_from_users_table (two_factor_* columns removed)
+//         drop_avatar_from_users_table (Phase 1 User Profile system — avatar
+//         moved to Spatie Media Library on UserProfile; identity table no
+//         longer stores it)
 return new class extends Migration
 {
     public function up(): void
@@ -45,7 +48,6 @@ return new class extends Migration
             $table->boolean('must_change_password')->default(false);
             $table->enum('status', ['pending_verification', 'active', 'inactive', 'blocked', 'suspended'])
                 ->default('pending_verification');
-            $table->string('avatar')->nullable();
             $table->timestamps();
         });
 

@@ -12,9 +12,14 @@
 @section('account-content')
 <div x-data="{
     activeTab: '{{ session('active_tab', 'general') }}',
-    avatarPreview: '{{ $user->avatar ? asset('storage/' . $user->avatar) : '' }}',
+    avatarPreview: '{{ $accountProfileSummary->avatarUrl }}',
     uploading: false,
     uploadError: '',
+    coverPreview: '{{ $accountProfileSummary->coverUrl }}',
+    coverUploading: false,
+    coverUploadError: '',
+    selectedCountryId: '{{ old('country_id', $user->profile->country_id) }}',
+    states: @js($states->map(fn ($state) => ['id' => $state->id, 'country_id' => $state->country_id, 'name' => $state->name])),
 
     async uploadAvatar(event) {
         const file = event.target.files[0];
@@ -41,50 +46,106 @@
         });
         const json = await res.json();
         if (json.success) this.avatarPreview = '';
+    },
+
+    async uploadCover(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        this.coverUploading = true;
+        this.coverUploadError = '';
+        const form = new FormData();
+        form.append('cover', file);
+        form.append('_token', document.querySelector('meta[name=csrf-token]').content);
+        try {
+            const res = await fetch('{{ route('profile.cover.upload') }}', { method: 'POST', body: form });
+            const json = await res.json();
+            if (json.success) { this.coverPreview = json.url; }
+            else { this.coverUploadError = 'Upload failed. Please try again.'; }
+        } catch (e) { this.coverUploadError = 'Upload error. Please try again.'; }
+        finally { this.coverUploading = false; }
+    },
+
+    async deleteCover() {
+        if (!confirm('Remove your cover photo?')) return;
+        const res = await fetch('{{ route('profile.cover.delete') }}', {
+            method: 'DELETE',
+            headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content, 'Accept': 'application/json' }
+        });
+        const json = await res.json();
+        if (json.success) this.coverPreview = '';
+    },
+
+    get statesForSelectedCountry() {
+        if (!this.selectedCountryId) return [];
+        return this.states.filter(s => String(s.country_id) === String(this.selectedCountryId));
     }
 }">
 
-    {{-- ── PROFILE HERO BANNER ───────────────────────────────────────── --}}
-    <div class="rounded-2xl border border-white/[0.05] p-6 sm:p-8 mb-6" style="background:linear-gradient(135deg,rgba(99,102,241,.08) 0%,rgba(139,92,246,.06) 50%,rgba(59,130,246,.04) 100%);">
-        <x-account.profile-header :summary="$accountProfileSummary" variant="full">
-            <x-slot:avatar>
-                <template x-if="avatarPreview">
-                    <img :src="avatarPreview" class="w-full h-full object-cover" alt="Avatar">
-                </template>
-                <template x-if="!avatarPreview">
-                    <span class="text-3xl font-bold text-white">{{ $accountProfileSummary->initial }}</span>
-                </template>
-            </x-slot:avatar>
-            <x-slot:avatarActions>
-                {{-- Camera overlay --}}
-                <label class="absolute inset-0 rounded-2xl flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity"
-                       :class="{'cursor-not-allowed': uploading}">
-                    <input type="file" class="sr-only" accept="image/*" @change="uploadAvatar($event)" :disabled="uploading">
-                    <svg x-show="!uploading" class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    {{-- ── PROFILE HERO BANNER (cover + avatar) ────────────────────────── --}}
+    <x-account.profile-header :summary="$accountProfileSummary" variant="full">
+        <x-slot:avatar>
+            <template x-if="avatarPreview">
+                <img :src="avatarPreview" class="w-full h-full object-cover" alt="Avatar">
+            </template>
+            <template x-if="!avatarPreview">
+                <span class="text-3xl font-bold text-white">{{ $accountProfileSummary->initial }}</span>
+            </template>
+        </x-slot:avatar>
+        <x-slot:avatarActions>
+            {{-- Camera overlay --}}
+            <label class="absolute inset-0 rounded-2xl flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity"
+                   :class="{'cursor-not-allowed': uploading}">
+                <input type="file" class="sr-only" accept="image/*" @change="uploadAvatar($event)" :disabled="uploading">
+                <svg x-show="!uploading" class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/>
+                </svg>
+                <svg x-show="uploading" class="w-6 h-6 text-white animate-spin" fill="none" viewBox="0 0 24 24" style="display:none">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                </svg>
+            </label>
+        </x-slot:avatarActions>
+        <x-slot:coverActions>
+            <label class="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover/cover:opacity-100 cursor-pointer transition-opacity"
+                   :class="{'cursor-not-allowed': coverUploading}">
+                <input type="file" class="sr-only" accept="image/*" @change="uploadCover($event)" :disabled="coverUploading">
+                <span class="flex items-center gap-2 px-4 py-2 rounded-xl bg-black/50 text-white text-xs font-semibold">
+                    <svg x-show="!coverUploading" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/>
                     </svg>
-                    <svg x-show="uploading" class="w-6 h-6 text-white animate-spin" fill="none" viewBox="0 0 24 24" style="display:none">
+                    <svg x-show="coverUploading" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24" style="display:none">
                         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                         <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
                     </svg>
-                </label>
-            </x-slot:avatarActions>
-
-            @if($user->profile?->country)
-                <p class="text-slate-500 text-xs mt-1">{{ $user->profile->country->flag }} {{ $user->profile->country->name }}</p>
-            @endif
-            <p x-show="uploadError" x-text="uploadError" class="text-xs text-red-400 mt-2"></p>
-            <button x-show="avatarPreview" @click="deleteAvatar()" type="button"
-                class="mt-2 flex items-center gap-1 text-xs text-slate-600 hover:text-red-400 transition-colors"
+                    <span x-text="coverPreview ? 'Change cover' : 'Add cover'"></span>
+                </span>
+            </label>
+            <button x-show="coverPreview" @click="deleteCover()" type="button"
+                class="absolute top-3 right-3 px-3 py-1.5 rounded-lg bg-black/50 text-white text-xs font-medium hover:bg-red-500/60 transition-colors"
                 style="display:none">
-                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-                Remove photo
+                Remove
             </button>
+        </x-slot:coverActions>
 
-            <x-slot:actions>
-                <div class="text-xs text-slate-600 text-right">Hover avatar to change photo</div>
-            </x-slot:actions>
-        </x-account.profile-header>
+        @if($user->profile->country)
+            <p class="text-slate-500 text-xs mt-1">{{ $user->profile->country->flag }} {{ $user->profile->country->name }}</p>
+        @endif
+        <p x-show="uploadError" x-text="uploadError" class="text-xs text-red-400 mt-2"></p>
+        <p x-show="coverUploadError" x-text="coverUploadError" class="text-xs text-red-400 mt-2"></p>
+        <button x-show="avatarPreview" @click="deleteAvatar()" type="button"
+            class="mt-2 flex items-center gap-1 text-xs text-slate-600 hover:text-red-400 transition-colors"
+            style="display:none">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+            Remove photo
+        </button>
+
+        <x-slot:actions>
+            <div class="text-xs text-slate-600 text-right">Hover photos to change</div>
+        </x-slot:actions>
+    </x-account.profile-header>
+
+    <div class="mb-6">
+        <x-account.profile-completion :percentage="$accountProfileSummary->profileCompletion" :breakdown="$completionBreakdown" />
     </div>
 
     {{-- ── MAIN CONTENT ──────────────────────────────────────────────── --}}
@@ -162,7 +223,7 @@
                                 {{-- Phone --}}
                                 <div>
                                     <label class="block text-xs font-semibold text-slate-400 mb-2">Phone Number</label>
-                                    <input type="text" name="phone" value="{{ old('phone', $user->profile?->phone) }}"
+                                    <input type="text" name="phone" value="{{ old('phone', $user->profile->phone) }}"
                                         class="w-full px-4 py-3 rounded-xl bg-white/[0.05] border border-white/[0.05] text-slate-200 placeholder-slate-600 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500/30 transition-all"
                                         placeholder="+91 98765 43210">
                                 </div>
@@ -187,7 +248,7 @@
                                         class="w-full px-4 py-3 rounded-xl bg-white/[0.05] border border-white/[0.05] text-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500/30 transition-all appearance-none">
                                         <option value="" class="bg-[#0d1117]">— Select —</option>
                                         @foreach(['male' => 'Male', 'female' => 'Female', 'other' => 'Other', 'prefer_not_to_say' => 'Prefer not to say'] as $val => $label)
-                                            <option value="{{ $val }}" class="bg-[#0d1117]" {{ old('gender', $user->profile?->gender) === $val ? 'selected' : '' }}>{{ $label }}</option>
+                                            <option value="{{ $val }}" class="bg-[#0d1117]" {{ old('gender', $user->profile->gender) === $val ? 'selected' : '' }}>{{ $label }}</option>
                                         @endforeach
                                     </select>
                                 </div>
@@ -196,9 +257,43 @@
                                 <div>
                                     <label class="block text-xs font-semibold text-slate-400 mb-2">Date of Birth</label>
                                     <input type="date" name="date_of_birth"
-                                        value="{{ old('date_of_birth', $user->profile?->date_of_birth?->format('Y-m-d')) }}"
+                                        value="{{ old('date_of_birth', $user->profile->date_of_birth?->format('Y-m-d')) }}"
                                         max="{{ now()->subYears(5)->format('Y-m-d') }}"
                                         class="w-full px-4 py-3 rounded-xl bg-white/[0.05] border border-white/[0.05] text-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500/30 transition-all [color-scheme:dark]">
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-5 mt-5">
+                                {{-- Headline --}}
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-400 mb-2">Headline</label>
+                                    <input type="text" name="headline" value="{{ old('headline', $user->profile->headline) }}"
+                                        class="w-full px-4 py-3 rounded-xl bg-white/[0.05] border border-white/[0.05] text-slate-200 placeholder-slate-600 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500/30 transition-all"
+                                        placeholder="e.g. Senior Instructor">
+                                </div>
+
+                                {{-- Designation --}}
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-400 mb-2">Designation</label>
+                                    <input type="text" name="designation" value="{{ old('designation', $user->profile->designation) }}"
+                                        class="w-full px-4 py-3 rounded-xl bg-white/[0.05] border border-white/[0.05] text-slate-200 placeholder-slate-600 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500/30 transition-all"
+                                        placeholder="e.g. Head of Mathematics">
+                                </div>
+
+                                {{-- Short Bio --}}
+                                <div class="sm:col-span-2">
+                                    <label class="block text-xs font-semibold text-slate-400 mb-2">Short Bio</label>
+                                    <input type="text" name="short_bio" value="{{ old('short_bio', $user->profile->short_bio) }}" maxlength="160"
+                                        class="w-full px-4 py-3 rounded-xl bg-white/[0.05] border border-white/[0.05] text-slate-200 placeholder-slate-600 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500/30 transition-all"
+                                        placeholder="A one-line summary (max 160 characters)">
+                                </div>
+
+                                {{-- Bio --}}
+                                <div class="sm:col-span-2">
+                                    <label class="block text-xs font-semibold text-slate-400 mb-2">Bio</label>
+                                    <textarea name="bio" rows="4" maxlength="2000"
+                                        class="w-full px-4 py-3 rounded-xl bg-white/[0.05] border border-white/[0.05] text-slate-200 placeholder-slate-600 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500/30 transition-all"
+                                        placeholder="Tell others about yourself">{{ old('bio', $user->profile->bio) }}</textarea>
                                 </div>
                             </div>
                         </div>
@@ -213,45 +308,84 @@
                                 </div>
                                 <div>
                                     <h2 class="text-base font-semibold text-white">Address</h2>
-                                    <p class="text-xs text-slate-500">Your location and mailing address</p>
+                                    <p class="text-xs text-slate-500">Your location and mailing address — integrates with the Countries/States masters</p>
                                 </div>
                             </div>
 
                             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
                                 <div class="sm:col-span-2 lg:col-span-3">
                                     <label class="block text-xs font-semibold text-slate-400 mb-2">Street Address</label>
-                                    <input type="text" name="address" value="{{ old('address', $user->profile?->address) }}"
+                                    <input type="text" name="address" value="{{ old('address', $user->profile->address) }}"
                                         class="w-full px-4 py-3 rounded-xl bg-white/[0.05] border border-white/[0.05] text-slate-200 placeholder-slate-600 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500/30 transition-all"
                                         placeholder="123 Main Street, Apt 4B">
                                 </div>
                                 <div>
-                                    <label class="block text-xs font-semibold text-slate-400 mb-2">City</label>
-                                    <input type="text" name="city" value="{{ old('city', $user->profile?->city) }}"
-                                        class="w-full px-4 py-3 rounded-xl bg-white/[0.05] border border-white/[0.05] text-slate-200 placeholder-slate-600 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500/30 transition-all" placeholder="Mumbai">
-                                </div>
-                                <div>
-                                    <label class="block text-xs font-semibold text-slate-400 mb-2">State / Province</label>
-                                    <input type="text" name="state" value="{{ old('state', $user->profile?->state) }}"
-                                        class="w-full px-4 py-3 rounded-xl bg-white/[0.05] border border-white/[0.05] text-slate-200 placeholder-slate-600 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500/30 transition-all" placeholder="Maharashtra">
-                                </div>
-                                <div>
-                                    <label class="block text-xs font-semibold text-slate-400 mb-2">Postal Code</label>
-                                    <input type="text" name="postal_code" value="{{ old('postal_code', $user->profile?->postal_code) }}"
-                                        class="w-full px-4 py-3 rounded-xl bg-white/[0.05] border border-white/[0.05] text-slate-200 placeholder-slate-600 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500/30 transition-all" placeholder="400001">
-                                </div>
-                                <div class="sm:col-span-2">
                                     <label class="block text-xs font-semibold text-slate-400 mb-2">Country</label>
-                                    <select name="country_id"
+                                    <select name="country_id" x-model="selectedCountryId"
                                         class="w-full px-4 py-3 rounded-xl bg-white/[0.05] border border-white/[0.05] text-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500/30 transition-all appearance-none">
                                         <option value="" class="bg-[#0d1117]">— Select Country —</option>
                                         @foreach($countries as $country)
-                                            <option value="{{ $country->id }}" class="bg-[#0d1117]"
-                                                {{ old('country_id', $user->profile?->country_id) == $country->id ? 'selected' : '' }}>
+                                            <option value="{{ $country->id }}" class="bg-[#0d1117]">
                                                 {{ $country->flag }} {{ $country->name }}
                                             </option>
                                         @endforeach
                                     </select>
                                 </div>
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-400 mb-2">State / Province</label>
+                                    <select name="state_id"
+                                        class="w-full px-4 py-3 rounded-xl bg-white/[0.05] border border-white/[0.05] text-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500/30 transition-all appearance-none">
+                                        <option value="" class="bg-[#0d1117]">— Select State —</option>
+                                        <template x-for="state in statesForSelectedCountry" :key="state.id">
+                                            <option :value="state.id" class="bg-[#0d1117]" x-text="state.name"
+                                                :selected="String(state.id) === '{{ old('state_id', $user->profile->state_id) }}'"></option>
+                                        </template>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-400 mb-2">City</label>
+                                    <input type="text" name="city" value="{{ old('city', $user->profile->city) }}"
+                                        class="w-full px-4 py-3 rounded-xl bg-white/[0.05] border border-white/[0.05] text-slate-200 placeholder-slate-600 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500/30 transition-all" placeholder="Mumbai">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-400 mb-2">Postal Code</label>
+                                    <input type="text" name="postal_code" value="{{ old('postal_code', $user->profile->postal_code) }}"
+                                        class="w-full px-4 py-3 rounded-xl bg-white/[0.05] border border-white/[0.05] text-slate-200 placeholder-slate-600 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500/30 transition-all" placeholder="400001">
+                                </div>
+                            </div>
+                        </div>
+
+                        {{-- Social Links --}}
+                        <div class="rounded-2xl border border-white/[0.04] bg-white/[0.025] backdrop-blur-xl p-7 mb-5">
+                            <div class="flex items-center gap-3 mb-6 pb-5 border-b border-white/[0.04]">
+                                <div class="w-9 h-9 rounded-xl bg-sky-500/15 border border-sky-500/25 flex items-center justify-center flex-shrink-0">
+                                    <svg class="w-4.5 h-4.5 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <h2 class="text-base font-semibold text-white">Social Links</h2>
+                                    <p class="text-xs text-slate-500">Shown on your profile if visibility allows</p>
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                                @foreach([
+                                    ['website', 'Website', 'https://example.com'],
+                                    ['facebook', 'Facebook', 'https://facebook.com/username'],
+                                    ['twitter', 'Twitter / X', 'https://x.com/username'],
+                                    ['linkedin', 'LinkedIn', 'https://linkedin.com/in/username'],
+                                    ['github', 'GitHub', 'https://github.com/username'],
+                                    ['instagram', 'Instagram', 'https://instagram.com/username'],
+                                    ['youtube', 'YouTube', 'https://youtube.com/@username'],
+                                ] as [$field, $label, $placeholder])
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-400 mb-2">{{ $label }}</label>
+                                    <input type="url" name="{{ $field }}" value="{{ old($field, $user->profile->$field) }}"
+                                        class="w-full px-4 py-3 rounded-xl bg-white/[0.05] border border-white/[0.05] text-slate-200 placeholder-slate-600 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500/30 transition-all"
+                                        placeholder="{{ $placeholder }}">
+                                </div>
+                                @endforeach
                             </div>
                         </div>
 
@@ -263,6 +397,55 @@
                             <span class="text-xs text-slate-600">Changes are saved immediately</span>
                         </div>
                     </form>
+
+                    {{-- Profile Visibility --}}
+                    <div class="rounded-2xl border border-white/[0.04] bg-white/[0.025] backdrop-blur-xl p-7 mt-5">
+                        <div class="flex items-center gap-3 mb-6 pb-5 border-b border-white/[0.04]">
+                            <div class="w-9 h-9 rounded-xl bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center flex-shrink-0">
+                                <svg class="w-4.5 h-4.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                                </svg>
+                            </div>
+                            <div>
+                                <h2 class="text-base font-semibold text-white">Profile Visibility</h2>
+                                <p class="text-xs text-slate-500">Control who can see your profile and which details are shown</p>
+                            </div>
+                        </div>
+
+                        <form method="POST" action="{{ route('profile.visibility.update') }}" class="space-y-5">
+                            @csrf
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-400 mb-2">Who can see your profile</label>
+                                <select name="profile_visibility"
+                                    class="w-full sm:w-64 px-4 py-3 rounded-xl bg-white/[0.05] border border-white/[0.05] text-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500/30 transition-all appearance-none">
+                                    @foreach(['public' => 'Public', 'members_only' => 'Members Only', 'private' => 'Private'] as $val => $label)
+                                        <option value="{{ $val }}" class="bg-[#0d1117]" {{ $user->profile->profile_visibility === $val ? 'selected' : '' }}>{{ $label }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+
+                            <div class="space-y-3">
+                                @foreach([
+                                    ['show_email', 'Show email on profile', $user->profile->show_email],
+                                    ['show_phone', 'Show phone on profile', $user->profile->show_phone],
+                                    ['show_social_links', 'Show social links on profile', $user->profile->show_social_links],
+                                ] as [$field, $label, $enabled])
+                                <label class="flex items-center justify-between gap-4 p-4 rounded-xl border border-white/[0.04] hover:border-white/[0.08] hover:bg-white/[0.02] cursor-pointer transition-all">
+                                    <span class="text-sm font-medium text-slate-200">{{ $label }}</span>
+                                    <label class="toggle-switch">
+                                        <input type="checkbox" name="{{ $field }}" value="1" {{ $enabled ? 'checked' : '' }}>
+                                        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                                    </label>
+                                </label>
+                                @endforeach
+                            </div>
+
+                            <button type="submit"
+                                class="px-7 py-3 rounded-xl font-semibold text-sm text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 shadow-lg shadow-emerald-500/20 transition-all active:scale-[.98]">
+                                Save Visibility
+                            </button>
+                        </form>
+                    </div>
                 </div>
 
                 {{-- ══════════════════════════════════════════════════════ --}}
@@ -577,7 +760,7 @@
                                 </div>
                             </div>
 
-                            @php $notifPrefs = $user->profile?->notification_preferences ?? []; @endphp
+                            @php $notifPrefs = $user->profile->notification_preferences ?? []; @endphp
 
                             <div class="space-y-3">
                                 @foreach([

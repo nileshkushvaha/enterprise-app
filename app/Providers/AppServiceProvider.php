@@ -10,13 +10,21 @@ use App\Models\PostCategory;
 use App\Models\SchedulerHistory;
 use App\Models\Tag;
 use App\Models\User;
+use App\Models\UserEducation;
+use App\Models\UserExperience;
+use App\Models\UserProfile;
 use App\Observers\ActivityObserver;
 use App\Observers\PageObserver;
 use App\Observers\PostCategoryObserver;
 use App\Observers\PostObserver;
 use App\Observers\TagObserver;
+use App\Observers\UserEducationObserver;
+use App\Observers\UserExperienceObserver;
+use App\Observers\UserObserver;
+use App\Observers\UserProfileObserver;
 use App\Policies\ActivityLogPolicy;
 use App\Policies\CacheManagerPolicy;
+use App\Policies\InstructorPolicy;
 use App\Policies\NavigationMenuPolicy;
 use App\Policies\PermissionPolicy;
 use App\Policies\ProfilePolicy;
@@ -24,6 +32,8 @@ use App\Policies\QueueMonitorPolicy;
 use App\Policies\RolePolicy;
 use App\Policies\SchedulerMonitorPolicy;
 use App\Policies\Security\SecurityPolicy;
+use App\Policies\UserEducationPolicy;
+use App\Policies\UserExperiencePolicy;
 use App\Settings\LoginSecuritySettings;
 use App\View\Composers\AccountPortalComposer;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -75,7 +85,17 @@ class AppServiceProvider extends ServiceProvider
      */
     private function registerViewComposers(): void
     {
-        View::composer(['dashboard.index', 'profile.show'], AccountPortalComposer::class);
+        View::composer([
+            'dashboard.index',
+            'profile.show',
+            'student.courses.index',
+            'student.progress.index',
+            'student.certificates.index',
+            'student.orders.index',
+            'student.wishlist.index',
+            'student.reviews.index',
+            'student.notifications.index',
+        ], AccountPortalComposer::class);
     }
 
     /**
@@ -95,6 +115,10 @@ class AppServiceProvider extends ServiceProvider
         Post::observe(PostObserver::class);
         PostCategory::observe(PostCategoryObserver::class);
         Tag::observe(TagObserver::class);
+        User::observe(UserObserver::class);
+        UserExperience::observe(UserExperienceObserver::class);
+        UserEducation::observe(UserEducationObserver::class);
+        UserProfile::observe(UserProfileObserver::class);
     }
 
     private function registerPolicies(): void
@@ -110,6 +134,8 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(Activity::class, ActivityLogPolicy::class);
         Gate::policy(Role::class, RolePolicy::class);
         Gate::policy(Permission::class, PermissionPolicy::class);
+        Gate::policy(UserExperience::class, UserExperiencePolicy::class);
+        Gate::policy(UserEducation::class, UserEducationPolicy::class);
 
         Gate::define('cache_manager.view', [CacheManagerPolicy::class, 'viewPage']);
         Gate::define('cache_manager.clear', [CacheManagerPolicy::class, 'clearApplicationCache']);
@@ -119,6 +145,9 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('scheduler_monitor.run', [SchedulerMonitorPolicy::class, 'runTask']);
 
         Gate::define('queue_monitor.view', [QueueMonitorPolicy::class, 'viewPage']);
+
+        Gate::define('instructor.viewAny', [InstructorPolicy::class, 'viewAny']);
+        Gate::define('instructor.view', [InstructorPolicy::class, 'view']);
 
         Gate::define('profile.view', [ProfilePolicy::class, 'view']);
         Gate::define('profile.update', [ProfilePolicy::class, 'update']);

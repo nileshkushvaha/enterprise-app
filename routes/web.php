@@ -14,13 +14,22 @@ use App\Http\Controllers\Auth\ResetPasswordController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\ContactFormController;
 use App\Http\Controllers\Dashboard\DashboardController;
+use App\Http\Controllers\Instructor\InstructorController;
 use App\Http\Controllers\PageController;
 use App\Http\Controllers\PostController;
 use App\Http\Controllers\Profile\ProfileController;
+use App\Http\Controllers\Profile\PublicProfileController;
 use App\Http\Controllers\Profile\SecurityController;
 use App\Http\Controllers\Profile\SessionController;
 use App\Http\Controllers\SearchController;
 use App\Http\Controllers\SeoController;
+use App\Http\Controllers\Student\StudentCertificatesController;
+use App\Http\Controllers\Student\StudentCoursesController;
+use App\Http\Controllers\Student\StudentNotificationsController;
+use App\Http\Controllers\Student\StudentOrdersController;
+use App\Http\Controllers\Student\StudentProgressController;
+use App\Http\Controllers\Student\StudentReviewsController;
+use App\Http\Controllers\Student\StudentWishlistController;
 use App\Http\Controllers\TagController;
 use App\Http\Middleware\EnsureAccountIsActive;
 use App\Models\User;
@@ -142,6 +151,33 @@ Route::name('auth.')->middleware('auth')->group(function (): void {
 
 });
 
+// ── Student Dashboard sub-pages (auth + active account + frontend portal) ──
+Route::prefix('dashboard')->name('dashboard.')->middleware([
+    'auth',
+    'email.verify.if.required',
+    EnsureAccountIsActive::class,
+    'password.change.required',
+    'session.track',
+    'frontend.portal',
+])->group(function (): void {
+    Route::get('/courses', [StudentCoursesController::class,      'index'])->name('courses');
+    Route::get('/progress', [StudentProgressController::class,     'index'])->name('progress');
+    Route::get('/certificates', [StudentCertificatesController::class, 'index'])->name('certificates');
+    Route::get('/orders', [StudentOrdersController::class,       'index'])->name('orders');
+    Route::get('/wishlist', [StudentWishlistController::class,     'index'])->name('wishlist');
+    Route::get('/reviews', [StudentReviewsController::class,      'index'])->name('reviews');
+    Route::get('/notifications', [StudentNotificationsController::class, 'index'])->name('notifications');
+    Route::post('/notifications/read-all', [StudentNotificationsController::class, 'markAllRead'])->name('notifications.read-all');
+    Route::post('/notifications/{id}/read', [StudentNotificationsController::class, 'markRead'])->name('notifications.read');
+});
+
+// ── Instructors (public — visibility enforced in the controller) ──────
+Route::get('/instructors', [InstructorController::class, 'index'])->name('instructors.index');
+Route::get('/instructors/{user:slug}', [InstructorController::class, 'show'])->name('instructors.show');
+
+// ── Public Profile (guests + authenticated — visibility enforced in the controller) ──
+Route::get('/profile/{user}', [PublicProfileController::class, 'show'])->name('profile.public');
+
 // ── Profile (auth + conditional email verification + active + password) ─────────
 Route::prefix('profile')->name('profile.')->middleware([
     'auth',
@@ -157,6 +193,9 @@ Route::prefix('profile')->name('profile.')->middleware([
     Route::post('/password', [ProfileController::class, 'changePassword'])->name('password');
     Route::post('/avatar', [ProfileController::class, 'uploadAvatar'])->name('avatar.upload');
     Route::delete('/avatar', [ProfileController::class, 'deleteAvatar'])->name('avatar.delete');
+    Route::post('/cover', [ProfileController::class, 'uploadCover'])->name('cover.upload');
+    Route::delete('/cover', [ProfileController::class, 'deleteCover'])->name('cover.delete');
+    Route::post('/visibility', [ProfileController::class, 'updateVisibility'])->name('visibility.update');
 
     // Session Management
     Route::delete('/sessions/all', [SessionController::class, 'revokeAll'])->name('sessions.revoke-all');

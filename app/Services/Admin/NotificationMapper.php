@@ -182,6 +182,31 @@ final class NotificationMapper
                 'priority' => 2,
             ],
 
+            // ── Instructor profile lifecycle ───────────────────────────────
+            $log === 'instructor' && $event === 'profile_approved' => [
+                'title' => 'Instructor Profile Approved',
+                'actor_label' => 'Approved by',
+                'icon' => 'heroicon-o-check-badge',
+                'color' => 'success',
+                'priority' => 2,
+            ],
+
+            $log === 'instructor' && $event === 'profile_rejected' => [
+                'title' => 'Instructor Profile Rejected',
+                'actor_label' => 'Rejected by',
+                'icon' => 'heroicon-o-x-circle',
+                'color' => 'danger',
+                'priority' => 2,
+            ],
+
+            $log === 'instructor' && $event === 'profile_published' => [
+                'title' => 'Instructor Profile Published',
+                'actor_label' => 'Published by',
+                'icon' => 'heroicon-o-globe-alt',
+                'color' => 'success',
+                'priority' => 1,
+            ],
+
             // ── Everything else: silence ──────────────────────────────────
             default => null,
         };

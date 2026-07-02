@@ -6,6 +6,10 @@ use App\Filament\Resources\Users\Pages\CreateUser;
 use App\Filament\Resources\Users\Pages\EditUser;
 use App\Filament\Resources\Users\Pages\ListUsers;
 use App\Filament\Resources\Users\Pages\ViewUser;
+use App\Filament\Resources\Users\RelationManagers\ActivityLogRelationManager;
+use App\Filament\Resources\Users\RelationManagers\EducationsRelationManager;
+use App\Filament\Resources\Users\RelationManagers\ExperiencesRelationManager;
+use App\Filament\Resources\Users\RelationManagers\LoginHistoryRelationManager;
 use App\Filament\Resources\Users\Schemas\UserForm;
 use App\Filament\Resources\Users\Tables\UsersTable;
 use App\Models\User;
@@ -39,7 +43,12 @@ class UserResource extends Resource
 
     public static function getRelations(): array
     {
-        return [];
+        return [
+            ExperiencesRelationManager::class,
+            EducationsRelationManager::class,
+            ActivityLogRelationManager::class,
+            LoginHistoryRelationManager::class,
+        ];
     }
 
     public static function getPages(): array

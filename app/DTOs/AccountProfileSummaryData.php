@@ -17,6 +17,7 @@ final readonly class AccountProfileSummaryData
         public string $name,
         public string $email,
         public ?string $avatarUrl,
+        public ?string $coverUrl,
         public string $initial,
         public bool $emailVerified,
         public ?string $lastLoginHuman,
@@ -34,7 +35,8 @@ final readonly class AccountProfileSummaryData
         return new self(
             name: $displayName,
             email: $user->email,
-            avatarUrl: $user->avatar ? asset('storage/'.$user->avatar) : null,
+            avatarUrl: $user->profile->avatar_url,
+            coverUrl: $user->profile->cover_url,
             initial: strtoupper(substr($user->first_name ?? $user->name, 0, 1)),
             emailVerified: (bool) $user->email_verified_at,
             lastLoginHuman: $user->last_login_at?->diffForHumans(),

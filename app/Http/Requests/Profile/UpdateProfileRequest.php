@@ -21,19 +21,31 @@ class UpdateProfileRequest extends FormRequest
             'last_name' => ['nullable', 'string', 'max:100'],
             // Email is frozen — never accepted from the profile form. See
             // UpdateProfileAction, which never writes to users.email.
+            'headline' => ['nullable', 'string', 'max:255'],
+            'designation' => ['nullable', 'string', 'max:255'],
+            'short_bio' => ['nullable', 'string', 'max:160'],
+            'bio' => ['nullable', 'string', 'max:2000'],
             'phone' => ['nullable', 'string', 'max:20'],
             'gender' => ['nullable', Rule::in(['male', 'female', 'other', 'prefer_not_to_say'])],
             'date_of_birth' => ['nullable', 'date', 'before:today', 'after:1900-01-01'],
             'address' => ['nullable', 'string', 'max:500'],
             'city' => ['nullable', 'string', 'max:100'],
-            'state' => ['nullable', 'string', 'max:100'],
             'country_id' => ['nullable', 'integer', 'exists:countries,id'],
+            'state_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('states', 'id')->where(fn ($query) => $query->where('country_id', $this->input('country_id'))),
+            ],
             'postal_code' => ['nullable', 'string', 'max:20'],
             'timezone' => ['nullable', 'string', 'timezone:all'],
             'language' => ['nullable', 'string', 'max:10'],
-            'date_format' => ['nullable', Rule::in(['Y-m-d', 'd/m/Y', 'm/d/Y', 'd-m-Y'])],
-            'time_format' => ['nullable', Rule::in(['H:i', 'h:i A'])],
-            'theme' => ['nullable', Rule::in(['dark', 'light', 'system'])],
+            'website' => ['nullable', 'url', 'max:255'],
+            'facebook' => ['nullable', 'url', 'max:255'],
+            'twitter' => ['nullable', 'url', 'max:255'],
+            'linkedin' => ['nullable', 'url', 'max:255'],
+            'github' => ['nullable', 'url', 'max:255'],
+            'instagram' => ['nullable', 'url', 'max:255'],
+            'youtube' => ['nullable', 'url', 'max:255'],
             'email_notifications' => ['nullable', 'boolean'],
             'system_notifications' => ['nullable', 'boolean'],
             'marketing_emails' => ['nullable', 'boolean'],
@@ -47,6 +59,7 @@ class UpdateProfileRequest extends FormRequest
             'date_of_birth.before' => 'Date of birth must be in the past.',
             'timezone.timezone' => 'Please select a valid timezone.',
             'country_id.exists' => 'Please select a valid country.',
+            'state_id.exists' => 'Please select a state that belongs to the chosen country.',
         ];
     }
 

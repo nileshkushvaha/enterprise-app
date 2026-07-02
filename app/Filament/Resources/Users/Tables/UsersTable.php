@@ -24,11 +24,11 @@ class UsersTable
     public static function configure(Table $table): Table
     {
         return $table
+            ->modifyQueryUsing(fn (Builder $query) => $query->with(['profile.media']))
             ->columns([
-                ImageColumn::make('avatar')
+                ImageColumn::make('avatar_url')
                     ->label('')
                     ->circular()
-                    ->disk('public')
                     ->defaultImageUrl(fn ($record) => 'https://ui-avatars.com/api/?name='.urlencode($record->name).'&color=ffffff&background=6366f1')
                     ->size(40),
 
@@ -82,6 +82,12 @@ class UsersTable
                 TextColumn::make('updated_at')
                     ->label('Updated')
                     ->since()
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
+
+                TextColumn::make('profile.profile_completion')
+                    ->label('Profile')
+                    ->suffix('%')
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
             ])

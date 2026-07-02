@@ -49,6 +49,43 @@ final class AccountMenuService
                 'icon' => 'user',
                 'permission' => 'profile.view',
             ],
+            [
+                'label' => 'My Courses',
+                'route' => 'dashboard.courses',
+                'icon' => 'book',
+                'permission' => null,
+            ],
+            [
+                'label' => 'Certificates',
+                'route' => 'dashboard.certificates',
+                'icon' => 'badge',
+                'permission' => null,
+            ],
+            [
+                'label' => 'Orders',
+                'route' => 'dashboard.orders',
+                'icon' => 'bag',
+                'permission' => null,
+            ],
+            [
+                'label' => 'Wishlist',
+                'route' => 'dashboard.wishlist',
+                'icon' => 'heart',
+                'permission' => null,
+            ],
+            [
+                'label' => 'Reviews',
+                'route' => 'dashboard.reviews',
+                'icon' => 'star',
+                'permission' => null,
+            ],
+            [
+                'label' => 'Notifications',
+                'route' => 'dashboard.notifications',
+                'icon' => 'bell',
+                'permission' => null,
+                'badge' => fn (User $user): mixed => $user->unreadNotifications()->count() ?: null,
+            ],
         ];
     }
 
@@ -68,7 +105,7 @@ final class AccountMenuService
             'url' => route($item['route']),
             'route' => $item['route'],
             'icon' => $item['icon'] ?? 'default',
-            'badge' => $item['badge'] ?? null,
+            'badge' => is_callable($item['badge'] ?? null) ? ($item['badge'])($user) : ($item['badge'] ?? null),
             'children' => $children,
         ];
     }

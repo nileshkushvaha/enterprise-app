@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Pages;
 
 use App\Models\Country;
+use App\Models\State;
 use BackedEnum;
 use Filament\Auth\Pages\EditProfile;
 use Filament\Forms\Components\DatePicker;
@@ -77,21 +78,18 @@ class AdminProfile extends EditProfile
     // ── Fill form: merge user + profile data ─────────────────────────
     protected function mutateFormDataBeforeFill(array $data): array
     {
-        $user = $this->getUser();
-        $profile = $user->profile;
+        $profile = $this->getUser()->profile;
 
-        if ($profile) {
-            $data['phone'] = $profile->phone;
-            $data['gender'] = $profile->gender;
-            $data['date_of_birth'] = $profile->date_of_birth?->format('Y-m-d');
-            $data['address'] = $profile->address;
-            $data['city'] = $profile->city;
-            $data['state'] = $profile->state;
-            $data['country_id'] = $profile->country_id;
-            $data['postal_code'] = $profile->postal_code;
-            $data['timezone'] = $profile->timezone;
-            $data['language'] = $profile->language;
-        }
+        $data['phone'] = $profile->phone;
+        $data['gender'] = $profile->gender;
+        $data['date_of_birth'] = $profile->date_of_birth?->format('Y-m-d');
+        $data['address'] = $profile->address;
+        $data['city'] = $profile->city;
+        $data['state_id'] = $profile->state_id;
+        $data['country_id'] = $profile->country_id;
+        $data['postal_code'] = $profile->postal_code;
+        $data['timezone'] = $profile->timezone;
+        $data['language'] = $profile->language;
 
         return $data;
     }
@@ -103,7 +101,7 @@ class AdminProfile extends EditProfile
 
         $profileFields = [
             'phone', 'gender', 'date_of_birth',
-            'address', 'city', 'state', 'country_id', 'postal_code',
+            'address', 'city', 'state_id', 'country_id', 'postal_code',
             'timezone', 'language',
         ];
 
@@ -120,10 +118,7 @@ class AdminProfile extends EditProfile
         $record->update($data);
 
         if (! empty($profileData)) {
-            $record->profile()->updateOrCreate(
-                ['user_id' => $record->id],
-                $profileData
-            );
+            $record->profile->update($profileData);
         }
 
         return $record;
@@ -198,22 +193,34 @@ class AdminProfile extends EditProfile
 
                         Grid::make(2)
                             ->schema([
-                                TextInput::make('city')
-                                    ->label('City')
-                                    ->maxLength(100),
+                                Select::make('country_id')
+                                    ->label('Country')
+                                    ->options(Country::query()->active()->orderBy('name')->pluck('name', 'id'))
+                                    ->searchable()
+                                    ->native(false)
+                                    ->live()
+                                    ->afterStateUpdated(fn ($set) => $set('state_id', null)),
 
-                                TextInput::make('state')
+                                Select::make('state_id')
                                     ->label('State / Province')
-                                    ->maxLength(100),
+                                    ->options(function ($get) {
+                                        $countryId = $get('country_id');
+
+                                        if (! $countryId) {
+                                            return [];
+                                        }
+
+                                        return State::query()->active()->where('country_id', $countryId)->orderBy('name')->pluck('name', 'id');
+                                    })
+                                    ->searchable()
+                                    ->native(false),
                             ]),
 
                         Grid::make(2)
                             ->schema([
-                                Select::make('country_id')
-                                    ->label('Country')
-                                    ->options(Country::orderBy('name')->pluck('name', 'id'))
-                                    ->searchable()
-                                    ->native(false),
+                                TextInput::make('city')
+                                    ->label('City')
+                                    ->maxLength(100),
 
                                 TextInput::make('postal_code')
                                     ->label('Postal Code')

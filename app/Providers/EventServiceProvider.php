@@ -15,6 +15,7 @@ use App\Listeners\Auth\SendApprovalNotification;
 use App\Listeners\Auth\SendRegistrationNotifications;
 use App\Listeners\Auth\SendWelcomeNotification;
 use App\Listeners\NotifyAdminsOnActivity;
+use App\Listeners\NotifyInstructorOnProfileActivity;
 use Illuminate\Auth\Events\Verified;
 use Illuminate\Foundation\Support\Providers\EventServiceProvider as ServiceProvider;
 
@@ -23,6 +24,7 @@ class EventServiceProvider extends ServiceProvider
     protected $listen = [
         ActivityCreated::class => [
             NotifyAdminsOnActivity::class,
+            NotifyInstructorOnProfileActivity::class,
         ],
         UserRegistered::class => [
             SendRegistrationNotifications::class,

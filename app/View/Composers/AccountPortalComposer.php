@@ -29,7 +29,7 @@ final class AccountPortalComposer
             return;
         }
 
-        $user->loadMissing('profile');
+        $user->loadMissing('profile.media');
 
         $view->with([
             'accountMenu' => $this->menuService->items($user),

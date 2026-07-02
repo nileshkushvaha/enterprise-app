@@ -9,19 +9,23 @@ use App\Services\PortalResolver;
 use Filament\Models\Contracts\FilamentUser;
 use Filament\Panel;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Str;
 use Spatie\Activitylog\Models\Concerns\LogsActivity;
 use Spatie\Activitylog\Support\LogOptions;
+use Spatie\MediaLibrary\HasMedia;
+use Spatie\MediaLibrary\InteractsWithMedia;
 use Spatie\Permission\Traits\HasRoles;
 
-class User extends Authenticatable implements FilamentUser, MustVerifyEmail
+class User extends Authenticatable implements FilamentUser, HasMedia, MustVerifyEmail
 {
-    use HasFactory, HasRoles, LogsActivity, Notifiable;
+    use HasFactory, HasRoles, InteractsWithMedia, LogsActivity, Notifiable;
 
     // ── Status constants ────────────────────────────────────────────
     public const STATUS_PENDING = 'pending_verification';
@@ -41,12 +45,12 @@ class User extends Authenticatable implements FilamentUser, MustVerifyEmail
 
     protected $fillable = [
         'name',
+        'slug',
         'first_name',
         'last_name',
         'email',
         'password',
         'status',
-        'avatar',
         'email_verified_at',
         'failed_login_count',
         'locked_at',
@@ -102,12 +106,38 @@ class User extends Authenticatable implements FilamentUser, MustVerifyEmail
         return $this->hasMany(Post::class, 'author_id');
     }
 
+    public function activities(): MorphMany
+    {
+        return $this->morphMany(Activity::class, 'causer')->latest();
+    }
+
+    public function experiences(): HasMany
+    {
+        return $this->hasMany(UserExperience::class)->orderBy('display_order');
+    }
+
+    public function educations(): HasMany
+    {
+        return $this->hasMany(UserEducation::class)->orderBy('display_order');
+    }
+
     // ── Accessors ────────────────────────────────────────────────────
 
     public function getFullNameAttribute(): string
     {
         return trim(($this->first_name ?? '').' '.($this->last_name ?? ''))
             ?: $this->name;
+    }
+
+    /**
+     * Convenience accessor for Filament/UI code — avatars live on the
+     * profile (Spatie Media Library), never on the identity table itself.
+     */
+    public function avatarUrl(): Attribute
+    {
+        return Attribute::make(
+            get: fn (): ?string => $this->profile?->avatarUrl,
+        );
     }
 
     // ── Authorization helpers ────────────────────────────────────────
@@ -230,6 +260,22 @@ class User extends Authenticatable implements FilamentUser, MustVerifyEmail
         }
 
         return $this->isActive() && $this->hasVerifiedEmail();
+    }
+
+    // ── Route key ───────────────────────────────────────────────────
+
+    public function getRouteKeyName(): string
+    {
+        return 'slug';
+    }
+
+    // ── Media ───────────────────────────────────────────────────────
+
+    public function registerMediaCollections(): void
+    {
+        $this->addMediaCollection('instructor_cover')
+            ->singleFile()
+            ->acceptsMimeTypes(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
     }
 
     // ── Activity Log ─────────────────────────────────────────────────

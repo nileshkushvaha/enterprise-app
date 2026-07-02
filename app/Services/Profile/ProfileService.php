@@ -8,10 +8,10 @@ use App\Actions\Profile\UpdateProfileAction;
 use App\Actions\Profile\UploadAvatarAction;
 use App\Models\User;
 use App\Notifications\Auth\PasswordChangedNotification;
+use App\Services\AuditTrailService;
 use App\Services\Auth\PasswordHistoryService;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
 
 final class ProfileService
@@ -20,56 +20,33 @@ final class ProfileService
         private readonly UpdateProfileAction $updateProfile,
         private readonly UploadAvatarAction $uploadAvatar,
         private readonly PasswordHistoryService $historyService,
+        private readonly ProfileCompletionService $completionService,
+        private readonly AuditTrailService $auditTrail,
     ) {}
 
     public function update(User $user, array $data): User
     {
         $updated = $this->updateProfile->execute($user, $data);
 
-        activity('profile')
-            ->causedBy($user)
-            ->performedOn($user)
-            ->withProperties(['fields' => array_keys(array_filter($data))])
-            ->log('Profile updated');
+        $this->auditTrail->logUser($user, 'profile', 'updated', 'Profile updated', $user, [
+            'fields' => array_keys(array_filter($data)),
+        ]);
 
-        Cache::forget($this->completionCacheKey($user));
+        $this->completionService->recalculateAndStore($updated);
 
         return $updated;
     }
 
     /**
-     * Weighted profile-completion percentage, cached per user since it is
-     * read on every Account Portal page via AccountPortalComposer.
+     * Persisted percentage (recalculated on every profile/avatar/cover/
+     * visibility change by ProfileCompletionService) — a plain column read,
+     * no computation on the request path.
      */
     public function completion(User $user): int
     {
-        return Cache::remember(
-            $this->completionCacheKey($user),
-            now()->addMinutes(10),
-            function () use ($user): int {
-                $user->loadMissing('profile');
-                $profile = $user->profile;
+        $user->loadMissing('profile');
 
-                $checks = [
-                    filled($user->first_name),
-                    filled($user->last_name),
-                    (bool) $user->email_verified_at,
-                    filled($user->avatar),
-                    filled($profile?->phone),
-                    filled($profile?->address),
-                    filled($profile?->country_id),
-                ];
-
-                $completed = count(array_filter($checks));
-
-                return (int) round(($completed / count($checks)) * 100);
-            },
-        );
-    }
-
-    private function completionCacheKey(User $user): string
-    {
-        return "account.profile-completion.{$user->id}";
+        return $user->profile->profile_completion ?? 0;
     }
 
     public function changePassword(User $user, string $newPassword, string $ipAddress = '127.0.0.1'): void
@@ -86,12 +63,9 @@ final class ProfileService
 
         $this->historyService->store($user, $oldHash);
 
-        activity('profile')
-            ->causedBy($user)
-            ->performedOn($user)
-            ->event('password_changed')
-            ->withProperties(['ip' => $ipAddress])
-            ->log('Password changed');
+        $this->auditTrail->logUser($user, 'profile', 'password_changed', 'Password changed', $user, [
+            'ip' => $ipAddress,
+        ]);
 
         $user->notify(new PasswordChangedNotification(
             ipAddress: $ipAddress,
@@ -99,29 +73,48 @@ final class ProfileService
         ));
     }
 
-    public function uploadAvatar(User $user, UploadedFile $file): string
+    public function uploadAvatar(User $user, UploadedFile $file): void
     {
-        $path = $this->uploadAvatar->execute($user, $file);
+        $this->uploadAvatar->execute($user, $file, 'avatar');
 
-        activity('profile')
-            ->causedBy($user)
-            ->performedOn($user)
-            ->withProperties(['path' => $path])
-            ->log('Profile photo updated');
+        $this->auditTrail->logUser($user, 'profile', 'avatar_changed', 'Profile photo updated', $user);
 
-        Cache::forget($this->completionCacheKey($user));
-
-        return $path;
+        $this->completionService->recalculateAndStore($user);
     }
 
     public function deleteAvatar(User $user): void
     {
-        $this->uploadAvatar->delete($user);
-        Cache::forget($this->completionCacheKey($user));
+        $this->uploadAvatar->delete($user, 'avatar');
 
-        activity('profile')
-            ->causedBy($user)
-            ->performedOn($user)
-            ->log('Profile photo removed');
+        $this->auditTrail->logUser($user, 'profile', 'avatar_changed', 'Profile photo removed', $user);
+
+        $this->completionService->recalculateAndStore($user);
+    }
+
+    public function uploadCover(User $user, UploadedFile $file): void
+    {
+        $this->uploadAvatar->execute($user, $file, 'cover');
+
+        $this->auditTrail->logUser($user, 'profile', 'cover_changed', 'Cover photo updated', $user);
+
+        $this->completionService->recalculateAndStore($user);
+    }
+
+    public function deleteCover(User $user): void
+    {
+        $this->uploadAvatar->delete($user, 'cover');
+
+        $this->auditTrail->logUser($user, 'profile', 'cover_changed', 'Cover photo removed', $user);
+
+        $this->completionService->recalculateAndStore($user);
+    }
+
+    public function updateVisibility(User $user, array $data): void
+    {
+        $user->profile->update($data);
+
+        $this->auditTrail->logUser($user, 'profile', 'visibility_changed', 'Profile visibility updated', $user, [
+            'fields' => array_keys($data),
+        ]);
     }
 }
