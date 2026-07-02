@@ -86,6 +86,12 @@ final class AccountMenuService
                 'permission' => null,
                 'badge' => fn (User $user): mixed => $user->unreadNotifications()->count() ?: null,
             ],
+            [
+                'label' => 'FAQs',
+                'route' => 'dashboard.faqs',
+                'icon' => 'help',
+                'permission' => null,
+            ],
         ];
     }
 

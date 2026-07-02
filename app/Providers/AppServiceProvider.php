@@ -3,6 +3,8 @@
 namespace App\Providers;
 
 use App\Models\Activity;
+use App\Models\Faq;
+use App\Models\FaqCategory;
 use App\Models\NavigationMenu;
 use App\Models\Page;
 use App\Models\Post;
@@ -14,6 +16,8 @@ use App\Models\UserEducation;
 use App\Models\UserExperience;
 use App\Models\UserProfile;
 use App\Observers\ActivityObserver;
+use App\Observers\FaqCategoryObserver;
+use App\Observers\FaqObserver;
 use App\Observers\PageObserver;
 use App\Observers\PostCategoryObserver;
 use App\Observers\PostObserver;
@@ -24,6 +28,8 @@ use App\Observers\UserObserver;
 use App\Observers\UserProfileObserver;
 use App\Policies\ActivityLogPolicy;
 use App\Policies\CacheManagerPolicy;
+use App\Policies\FaqCategoryPolicy;
+use App\Policies\FaqPolicy;
 use App\Policies\InstructorPolicy;
 use App\Policies\NavigationMenuPolicy;
 use App\Policies\PermissionPolicy;
@@ -95,6 +101,7 @@ class AppServiceProvider extends ServiceProvider
             'student.wishlist.index',
             'student.reviews.index',
             'student.notifications.index',
+            'dashboard.faqs.index',
         ], AccountPortalComposer::class);
     }
 
@@ -111,6 +118,8 @@ class AppServiceProvider extends ServiceProvider
     private function registerObservers(): void
     {
         Activity::observe(ActivityObserver::class);
+        Faq::observe(FaqObserver::class);
+        FaqCategory::observe(FaqCategoryObserver::class);
         Page::observe(PageObserver::class);
         Post::observe(PostObserver::class);
         PostCategory::observe(PostCategoryObserver::class);
@@ -130,6 +139,8 @@ class AppServiceProvider extends ServiceProvider
         // Filament default-allow full User management (view/create/delete any account)
         // to every authenticated user, since Filament treats "no matching policy method"
         // as allowed rather than denied.
+        Gate::policy(Faq::class, FaqPolicy::class);
+        Gate::policy(FaqCategory::class, FaqCategoryPolicy::class);
         Gate::policy(NavigationMenu::class, NavigationMenuPolicy::class);
         Gate::policy(Activity::class, ActivityLogPolicy::class);
         Gate::policy(Role::class, RolePolicy::class);

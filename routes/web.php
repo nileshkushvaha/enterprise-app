@@ -14,6 +14,8 @@ use App\Http\Controllers\Auth\ResetPasswordController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\ContactFormController;
 use App\Http\Controllers\Dashboard\DashboardController;
+use App\Http\Controllers\Faq\DashboardFaqController;
+use App\Http\Controllers\Faq\PublicFaqController;
 use App\Http\Controllers\Instructor\InstructorController;
 use App\Http\Controllers\PageController;
 use App\Http\Controllers\PostController;
@@ -45,6 +47,9 @@ Route::get('/', [PageController::class, 'home'])->name('home');
 Route::get('/search', [SearchController::class, 'index'])->name('search.index');
 Route::get('/sitemap.xml', [SeoController::class, 'sitemap'])->name('seo.sitemap');
 Route::get('/robots.txt', [SeoController::class, 'robots'])->name('seo.robots');
+
+// ── FAQ / Help Center (public — published, public-audience only) ──────
+Route::get('/faqs', [PublicFaqController::class, 'index'])->name('faqs.index');
 
 // ── Blog ─────────────────────────────────────────────────────────────
 Route::get('/blog', [PostController::class, 'index'])->name('blog.index');
@@ -169,6 +174,7 @@ Route::prefix('dashboard')->name('dashboard.')->middleware([
     Route::get('/notifications', [StudentNotificationsController::class, 'index'])->name('notifications');
     Route::post('/notifications/read-all', [StudentNotificationsController::class, 'markAllRead'])->name('notifications.read-all');
     Route::post('/notifications/{id}/read', [StudentNotificationsController::class, 'markRead'])->name('notifications.read');
+    Route::get('/faqs', [DashboardFaqController::class, 'index'])->name('faqs');
 });
 
 // ── Instructors (public — visibility enforced in the controller) ──────

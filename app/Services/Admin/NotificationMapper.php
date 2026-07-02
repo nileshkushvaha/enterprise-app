@@ -182,6 +182,23 @@ final class NotificationMapper
                 'priority' => 2,
             ],
 
+            // ── FAQs ──────────────────────────────────────────────────────
+            $log === 'faqs' && $event === 'published' => [
+                'title' => 'FAQ Published',
+                'actor_label' => 'Published by',
+                'icon' => 'heroicon-o-question-mark-circle',
+                'color' => 'success',
+                'priority' => 1,
+            ],
+
+            $log === 'faqs' && $event === 'deleted' => [
+                'title' => 'FAQ Deleted',
+                'actor_label' => 'Deleted by',
+                'icon' => 'heroicon-o-trash',
+                'color' => 'danger',
+                'priority' => 1,
+            ],
+
             // ── Instructor profile lifecycle ───────────────────────────────
             $log === 'instructor' && $event === 'profile_approved' => [
                 'title' => 'Instructor Profile Approved',
