@@ -1,14 +1,19 @@
 @php
     $isPaid = (bool) ($selectedType['is_paid'] ?? false);
     $showCalendar = in_array($currentPhase, ['date', 'time'], true);
-    $showTimes = $currentPhase === 'time' && $date !== null;
-    $selectedDay = $date ? \Carbon\CarbonImmutable::parse($date, $timezone) : null;
+    // A repeating schedule shares ONE time across every class, so the
+    // times shown are the first class's — the start date may not be a
+    // class day at all.
+    $timesDate = $recurring ? $firstClassDate : $date;
+    $showTimes = $currentPhase === 'time' && $timesDate !== null;
+    $selectedDay = $timesDate ? \Carbon\CarbonImmutable::parse($timesDate, $timezone) : null;
+    $durationMinutes = (int) ($selectedType['duration_minutes'] ?? 0);
     $tzCity = str_replace('_', ' ', \Illuminate\Support\Str::afterLast($timezone, '/'));
     $tzOffset = 'GMT'.\Carbon\CarbonImmutable::now($timezone)->format('P');
-    $calendarTargets = 'selectBillingMode,selectFrequency,previousMonth,nextMonth,continueStage,editStage,editPhase';
+    $calendarTargets = 'selectBillingMode,toggleWeekday,setEndCondition,setOccurrences,setEndDate,previousMonth,nextMonth,continueStage,editStage,editPhase';
 @endphp
 
-<div class="space-y-6">
+<div class="space-y-5">
     <div>
         <h2 data-booking-step-title tabindex="-1" class="text-2xl font-black tracking-tight text-fg-strong outline-none">Choose your schedule</h2>
         <p class="mt-1.5 text-sm leading-6 text-fg-muted">
@@ -24,63 +29,53 @@
                 <x-booking.option-card
                     wire:click="selectBillingMode('single')"
                     :selected="$billingModeChosen && ! $recurring"
-                    title="One-time session"
+                    title="One-time class"
                     description="Book a single class."
                 />
                 <x-booking.option-card
                     wire:click="selectBillingMode('recurring')"
                     :selected="$recurring"
-                    title="Repeating sessions"
-                    description="Keep the same time every day or every week, with one instructor."
+                    title="Repeating classes"
+                    description="Same time each week, on the days you choose, with one instructor."
                 />
             </div>
         </section>
 
-        @if($recurring && $currentPhase === 'frequency')
-            <section
-                aria-labelledby="booking-repeat"
-                class="rounded-2xl border border-indigo-300/40 bg-indigo-500/5 p-4 sm:p-5"
-                x-data="{ frequency: @entangle('frequency').live, occurrences: @entangle('occurrences').live }"
-            >
-                <h3 id="booking-repeat" class="text-base font-black text-fg-strong">Set the repeat pattern</h3>
-                <p class="mt-1 text-sm text-fg-muted">The date and time you pick next become the first session.</p>
-
-                <div class="mt-4 grid gap-5 sm:grid-cols-2">
-                    <fieldset>
-                        <legend class="text-sm font-semibold text-fg">Repeat</legend>
-                        <div class="mt-2 grid grid-cols-2 gap-2">
-                            <button type="button" @click="frequency = 'weekly'" :aria-pressed="frequency === 'weekly' ? 'true' : 'false'"
-                                class="min-h-11 rounded-xl border-2 px-3 text-sm font-bold transition focus:outline-none focus-visible:ring-4 focus-visible:ring-indigo-300/50"
-                                :class="frequency === 'weekly' ? 'border-indigo-500 bg-indigo-500/10 text-fg-strong' : 'border-edge bg-surface-raised text-fg hover:border-indigo-300'">
-                                Weekly
-                            </button>
-                            <button type="button" @click="frequency = 'daily'" :aria-pressed="frequency === 'daily' ? 'true' : 'false'"
-                                class="min-h-11 rounded-xl border-2 px-3 text-sm font-bold transition focus:outline-none focus-visible:ring-4 focus-visible:ring-indigo-300/50"
-                                :class="frequency === 'daily' ? 'border-indigo-500 bg-indigo-500/10 text-fg-strong' : 'border-edge bg-surface-raised text-fg hover:border-indigo-300'">
-                                Daily
-                            </button>
-                        </div>
-                    </fieldset>
-
-                    <div>
-                        <label for="occurrences" class="block text-sm font-semibold text-fg">Number of sessions</label>
-                        <div class="mt-2 flex items-stretch">
-                            <button type="button" @click="occurrences = Math.max(2, (parseInt(occurrences) || 2) - 1)" aria-label="One fewer session" class="min-h-11 w-11 rounded-l-xl border-2 border-r-0 border-edge bg-surface-raised text-lg font-bold text-fg hover:bg-surface-hover focus:outline-none focus-visible:ring-4 focus-visible:ring-indigo-300/50">−</button>
-                            <input id="occurrences" type="number" inputmode="numeric" min="2" max="{{ \App\Booking\DTOs\RecurrenceData::MAX_OCCURRENCES }}" x-model.number="occurrences" class="min-h-11 w-20 border-2 border-edge bg-surface-raised text-center text-base font-bold text-fg-strong focus:border-indigo-400 focus:outline-none focus:ring-4 focus:ring-indigo-300/30">
-                            <button type="button" @click="occurrences = Math.min({{ \App\Booking\DTOs\RecurrenceData::MAX_OCCURRENCES }}, (parseInt(occurrences) || 2) + 1)" aria-label="One more session" class="min-h-11 w-11 rounded-r-xl border-2 border-l-0 border-edge bg-surface-raised text-lg font-bold text-fg hover:bg-surface-hover focus:outline-none focus-visible:ring-4 focus-visible:ring-indigo-300/50">+</button>
-                        </div>
-                        <p class="mt-1 text-xs text-fg-faint">Between 2 and {{ \App\Booking\DTOs\RecurrenceData::MAX_OCCURRENCES }} sessions.</p>
-                    </div>
+        @if($recurring)
+            {{--
+                Everything a repeating schedule needs, in this one step.
+                Days first, because they decide which start dates mean
+                anything and which times get loaded.
+            --}}
+            <section aria-labelledby="booking-class-days" class="rounded-2xl border border-edge bg-surface p-4">
+                <div class="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                    <h3 id="booking-class-days" class="text-base font-black text-fg-strong">Class days</h3>
+                    @if($perWeekLabel)
+                        <p class="text-sm font-bold text-indigo-700 dark:text-indigo-300" aria-live="polite">{{ $perWeekLabel }}</p>
+                    @endif
                 </div>
+                <p class="mt-1 text-sm text-fg-muted">Your classes repeat on these days every week. Pick all seven for daily classes.</p>
 
-                <div class="mt-4">
-                    <x-ui.button type="button" variant="secondary" @click="$wire.selectFrequency(frequency, occurrences)" x-bind:disabled="!frequency">
-                        Continue to date &amp; time
-                    </x-ui.button>
+                <div class="mt-3 grid grid-cols-7 gap-1.5" role="group" aria-labelledby="booking-class-days">
+                    @foreach([1 => 'Monday', 2 => 'Tuesday', 3 => 'Wednesday', 4 => 'Thursday', 5 => 'Friday', 6 => 'Saturday', 0 => 'Sunday'] as $value => $name)
+                        @php $isOn = in_array($value, $selectedWeekdays, true); @endphp
+                        <button
+                            type="button"
+                            wire:click="toggleWeekday({{ $value }})"
+                            aria-pressed="{{ $isOn ? 'true' : 'false' }}"
+                            aria-label="{{ $name }}"
+                            class="flex min-h-12 items-center justify-center rounded-xl border-2 text-sm font-black transition focus:outline-none focus-visible:ring-4 focus-visible:ring-indigo-300/50
+                                {{ $isOn
+                                    ? 'border-indigo-500 bg-indigo-600 text-white shadow-sm shadow-indigo-500/25'
+                                    : 'border-edge bg-surface-raised text-fg hover:border-indigo-300 hover:bg-surface-hover' }}"
+                        >
+                            <span aria-hidden="true">{{ \Illuminate\Support\Str::substr($name, 0, 3) }}</span>
+                        </button>
+                    @endforeach
                 </div>
+                @error('weekdays') <p class="mt-2 text-sm font-semibold text-rose-600 dark:text-rose-300" role="alert">{{ $message }}</p> @enderror
             </section>
-        @elseif($recurring && $frequency)
-            <x-booking.chosen-row label="Repeat" :value="ucfirst($frequency).' · '.$occurrences.' sessions'" phase="frequency" />
+
         @endif
     @endif
 
@@ -88,8 +83,10 @@
         <section aria-labelledby="booking-date">
             <div class="flex items-start justify-between gap-4">
                 <div>
-                    <h3 id="booking-date" class="text-lg font-black text-fg-strong">{{ $recurring ? 'Choose the first date' : 'Choose a date' }}</h3>
-                    <p class="mt-1 text-sm text-fg-muted">Highlighted days have open times.</p>
+                    <h3 id="booking-date" class="text-lg font-black text-fg-strong">{{ $recurring ? 'Starting from' : 'Choose a date' }}</h3>
+                    <p class="mt-1 text-sm text-fg-muted">
+                        {{ $recurring ? 'Your classes begin on the first chosen day on or after this date.' : 'Highlighted days have open times.' }}
+                    </p>
                 </div>
                 <div class="flex shrink-0 items-center gap-1">
                     <button type="button" wire:click="previousMonth" @disabled(! $canGoPreviousMonth) aria-label="Previous month" class="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-edge text-fg transition hover:bg-surface-hover focus:outline-none focus-visible:ring-4 focus-visible:ring-indigo-300/50 disabled:cursor-not-allowed disabled:opacity-40">
@@ -109,7 +106,7 @@
 
             <div wire:loading.remove wire:target="{{ $calendarTargets }}" class="mt-4">
                 <div class="grid grid-cols-7 text-center text-[11px] font-bold uppercase tracking-wide text-fg-faint" aria-hidden="true">
-                    @foreach(['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'] as $day)
+                    @foreach(['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'] as $day)
                         <span class="py-1.5">{{ $day }}</span>
                     @endforeach
                 </div>
@@ -121,20 +118,34 @@
                                     type="button"
                                     wire:click="selectDate({{ \Illuminate\Support\Js::from($cell['iso']) }})"
                                     @disabled(! $cell['available'])
-                                    aria-label="{{ $cell['label'] }}{{ $cell['available'] ? ', available' : ', unavailable' }}"
+                                    aria-label="{{ $cell['label'] }}@if($recurring){{ $cell['is_first_class'] ? ', your first class' : ($cell['is_class_day'] ? ', a class day' : '') }}@else{{ $cell['available'] ? ', available' : ', unavailable' }}@endif"
                                     aria-pressed="{{ $cell['selected'] ? 'true' : 'false' }}"
-                                    class="h-full w-full rounded-xl text-sm font-bold transition focus:outline-none focus-visible:ring-4 focus-visible:ring-indigo-300/50 disabled:cursor-not-allowed
+                                    class="relative h-full w-full rounded-xl text-sm font-bold transition focus:outline-none focus-visible:ring-4 focus-visible:ring-indigo-300/50 disabled:cursor-not-allowed
                                         {{ $cell['selected'] ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/25' : '' }}
-                                        {{ ! $cell['selected'] && $cell['available'] ? 'bg-indigo-500/10 text-indigo-700 ring-1 ring-inset ring-indigo-400/40 hover:bg-indigo-500/20 dark:text-indigo-200' : '' }}
+                                        {{ ! $cell['selected'] && $cell['is_class_day'] ? 'bg-indigo-500/10 text-indigo-700 ring-1 ring-inset ring-indigo-400/40 hover:bg-indigo-500/20 dark:text-indigo-200' : '' }}
+                                        {{ ! $cell['selected'] && ! $cell['is_class_day'] && $cell['available'] && ! $recurring ? 'bg-indigo-500/10 text-indigo-700 ring-1 ring-inset ring-indigo-400/40 hover:bg-indigo-500/20 dark:text-indigo-200' : '' }}
+                                        {{ ! $cell['selected'] && ! $cell['is_class_day'] && $cell['available'] && $recurring ? 'text-fg hover:bg-surface-hover' : '' }}
                                         {{ ! $cell['available'] ? 'text-fg-faint opacity-50' : '' }}"
                                 >
                                     {{ $cell['day'] }}
+                                    {{-- The one day that is actually the first class, called out on the grid itself. --}}
+                                    @if($cell['is_first_class'] && ! $cell['selected'])
+                                        <span class="absolute inset-x-0 bottom-1 mx-auto h-1 w-1 rounded-full bg-indigo-500" aria-hidden="true"></span>
+                                    @endif
                                 </button>
                             @endif
                         </div>
                     @endforeach
                 </div>
-                @if(empty($dates))
+                @if($recurring && $firstClassDate)
+                    <p class="mt-4 rounded-xl bg-indigo-500/10 px-3.5 py-2.5 text-sm font-semibold text-indigo-900 dark:text-indigo-200" aria-live="polite">
+                        First class: {{ \Carbon\CarbonImmutable::parse($firstClassDate)->format('l, j F Y') }}
+                    </p>
+                @elseif($recurring && $date && ! $firstClassDate)
+                    <p class="mt-4 rounded-xl border border-dashed border-edge-strong px-3.5 py-2.5 text-sm text-fg-muted" role="status">
+                        Choose the days above to see when your first class falls.
+                    </p>
+                @elseif(! $recurring && empty($dates))
                     <div class="mt-4 rounded-2xl border border-dashed border-edge-strong px-4 py-5 text-center">
                         <p class="text-sm font-semibold text-fg-strong">No times are available this month.</p>
                         <p class="mt-1 text-sm text-fg-muted">{{ $canGoNextMonth ? 'Try the next month.' : 'Please check back soon.' }}</p>
@@ -146,19 +157,25 @@
 
     @if($showTimes)
         <section aria-labelledby="booking-time">
-            <h3 id="booking-time" class="text-lg font-black text-fg-strong">Available times</h3>
-            <p class="mt-1 text-sm text-fg-muted">{{ $selectedDay?->format('l, j F') }}</p>
+            <h3 id="booking-time" class="text-lg font-black text-fg-strong">{{ $recurring ? 'Class time' : 'Available times' }}</h3>
+            <p class="mt-1 text-sm text-fg-muted">
+                @if($recurring)
+                    Every class uses this time. Shown for your first class, {{ $selectedDay?->format('l, j F') }}@if($durationMinutes) · {{ $durationMinutes }} minutes @endif · {{ $tzCity }} ({{ $tzOffset }}).
+                @else
+                    {{ $selectedDay?->format('l, j F') }}@if($durationMinutes) · {{ $durationMinutes }} minutes @endif
+                @endif
+            </p>
 
-            <div wire:loading.flex wire:target="selectDate" class="mt-5 min-h-24 items-center justify-center gap-3 text-sm text-fg-muted" role="status">
+            <div wire:loading.flex wire:target="selectDate,toggleWeekday" class="mt-5 min-h-24 items-center justify-center gap-3 text-sm text-fg-muted" role="status">
                 <x-ui.spinner size="sm" />
                 Loading times…
             </div>
 
-            <div wire:loading.remove wire:target="selectDate" class="mt-4 space-y-5">
+            <div wire:loading.remove wire:target="selectDate,toggleWeekday" class="mt-4 space-y-5">
                 @if(empty($slotGroups))
                     <div class="rounded-2xl border border-dashed border-edge-strong px-4 py-5 text-center">
                         <p class="text-sm font-semibold text-fg-strong">No times are available on this date.</p>
-                        <p class="mt-1 text-sm text-fg-muted">Try another date.</p>
+                        <p class="mt-1 text-sm text-fg-muted">{{ $recurring ? 'Try a different start date, or change your class days.' : 'Try another date.' }}</p>
                     </div>
                 @else
                     @foreach($slotGroups as $group)
@@ -181,9 +198,72 @@
                 @endif
             </div>
 
-            @if($recurrenceSummary)
-                <p class="mt-5 rounded-2xl bg-indigo-500/10 px-4 py-3 text-sm font-semibold text-indigo-800 dark:text-indigo-200" aria-live="polite">{{ $recurrenceSummary }}</p>
-            @endif
         </section>
+    @endif
+
+    {{--
+        "How long?" comes last on purpose: a student settles the routine
+        — which days, starting when, at what time — before deciding how
+        long to keep it up.
+    --}}
+    @if($recurring)
+            <section aria-labelledby="booking-how-long" class="rounded-2xl border border-edge bg-surface p-4">
+                <h3 id="booking-how-long" class="text-base font-black text-fg-strong">How long?</h3>
+
+                <div class="mt-3 grid gap-2 sm:grid-cols-3" role="group" aria-labelledby="booking-how-long">
+                    @foreach([
+                        'after_count' => ['Number of classes', 'Stop after a set number.'],
+                        'on_date' => ['Until a date', 'Stop on a date you choose.'],
+                        'never' => ['Until I cancel', 'Keeps going until you stop it.'],
+                    ] as $value => [$label, $hint])
+                        <button
+                            type="button"
+                            wire:click="setEndCondition('{{ $value }}')"
+                            aria-pressed="{{ $endCondition === $value ? 'true' : 'false' }}"
+                            class="min-h-12 rounded-xl border-2 px-3 py-2 text-left transition focus:outline-none focus-visible:ring-4 focus-visible:ring-indigo-300/50
+                                {{ $endCondition === $value ? 'border-indigo-500 bg-indigo-500/10' : 'border-edge bg-surface-raised hover:border-indigo-300' }}"
+                        >
+                            <span class="block text-sm font-bold text-fg-strong">{{ $label }}</span>
+                            <span class="block text-xs text-fg-muted">{{ $hint }}</span>
+                        </button>
+                    @endforeach
+                </div>
+
+                <div class="mt-3">
+                    @if($endCondition === 'after_count')
+                        <label for="occurrences" class="block text-sm font-semibold text-fg">How many classes?</label>
+                        <input
+                            id="occurrences"
+                            type="number"
+                            inputmode="numeric"
+                            min="1"
+                            step="1"
+                            value="{{ $occurrences }}"
+                            wire:change="setOccurrences($event.target.value)"
+                            class="mt-1.5 min-h-11 w-28 rounded-xl border-2 border-edge bg-surface-raised px-3 text-center text-base font-bold text-fg-strong focus:border-indigo-400 focus:outline-none focus:ring-4 focus:ring-indigo-300/30"
+                        >
+                        @error('occurrences') <p class="mt-1.5 text-sm font-semibold text-rose-600 dark:text-rose-300" role="alert">{{ $message }}</p> @enderror
+                    @elseif($endCondition === 'on_date')
+                        <label for="end-date" class="block text-sm font-semibold text-fg">Last possible date</label>
+                        <input
+                            id="end-date"
+                            type="date"
+                            min="{{ now($timezone)->toDateString() }}"
+                            value="{{ $endDate }}"
+                            wire:change="setEndDate($event.target.value)"
+                            class="mt-1.5 min-h-11 rounded-xl border-2 border-edge bg-surface-raised px-3 text-base font-bold text-fg-strong focus:border-indigo-400 focus:outline-none focus:ring-4 focus:ring-indigo-300/30"
+                        >
+                        @error('endDate') <p class="mt-1.5 text-sm font-semibold text-rose-600 dark:text-rose-300" role="alert">{{ $message }}</p> @enderror
+                    @else
+                        <p class="rounded-xl bg-indigo-500/10 px-3.5 py-2.5 text-sm leading-6 text-indigo-900 dark:text-indigo-200">
+                            Your classes keep going with no end date. We book them a stretch at a time and add the next ones automatically, so you are only ever charged for classes that have been booked. You can stop the schedule at any point from My Bookings — the usual cancellation notice still applies to each individual class.
+                        </p>
+                    @endif
+                </div>
+            </section>
+    @endif
+
+    @if($recurring && $selectedSlotStartsAt)
+        @include('livewire.frontend.booking.partials.schedule-preview')
     @endif
 </div>

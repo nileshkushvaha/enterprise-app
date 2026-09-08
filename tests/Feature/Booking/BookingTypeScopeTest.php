@@ -245,7 +245,8 @@ class BookingTypeScopeTest extends TestCase
             ->call('selectAcademicSubject', $academic['subject']->id)
             ->call('selectCurriculum', $academic['curriculum']->id)
             ->call('selectBillingMode', 'recurring')
-            ->call('selectFrequency', 'weekly', 3)
+            ->call('toggleWeekday', (int) $slot->dayOfWeek)
+            ->call('setOccurrences', 3)
             ->call('selectDate', $slot->toDateString())
             ->call('selectSlot', $slot->toIso8601String())
             ->call('submit');
@@ -276,7 +277,11 @@ class BookingTypeScopeTest extends TestCase
             ->call('selectAcademicSubject', $academic['subject']->id)
             ->call('selectCurriculum', $academic['curriculum']->id)
             ->call('selectBillingMode', 'recurring')
-            ->call('selectFrequency', 'daily', 3)
+            // Daily is now "every day of the week selected" — one
+            // control instead of a switch plus a day list.
+            ->call('toggleWeekday', 0)->call('toggleWeekday', 1)->call('toggleWeekday', 2)->call('toggleWeekday', 3)
+            ->call('toggleWeekday', 4)->call('toggleWeekday', 5)->call('toggleWeekday', 6)
+            ->call('setOccurrences', 3)
             ->call('selectDate', $slot->toDateString())
             ->call('selectSlot', $slot->toIso8601String())
             ->call('submit');
@@ -307,7 +312,8 @@ class BookingTypeScopeTest extends TestCase
             ->call('selectAcademicSubject', $academic['subject']->id)
             ->call('selectCurriculum', $academic['curriculum']->id)
             ->call('selectBillingMode', 'recurring')
-            ->call('selectFrequency', 'weekly', 2)
+            ->call('toggleWeekday', (int) $slot->dayOfWeek)
+            ->call('setOccurrences', 2)
             ->call('selectDate', $slot->toDateString())
             ->call('selectSlot', $slot->toIso8601String())
             ->call('submit');

@@ -9,6 +9,7 @@ use App\Booking\Enums\Weekday;
 use App\Models\AcademicCategory;
 use App\Models\Booking;
 use App\Models\BookingActivity;
+use App\Models\BookingSeries;
 use App\Models\BookingType;
 use App\Models\Country;
 use App\Models\Currency;
@@ -199,6 +200,53 @@ class StudentBookingTest extends TestCase
         $this->assertCount(1, $response->json('failures'));
         $this->assertNotNull($response->json('recurring_group'));
         $this->assertSame($response->json('recurring_group'), $response->json('data.0.recurring_group'));
+    }
+
+    public function test_recurring_booking_accepts_more_than_twelve_occurrences(): void
+    {
+        // The twelve-occurrence cap is gone. The request is accepted in
+        // full and stored as a schedule; how many classes come back in
+        // `data` is bounded by the confirmation horizon, not by a limit
+        // on what the student may ask for.
+        $response = $this->actingAs($this->student)
+            ->postJson('/dashboard/bookings', [
+                'type' => 'paid_one_to_one',
+                'teacher_id' => $this->teacher->id,
+                'starts_at' => $this->slot(),
+                'subject' => 'maths',
+                'grade' => 5,
+                'recurring' => true,
+                'occurrences' => 30,
+                'frequency' => 'weekly',
+            ])
+            ->assertCreated();
+
+        $series = BookingSeries::query()->firstOrFail();
+
+        $this->assertSame(30, (int) $series->occurrence_count);
+        $this->assertSame($series->id, $response->json('recurring_group'));
+        $this->assertGreaterThan(0, count($response->json('data')));
+        // Everything returned really is a class of this schedule.
+        $this->assertSame(
+            count($response->json('data')),
+            $series->bookings()->count(),
+        );
+    }
+
+    public function test_recurring_booking_still_rejects_a_nonsensical_occurrence_count(): void
+    {
+        $this->actingAs($this->student)
+            ->postJson('/dashboard/bookings', [
+                'type' => 'paid_one_to_one',
+                'teacher_id' => $this->teacher->id,
+                'starts_at' => $this->slot(),
+                'subject' => 'maths',
+                'grade' => 5,
+                'recurring' => true,
+                'occurrences' => 1,
+                'frequency' => 'weekly',
+            ])
+            ->assertStatus(422);
     }
 
     public function test_teacher_must_teach_requested_subject(): void

@@ -250,7 +250,8 @@ class StudentFinancialVerificationGateTest extends TestCase
             ->call('selectAcademicSubject', $academic['subject']->id)
             ->call('selectCurriculum', $academic['curriculum']->id)
             ->call('selectBillingMode', 'recurring')
-            ->call('selectFrequency', 'weekly', 2)
+            ->call('toggleWeekday', (int) $slot->dayOfWeek)
+            ->call('setOccurrences', 2)
             ->call('selectDate', $slot->toDateString())
             ->call('selectSlot', $slot->toIso8601String())
             ->call('submit');

@@ -49,6 +49,22 @@ final readonly class CreateBookingData
     public ?string $packageEntitlementId;
 
     /**
+     * The recurring series that scheduled this class, when one did.
+     * Null for every single booking and for every historical recurring
+     * booking, which is identified only by `meta.recurring_group`.
+     */
+    public ?string $bookingSeriesId;
+
+    /**
+     * The occurrence's date (`Y-m-d`) in the SERIES' timezone — not the
+     * student's and not UTC. Paired with $bookingSeriesId it names
+     * exactly one class, and a unique index on the pair is what makes
+     * series generation idempotent under retries and concurrent
+     * workers. Null whenever $bookingSeriesId is.
+     */
+    public ?string $seriesOccurrenceDate;
+
+    /**
      * @param  array<string, mixed>  $meta  type-specific payload (subject, grade, recurring_group, …)
      * @param  RecurrenceFrequency|null  $recurrenceFrequency  Data-provenance field — set only by
      *                                                         the recurring-booking creation path (never inferred later), null for every single/non-recurring
@@ -71,6 +87,8 @@ final readonly class CreateBookingData
         ?RecurrenceFrequency $recurrenceFrequency = null,
         ?BookingAcademicContextData $academicContext = null,
         ?string $packageEntitlementId = null,
+        ?string $bookingSeriesId = null,
+        ?string $seriesOccurrenceDate = null,
     ) {
         $this->typeKey = $typeKey;
         $this->studentId = $studentId;
@@ -94,6 +112,8 @@ final readonly class CreateBookingData
         $this->recurrenceFrequency = $recurrenceFrequency;
         $this->academicContext = $academicContext;
         $this->packageEntitlementId = $packageEntitlementId;
+        $this->bookingSeriesId = $bookingSeriesId;
+        $this->seriesOccurrenceDate = $seriesOccurrenceDate;
     }
 
     /** Whether this booking is funded by a package rather than a payment. */

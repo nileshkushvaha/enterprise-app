@@ -30,8 +30,8 @@
             <div class="flex items-start justify-between gap-3">
                 <dt class="text-fg-muted">Schedule</dt>
                 <dd class="text-right font-semibold text-fg-strong">
-                    @if($recurring && $frequency)
-                        {{ ucfirst($frequency) }} · {{ $occurrences }} sessions
+                    @if($recurring && $cadenceLabel)
+                        {{ $cadenceLabel }} · {{ $classCountLabel }}
                     @elseif($recurring)
                         Repeating
                     @else
@@ -42,7 +42,7 @@
         @endif
         @if($slotStart)
             <div class="flex items-start justify-between gap-3">
-                <dt class="text-fg-muted">{{ $recurring ? 'First date' : 'Date' }}</dt>
+                <dt class="text-fg-muted">{{ $recurring ? 'First class' : 'Date' }}</dt>
                 <dd class="text-right font-semibold text-fg-strong">{{ $slotStart->format('l, j F') }}</dd>
             </div>
             <div class="flex items-start justify-between gap-3">
@@ -84,10 +84,12 @@
                 </div>
             @elseif($pricePreview !== [])
                 <dl class="space-y-2">
-                    <div class="flex items-center justify-between gap-3">
-                        <dt class="text-fg-muted">Session fee</dt>
-                        <dd class="font-semibold text-fg-strong">{{ $pricePreview['base_formatted'] }}</dd>
-                    </div>
+                    @if(! $recurring || $pricePreview['discount_formatted'] || $pricePreview['tax_formatted'])
+                        <div class="flex items-center justify-between gap-3">
+                            <dt class="text-fg-muted">Session fee</dt>
+                            <dd class="font-semibold text-fg-strong">{{ $pricePreview['base_formatted'] }}</dd>
+                        </div>
+                    @endif
                     @if($pricePreview['discount_formatted'])
                         <div class="flex items-center justify-between gap-3">
                             <dt class="text-fg-muted">Discount</dt>
@@ -101,13 +103,15 @@
                         </div>
                     @endif
                     <div class="flex items-center justify-between gap-3 border-t border-edge pt-2">
-                        <dt class="font-semibold text-fg-muted">{{ $recurring ? 'Per session' : 'Total' }}</dt>
+                        <dt class="font-semibold text-fg-muted">{{ $recurring ? 'Price per class' : 'Total' }}</dt>
                         <dd class="text-lg font-black text-fg-strong">{{ $pricePreview['total_formatted'] }}</dd>
                     </div>
                 </dl>
                 <p class="mt-2 text-xs leading-5 text-fg-faint">
-                    @if($recurring)
-                        Each session is reserved and paid separately.
+                    @if($recurring && $endCondition === 'never')
+                        You pay one class at a time. An ongoing schedule has no total.
+                    @elseif($recurring)
+                        You pay one class at a time; each class is reserved and paid separately.
                     @elseif(! $lockedInstructorName)
                         Standard rate. The final amount is confirmed when your time is reserved.
                     @else

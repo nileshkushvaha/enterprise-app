@@ -66,6 +66,23 @@ interface BookingRepositoryInterface
     ): bool;
 
     /**
+     * Does the STUDENT already have an active class overlapping this
+     * range, with any instructor?
+     *
+     * The instructor-side check (hasOverlap) cannot answer this: two
+     * different instructors are each free, while the student would have
+     * to be in two classes at once. Deliberately unbuffered — a buffer
+     * protects an instructor's turnaround between lessons, whereas
+     * back-to-back classes are a legitimate thing for a student to want.
+     */
+    public function studentHasOverlap(
+        int $studentId,
+        CarbonImmutable $startsAt,
+        CarbonImmutable $endsAt,
+        ?string $ignoreBookingId = null,
+    ): bool;
+
+    /**
      * Active bookings for the instructor on one INSTRUCTOR-LOCAL
      * calendar day (TZ-AUD-006).
      *

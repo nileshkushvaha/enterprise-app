@@ -40,12 +40,42 @@
             </div>
             <dl class="mt-2 space-y-1.5 text-sm">
                 @if($slotStart)
-                    <div class="flex justify-between gap-3"><dt class="text-fg-muted">{{ $recurring ? 'First date' : 'Date' }}</dt><dd class="text-right font-semibold text-fg-strong">{{ $slotStart->format('l, j F Y') }}</dd></div>
+                    <div class="flex justify-between gap-3"><dt class="text-fg-muted">{{ $recurring ? 'First class' : 'Date' }}</dt><dd class="text-right font-semibold text-fg-strong">{{ $slotStart->format('l, j F Y') }}</dd></div>
                     <div class="flex justify-between gap-3"><dt class="text-fg-muted">Time</dt><dd class="text-right font-semibold text-fg-strong">{{ $slotStart->format('g:i A') }}@if($slotEnd) – {{ $slotEnd->format('g:i A') }}@endif</dd></div>
                 @endif
+                @if($selectedSlot && ($selectedSlot['ends_at'] ?? null) && $slotStart && $slotEnd)
+                    <div class="flex justify-between gap-3"><dt class="text-fg-muted">Class length</dt><dd class="text-right font-semibold text-fg-strong">{{ (int) $slotStart->diffInMinutes($slotEnd) }} minutes</dd></div>
+                @endif
                 <div class="flex justify-between gap-3"><dt class="text-fg-muted">Timezone</dt><dd class="text-right font-semibold text-fg-strong">{{ $timezone }}</dd></div>
-                @if($recurrenceSummary)
-                    <div class="flex justify-between gap-3"><dt class="text-fg-muted">Repeats</dt><dd class="text-right font-semibold text-fg-strong">{{ $recurrenceSummary }}</dd></div>
+                @if($recurring)
+                    <div class="flex justify-between gap-3">
+                        <dt class="text-fg-muted">Days</dt>
+                        <dd class="text-right font-semibold text-fg-strong">
+                            {{ implode(', ', array_map(fn ($d) => \App\Booking\Enums\Weekday::from($d)->label(), $selectedWeekdays)) }}
+                            @if($perWeekLabel)<span class="font-normal text-fg-muted">({{ $perWeekLabel }})</span>@endif
+                        </dd>
+                    </div>
+                    @if(($previewMeta['last_date'] ?? null) !== null)
+                        <div class="flex justify-between gap-3"><dt class="text-fg-muted">Last class</dt><dd class="text-right font-semibold text-fg-strong">{{ \Carbon\CarbonImmutable::parse($previewMeta['last_date'])->format('l, j F Y') }}</dd></div>
+                    @endif
+                    <div class="flex justify-between gap-3">
+                        <dt class="text-fg-muted">Ends</dt>
+                        <dd class="text-right font-semibold text-fg-strong">
+                            @if($endCondition === 'never')
+                                Not until you cancel
+                            @elseif($endCondition === 'on_date')
+                                {{ $endDate ? \Carbon\CarbonImmutable::parse($endDate)->format('j F Y') : '—' }}
+                            @else
+                                After {{ $occurrences }} {{ \Illuminate\Support\Str::plural('class', $occurrences) }}
+                            @endif
+                        </dd>
+                    </div>
+                    <div class="flex justify-between gap-3">
+                        <dt class="text-fg-muted">Classes</dt>
+                        <dd class="text-right font-semibold text-fg-strong">
+                            {{ ($previewMeta['total'] ?? null) !== null ? $previewMeta['total'] : 'Ongoing' }}
+                        </dd>
+                    </div>
                 @endif
             </dl>
         </section>
@@ -68,17 +98,65 @@
                 @if($selectedFunding)<p class="text-xs text-fg-muted">{{ $selectedFunding['name'] }}</p>@endif
             @elseif($pricePreview !== [])
                 <dl class="mt-2 space-y-1.5 text-sm">
-                    <div class="flex justify-between gap-3"><dt class="text-fg-muted">Session fee</dt><dd class="font-semibold text-fg-strong">{{ $pricePreview['base_formatted'] }}</dd></div>
+                    {{-- For a repeating schedule the base fee only earns a
+                         row of its own when a discount or tax makes it
+                         differ from what is charged; otherwise it just
+                         repeats "price per class" directly below. --}}
+                    @if(! $recurring || $pricePreview['discount_formatted'] || $pricePreview['tax_formatted'])
+                        <div class="flex justify-between gap-3"><dt class="text-fg-muted">Session fee</dt><dd class="font-semibold text-fg-strong">{{ $pricePreview['base_formatted'] }}</dd></div>
+                    @endif
                     @if($pricePreview['discount_formatted'])<div class="flex justify-between gap-3"><dt class="text-fg-muted">Discount</dt><dd class="font-semibold text-emerald-600 dark:text-emerald-300">− {{ $pricePreview['discount_formatted'] }}</dd></div>@endif
                     @if($pricePreview['tax_formatted'])<div class="flex justify-between gap-3"><dt class="text-fg-muted">Tax</dt><dd class="font-semibold text-fg-strong">{{ $pricePreview['tax_formatted'] }}</dd></div>@endif
-                    <div class="flex justify-between gap-3 border-t border-edge pt-1.5"><dt class="font-semibold text-fg-muted">{{ $recurring ? 'Per session' : 'Total payable' }}</dt><dd class="text-lg font-black text-fg-strong">{{ $pricePreview['total_formatted'] }}</dd></div>
+                    <div class="flex justify-between gap-3 border-t border-edge pt-1.5"><dt class="font-semibold text-fg-muted">{{ $recurring ? 'Price per class' : 'Total payable' }}</dt><dd class="text-lg font-black text-fg-strong">{{ $pricePreview['total_formatted'] }}</dd></div>
+
+                    @if($recurring)
+                        {{--
+                            Three deliberately separate figures. What one
+                            class costs, what a FINITE schedule of them
+                            adds up to, and what is actually payable now.
+                            An ongoing schedule gets no total at all —
+                            there is no last class, so any total would be
+                            invented, and a made-up number next to a
+                            payment button is worse than none.
+                        --}}
+                        @php
+                            $classCount = $previewMeta['total'] ?? null;
+                            $minorUnits = $pricePreview['minor_units'] ?? 2;
+                            $money = fn (float $amount): string => \App\Support\MoneyFormatter::format(
+                                \App\Support\MoneyFormatter::toMinor(number_format($amount, $minorUnits, '.', ''), $minorUnits),
+                                $pricePreview['currency'],
+                                $minorUnits,
+                            );
+                        @endphp
+
+                        @if($classCount !== null)
+                            <div class="flex justify-between gap-3">
+                                <dt class="text-fg-muted">{{ $classCount }} {{ \Illuminate\Support\Str::plural('class', $classCount) }} scheduled</dt>
+                                <dd class="font-semibold text-fg-strong">{{ $money((float) $pricePreview['payable_amount'] * $classCount) }}</dd>
+                            </div>
+                        @else
+                            <div class="flex justify-between gap-3">
+                                <dt class="text-fg-muted">Schedule total</dt>
+                                <dd class="text-right font-semibold text-fg-strong">Ongoing · {{ $pricePreview['total_formatted'] }} per class</dd>
+                            </div>
+                        @endif
+
+                        <div class="flex justify-between gap-3 border-t border-edge pt-1.5">
+                            <dt class="font-semibold text-fg-muted">Payable now</dt>
+                            <dd class="text-lg font-black text-fg-strong">{{ $pricePreview['total_formatted'] }}</dd>
+                        </div>
+                    @endif
                 </dl>
-                <p class="mt-1 text-xs leading-5 text-fg-faint">{{ $recurring ? 'Each session is reserved and paid separately from My Bookings.' : 'The final amount is confirmed when your time is reserved.' }}</p>
+                <p class="mt-1 text-xs leading-5 text-fg-faint">{{ $recurring ? 'You pay for one class at a time. Each class is reserved and paid separately from My Bookings, and nothing is charged automatically.' : 'The final amount is confirmed when your time is reserved.' }}</p>
             @else
                 <p class="mt-2 text-sm text-fg-muted">The price is confirmed when your time is reserved.</p>
             @endif
         </section>
     </div>
+
+    @if($recurring && $selectedSlotStartsAt)
+        @include('livewire.frontend.booking.partials.schedule-preview')
+    @endif
 
     @if($fundingOptions !== [])
         <section class="rounded-2xl border border-indigo-300/40 bg-indigo-500/5 p-4 sm:p-5" aria-labelledby="review-funding">

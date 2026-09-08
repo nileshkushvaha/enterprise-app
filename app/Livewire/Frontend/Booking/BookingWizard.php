@@ -6,7 +6,12 @@ namespace App\Livewire\Frontend\Booking;
 
 use App\Booking\Contracts\BookingPaymentServiceInterface;
 use App\Booking\Contracts\BookingRepositoryInterface;
-use App\Booking\DTOs\RecurrenceData;
+use App\Booking\DTOs\RecurrencePatternData;
+use App\Booking\DTOs\RecurrenceRuleData;
+use App\Booking\DTOs\TimeSlotData;
+use App\Booking\Enums\RecurrenceEndCondition;
+use App\Booking\Enums\RecurrenceFrequency;
+use App\Booking\Enums\Weekday;
 use App\Booking\Exceptions\BookingException;
 use App\Booking\Exceptions\InvalidPaymentWebhookException;
 use App\Booking\Exceptions\NoEligibleTeacherException;
@@ -54,7 +59,7 @@ final class BookingWizard extends Component
      */
     private const array STAGE_PHASES = [
         'learning' => ['mode', 'level', 'academic_subject', 'curriculum', 'subject', 'grade'],
-        'schedule' => ['billing_mode', 'frequency', 'date', 'time'],
+        'schedule' => ['billing_mode', 'date', 'time'],
         'review' => ['funding', 'review'],
         'outcome' => ['confirmed'],
     ];
@@ -100,9 +105,78 @@ final class BookingWizard extends Component
 
     public bool $recurring = false;
 
-    public ?string $frequency = null;
-
     public int $occurrences = 4;
+
+    /**
+     * The days of the week classes repeat on, as Carbon day-of-week
+     * numbers in the STUDENT's timezone — the calendar the buttons are
+     * drawn in. WizardBookingService translates them into the
+     * instructor's calendar, which is what the schedule is anchored to.
+     *
+     * This is the ENTIRE cadence control. Seven days selected is a daily
+     * schedule, which is why there is no Daily/Weekly switch and no
+     * "repeat every N weeks": those were a second way of saying
+     * something this list already says, and two ways of saying it meant
+     * two things that could disagree.
+     *
+     * Existing series created with a real interval or a Daily frequency
+     * keep both — the SERIES model still stores them and still generates
+     * from them. Only this form stopped offering them; nothing is
+     * rewritten.
+     *
+     * @var list<int>
+     */
+    public array $weekdays = [];
+
+    /** 'after_count' | 'on_date' | 'never'. */
+    public string $endCondition = 'after_count';
+
+    /** `Y-m-d` in the student's timezone; only read when $endCondition is 'on_date'. */
+    public ?string $endDate = null;
+
+    /**
+     * Dates the student removed while resolving conflicts, in the
+     * SCHEDULE's timezone (the preview reports them that way, and the
+     * server keys deviations by them). Survives moving between steps —
+     * they are part of the schedule being built, not transient UI state.
+     *
+     * @var list<string>
+     */
+    public array $skippedDates = [];
+
+    /**
+     * Classes moved to another time on their own date, `Y-m-d => H:i:s`
+     * in the schedule's timezone.
+     *
+     * @var array<string, string>
+     */
+    public array $movedOccurrences = [];
+
+    /** The current preview page, as display rows. @var list<array<string, mixed>> */
+    public array $schedulePreview = [];
+
+    /** Totals and horizon copy for the preview. @var array<string, mixed> */
+    public array $previewMeta = [];
+
+    public int $previewPage = 1;
+
+    /** The date currently being moved, if any (schedule-timezone `Y-m-d`). */
+    public ?string $movingDate = null;
+
+    /** Alternative times for $movingDate. @var list<array<string, mixed>> */
+    public array $moveSlots = [];
+
+    /**
+     * The schedule's own calendar and instructor, as the server resolved
+     * them. #[Locked] because both are server decisions the client must
+     * not be able to rewrite — a writable instructor id here would let a
+     * crafted update ask for somebody else's availability.
+     */
+    #[Locked]
+    public ?string $seriesTimezone = null;
+
+    #[Locked]
+    public ?int $seriesInstructorId = null;
 
     public string $month = '';
 
@@ -368,7 +442,7 @@ final class BookingWizard extends Component
         $this->step = 1;
         $this->type = $type;
         $this->recurring = false;
-        $this->frequency = null;
+        $this->weekdays = [];
         $this->grade = null;
         $this->subject = null;
         $this->resetAvailability();
@@ -569,33 +643,121 @@ final class BookingWizard extends Component
             // carrying it to a service that would quietly ignore it and
             // bill the student instead (PKG-AUD-007). A commercial
             // choice must never be discarded silently.
-            if ($this->packageEntitlementId !== null) {
-                $this->banner = 'Package lessons are booked one at a time, so your package has not been applied to this recurring series. Each session will be charged normally.';
-            }
+            $droppedPackage = $this->packageEntitlementId !== null;
 
             $this->packageEntitlementId = null;
             $this->fundingOptions = [];
 
-            $this->goToPhase('frequency');
+            // Everything a repeating schedule needs now lives in this one
+            // step, next to the calendar and the times — there is no
+            // separate "set the pattern" detour to walk through and come
+            // back from.
+            $this->loadDates();
+
+            // Set AFTER loadDates(), which clears the banner: this
+            // message is the whole point of the branch and must survive.
+            if ($droppedPackage) {
+                $this->banner = 'Package lessons are booked one at a time, so your package has not been applied to this repeating schedule. Each class will be charged normally.';
+            }
+
+            $this->goToPhase('date');
 
             return;
         }
 
-        $this->frequency = null;
+        $this->resetRecurrenceSettings();
         $this->loadDates();
         $this->goToPhase('date');
     }
 
-    public function selectFrequency(string $frequency, int $occurrences): void
+    /**
+     * Clears everything that only means something for a repeating
+     * schedule. Called when the student switches back to a one-time
+     * session, so a later switch to repeating starts from the defaults
+     * rather than from half of a schedule they abandoned.
+     */
+    private function resetRecurrenceSettings(): void
     {
-        if (! in_array($frequency, ['daily', 'weekly'], true)) {
+        $this->weekdays = [];
+        $this->endCondition = 'after_count';
+        $this->endDate = null;
+        $this->skippedDates = [];
+        $this->movedOccurrences = [];
+        $this->schedulePreview = [];
+        $this->previewMeta = [];
+        $this->previewPage = 1;
+        $this->seriesInstructorId = null;
+        $this->seriesTimezone = null;
+        $this->cancelMove();
+    }
+
+    /**
+     * Turns one weekday on or off.
+     *
+     * At least one day must stay selected — a repeating schedule with no
+     * days is not a schedule, and silently accepting it would produce an
+     * empty preview with nothing to explain it.
+     *
+     * Changing the days can move the first class, so the anchor is
+     * recomputed and the times reloaded for whatever the first class now
+     * is; the chosen time of day is carried across when that slot still
+     * exists (see reanchorSchedule()).
+     */
+    public function toggleWeekday(int $day): void
+    {
+        if ($day < 0 || $day > 6) {
             return;
         }
 
-        $this->frequency = $frequency;
-        $this->occurrences = max(2, min($occurrences, RecurrenceData::MAX_OCCURRENCES));
-        $this->loadDates();
-        $this->goToPhase('date');
+        $selected = in_array($day, $this->weekdays, true);
+
+        if ($selected && count($this->weekdays) === 1) {
+            $this->banner = 'Choose at least one day for your classes.';
+
+            return;
+        }
+
+        $this->banner = '';
+
+        $this->weekdays = $selected
+            ? array_values(array_diff($this->weekdays, [$day]))
+            : [...$this->weekdays, $day];
+
+        sort($this->weekdays);
+
+        $this->reanchorSchedule();
+    }
+
+    /**
+     * How the schedule ends. Switching away from a condition clears the
+     * value that belonged to it, so a stale end date can never survive
+     * into an ongoing schedule.
+     */
+    public function setEndCondition(string $condition): void
+    {
+        if (RecurrenceEndCondition::tryFrom($condition) === null) {
+            return;
+        }
+
+        $this->endCondition = $condition;
+
+        if ($condition !== 'on_date') {
+            $this->endDate = null;
+        }
+
+        $this->refreshSchedulePreview();
+    }
+
+    public function setOccurrences(int $occurrences): void
+    {
+        $this->occurrences = max(1, $occurrences);
+        $this->refreshSchedulePreview();
+    }
+
+    public function setEndDate(string $date): void
+    {
+        $this->endDate = $date !== '' ? $date : null;
+        $this->refreshSchedulePreview();
     }
 
     public function previousMonth(): void
@@ -610,13 +772,94 @@ final class BookingWizard extends Component
         $this->loadDates();
     }
 
+    /**
+     * For a one-time class this is the class date. For a repeating
+     * schedule it is "starting from" — a boundary, not necessarily a
+     * class day.
+     *
+     * The distinction matters: a student who wants Monday and Wednesday
+     * classes "from 1 January" should not have to work out that 1
+     * January is a Friday. They pick the boundary; firstClassDate()
+     * resolves the first day on or after it that they actually chose,
+     * and that is what the times are loaded for and what the summary
+     * shows. An unselected weekday is never added to make the start date
+     * work.
+     */
     public function selectDate(string $date): void
     {
         $this->date = $date;
         $this->selectedSlotStartsAt = null;
-        $this->validateSelection(['subject', 'grade', 'date']);
+        $this->validateSelection($this->recurring ? ['date'] : ['subject', 'grade', 'date']);
         $this->loadSlots();
+
+        if ($this->recurring) {
+            $this->previewPage = 1;
+            $this->cancelMove();
+            $this->loadSchedulePreview();
+        }
+
         $this->goToPhase('time');
+    }
+
+    /**
+     * The first date on or after "starting from" that falls on one of
+     * the chosen weekdays, in the student's own timezone.
+     *
+     * Null until both a start date and at least one weekday exist —
+     * there is no honest answer before then, and guessing one would mean
+     * scheduling a day the student did not pick.
+     */
+    public function firstClassDate(): ?string
+    {
+        if (! $this->recurring || $this->date === null || $this->weekdays === []) {
+            return null;
+        }
+
+        $date = CarbonImmutable::parse($this->date, $this->timezone)->startOfDay();
+
+        // At most one week of candidates: some day of the week is always
+        // selected, so a match is guaranteed inside seven days.
+        for ($i = 0; $i < 7; $i++) {
+            if (in_array((int) $date->dayOfWeek, $this->weekdays, true)) {
+                return $date->toDateString();
+            }
+
+            $date = $date->addDay();
+        }
+
+        return null;
+    }
+
+    /**
+     * Re-resolves the first class after a change to the days or the
+     * start date, and reloads the times for it.
+     *
+     * The chosen time of day is carried over whenever the same clock
+     * time is still offered on the new first class — changing a day
+     * should not silently cost the student the time they already picked
+     * — and is cleared honestly when it is not.
+     */
+    private function reanchorSchedule(): void
+    {
+        $wanted = $this->selectedSlotStartsAt !== null
+            ? CarbonImmutable::parse($this->selectedSlotStartsAt)->setTimezone($this->timezone)->format('H:i')
+            : null;
+
+        $this->selectedSlotStartsAt = null;
+        $this->loadSlots();
+
+        if ($wanted !== null) {
+            foreach ($this->availableSlots as $slot) {
+                if (CarbonImmutable::parse($slot['starts_at'])->setTimezone($this->timezone)->format('H:i') === $wanted) {
+                    $this->selectedSlotStartsAt = $slot['starts_at'];
+                    break;
+                }
+            }
+        }
+
+        $this->previewPage = 1;
+        $this->cancelMove();
+        $this->loadSchedulePreview();
     }
 
     public function selectSlot(string $startsAt): void
@@ -630,7 +873,193 @@ final class BookingWizard extends Component
         // loaded here, once a concrete instant exists.
         $this->loadFundingOptions();
 
+        // A repeating schedule is anchored to the first class, so the
+        // preview only becomes meaningful once a concrete instant exists.
+        // Choosing a different time re-checks every date against it,
+        // rather than leaving a preview built from the previous choice on
+        // screen.
+        if ($this->recurring) {
+            $this->previewPage = 1;
+            $this->cancelMove();
+            $this->loadSchedulePreview();
+        }
+
         $this->goToPhase('time');
+    }
+
+    // ── Repeating schedule preview ─────────────────────────────────────────
+
+    /**
+     * The schedule the current settings produce, with every date inside
+     * the confirmation horizon checked against the assigned instructor's
+     * real availability and the student's own calendar.
+     *
+     * Entirely server-computed. The browser renders what comes back and
+     * never works dates out for itself, so what the student is shown
+     * cannot disagree with what confirmation will do.
+     */
+    public function loadSchedulePreview(): void
+    {
+        $this->schedulePreview = [];
+        $this->previewMeta = [];
+
+        if (! $this->recurring || $this->weekdays === [] || $this->selectedSlotStartsAt === null) {
+            return;
+        }
+
+        try {
+            $preview = $this->wizard->previewSeries(
+                $this->submissionPayload(),
+                $this->recurrencePattern(),
+                $this->skippedDates,
+                $this->previewPage,
+                $this->movedOccurrences,
+            );
+        } catch (BookingException|NoEligibleTeacherException $exception) {
+            // A preview that cannot be built is reported, never faked. The
+            // student keeps every selection and can change the pattern.
+            $this->previewMeta = ['error' => $exception instanceof BookingException
+                ? $exception->getMessage()
+                : 'We could not check these dates just now. Please try again.'];
+
+            return;
+        }
+
+        $this->seriesTimezone = $preview->timezone;
+        $this->seriesInstructorId = $preview->instructorId;
+
+        $this->schedulePreview = array_map(
+            fn ($occurrence): array => $occurrence->toDisplayArray($this->timezone),
+            $preview->occurrences,
+        );
+
+        $this->previewMeta = [
+            'total' => $preview->totalScheduled,
+            'ongoing' => $preview->totalScheduled === null,
+            'conflicts' => $preview->conflictCount,
+            'bookable_now' => $preview->bookableNowCount,
+            'planned' => $preview->plannedCount,
+            'horizon_days' => $preview->horizonDays,
+            'last_date' => $preview->lastLocalDate,
+            'has_more' => $preview->hasMore,
+            'page' => $this->previewPage,
+            'skipped' => count($this->skippedDates),
+        ];
+    }
+
+    /** Rebuilds the preview after a settings change, but only once one exists. */
+    private function refreshSchedulePreview(): void
+    {
+        if ($this->selectedSlotStartsAt === null) {
+            return;
+        }
+
+        $this->previewPage = 1;
+        $this->cancelMove();
+        $this->loadSchedulePreview();
+    }
+
+    public function previewNextPage(): void
+    {
+        if (($this->previewMeta['has_more'] ?? false) === true) {
+            $this->previewPage++;
+            $this->loadSchedulePreview();
+        }
+    }
+
+    public function previewPreviousPage(): void
+    {
+        if ($this->previewPage > 1) {
+            $this->previewPage--;
+            $this->loadSchedulePreview();
+        }
+    }
+
+    /**
+     * Drops one date from the schedule.
+     *
+     * Whether that costs a class depends on how the schedule ends, and
+     * the preview says so: a schedule of N classes reaches one date
+     * further so the student still gets N, while one that ends on a date
+     * simply has one class fewer.
+     */
+    public function skipOccurrence(string $localDate): void
+    {
+        if (! in_array($localDate, $this->skippedDates, true)) {
+            $this->skippedDates[] = $localDate;
+            sort($this->skippedDates);
+        }
+
+        $this->cancelMove();
+        $this->loadSchedulePreview();
+    }
+
+    public function restoreOccurrence(string $localDate): void
+    {
+        $this->skippedDates = array_values(array_diff($this->skippedDates, [$localDate]));
+        $this->loadSchedulePreview();
+    }
+
+    /**
+     * Offers the SAME instructor's other times on that date.
+     *
+     * Only that instructor's, and only that date's: a repeating schedule
+     * is an arrangement with one person, so a class that has to move
+     * moves within their calendar or not at all. Nothing here can
+     * substitute somebody else.
+     */
+    public function startMovingOccurrence(string $localDate): void
+    {
+        $this->movingDate = $localDate;
+        $this->moveSlots = [];
+
+        if ($this->seriesInstructorId === null || $this->seriesTimezone === null) {
+            return;
+        }
+
+        $slots = $this->wizard->availableSlots(
+            (string) $this->type,
+            (string) $this->subject,
+            (int) $this->grade,
+            CarbonImmutable::parse($localDate, $this->seriesTimezone)->startOfDay(),
+            $this->seriesTimezone,
+            $this->seriesInstructorId,
+            $this->browsingAcademicContext(),
+        );
+
+        $this->moveSlots = $slots
+            // The override is keyed by the schedule's own date, so a slot
+            // that lands on the following day in that calendar is not a
+            // move of THIS class and is not offered as one.
+            ->filter(fn (TimeSlotData $slot): bool => $slot->startsAt->setTimezone($this->seriesTimezone)->toDateString() === $localDate)
+            ->map(fn (TimeSlotData $slot): array => [
+                'local_time' => $slot->startsAt->setTimezone($this->seriesTimezone)->format('H:i:s'),
+                'label' => $slot->startsAt->setTimezone($this->timezone)->format('g:i A'),
+                'ends_label' => $slot->endsAt->setTimezone($this->timezone)->format('g:i A'),
+            ])
+            ->values()
+            ->all();
+    }
+
+    public function moveOccurrenceTo(string $localTime): void
+    {
+        if ($this->movingDate === null) {
+            return;
+        }
+
+        if (! in_array($localTime, array_column($this->moveSlots, 'local_time'), true)) {
+            return;
+        }
+
+        $this->movedOccurrences[$this->movingDate] = $localTime;
+        $this->cancelMove();
+        $this->loadSchedulePreview();
+    }
+
+    public function cancelMove(): void
+    {
+        $this->movingDate = null;
+        $this->moveSlots = [];
     }
 
     /**
@@ -655,7 +1084,55 @@ final class BookingWizard extends Component
         $this->banner = '';
         $this->validate($this->rulesForSubmit(), [], $this->validationAttributes());
 
-        $payload = [
+        // A repeating schedule may not be confirmed while dates in it are
+        // known not to work. The student has already been shown each one
+        // and can move it, drop it, or change the pattern — confirming
+        // over the top of them would mean quietly booking fewer classes
+        // than the schedule says.
+        if ($this->recurring && ($this->previewMeta['conflicts'] ?? 0) > 0) {
+            $this->banner = 'Some dates in your schedule need attention before you can confirm. Move or remove them below, or change the repeat pattern.';
+            $this->goToPhase('review');
+
+            return;
+        }
+
+        $payload = $this->submissionPayload();
+
+        try {
+            if ($this->recurring) {
+                $result = $this->wizard->bookSeries(
+                    $payload,
+                    $this->recurrencePattern(),
+                    $this->skippedDates,
+                    $this->movedOccurrences,
+                );
+                $this->bookingId = $result->booked->first()?->id;
+                $this->result = $this->wizard->recurringResult($result);
+            } else {
+                $booking = $this->wizard->book($payload);
+                $this->bookingId = $booking->id;
+                $this->result = $this->wizard->result($booking);
+                $this->refreshWalletOption();
+            }
+
+            $this->goToPhase('confirmed');
+        } catch (SlotUnavailableException|NoEligibleTeacherException) {
+            $this->returnToTimeSelection();
+        } catch (BookingException $exception) {
+            $this->banner = $exception->getMessage();
+        }
+    }
+
+    /**
+     * The submission payload, shared by the preview and the real
+     * submission so the schedule a student is shown is built from
+     * exactly the values that will be sent.
+     *
+     * @return array<string, mixed>
+     */
+    private function submissionPayload(): array
+    {
+        return [
             'type' => $this->type,
             'subject' => $this->subject,
             'grade' => $this->grade,
@@ -679,25 +1156,52 @@ final class BookingWizard extends Component
             // can fund anything. Null for every ordinary paid booking.
             'package_entitlement_id' => $this->packageEntitlementId,
         ];
+    }
 
-        try {
-            if ($this->recurring) {
-                $result = $this->wizard->bookRecurring($payload, (string) $this->frequency, $this->occurrences);
-                $this->bookingId = $result->booked->first()?->id;
-                $this->result = $this->wizard->recurringResult($result);
-            } else {
-                $booking = $this->wizard->book($payload);
-                $this->bookingId = $booking->id;
-                $this->result = $this->wizard->result($booking);
-                $this->refreshWalletOption();
-            }
+    /**
+     * The student's repeat choices as a pattern the server can anchor.
+     *
+     * Every value is bounded here as well as server-side; this is a
+     * convenience for the UI, not the authority — WizardBookingService
+     * and RecurrencePatternData validate the same things again on a
+     * request the browser could have crafted by hand.
+     */
+    private function recurrencePattern(): RecurrencePatternData
+    {
+        $endCondition = RecurrenceEndCondition::tryFrom($this->endCondition) ?? RecurrenceEndCondition::AfterCount;
 
-            $this->goToPhase('confirmed');
-        } catch (SlotUnavailableException|NoEligibleTeacherException) {
-            $this->returnToTimeSelection();
-        } catch (BookingException $exception) {
-            $this->banner = $exception->getMessage();
-        }
+        // One cadence, expressed once: the chosen days, every week. Seven
+        // days is a daily schedule; there is nothing else to say.
+        return new RecurrencePatternData(
+            frequency: RecurrenceFrequency::Weekly,
+            interval: 1,
+            weekdays: array_map(static fn (int $day): Weekday => Weekday::from($day), $this->selectedWeekdays()),
+            endCondition: $endCondition,
+            endDate: $endCondition === RecurrenceEndCondition::OnDate ? $this->endDate : null,
+            occurrenceCount: $endCondition === RecurrenceEndCondition::AfterCount ? max(1, $this->occurrences) : null,
+        );
+    }
+
+    /**
+     * The chosen days, validated and ordered.
+     *
+     * Nothing is ever added here. The old form forced the start date's
+     * own weekday into the set, because the start date WAS the first
+     * class; now the start date is only a boundary and the days are the
+     * student's alone.
+     *
+     * @return list<int>
+     */
+    private function selectedWeekdays(): array
+    {
+        $days = array_values(array_unique(array_filter(
+            $this->weekdays,
+            static fn (int $day): bool => $day >= 0 && $day <= 6,
+        )));
+
+        sort($days);
+
+        return $days;
     }
 
     /**
@@ -711,6 +1215,12 @@ final class BookingWizard extends Component
         $this->selectedSlotStartsAt = null;
         $this->fundingOptions = [];
         $this->packageEntitlementId = null;
+        // The whole schedule hung off the slot that has just gone, so the
+        // preview it produced is no longer about anything. Cleared rather
+        // than left on screen going stale.
+        $this->schedulePreview = [];
+        $this->previewMeta = [];
+        $this->cancelMove();
         $this->loadSlots();
         $this->goToPhase('time');
         $this->banner = self::SLOT_TAKEN_MESSAGE;
@@ -937,8 +1447,19 @@ final class BookingWizard extends Component
             'subject',
             'grade',
             'recurring',
-            'frequency',
             'occurrences',
+            'weekdays',
+            'endCondition',
+            'endDate',
+            'skippedDates',
+            'movedOccurrences',
+            'schedulePreview',
+            'previewMeta',
+            'previewPage',
+            'movingDate',
+            'moveSlots',
+            'seriesInstructorId',
+            'seriesTimezone',
             'date',
             'selectedSlotStartsAt',
             'notes',
@@ -991,6 +1512,16 @@ final class BookingWizard extends Component
             'learningSummary' => $this->learningSummary(),
             'scheduleSummary' => $this->scheduleSummary(),
             'recurrenceSummary' => $this->recurrenceSummary(),
+            'recurrencePatternLabel' => $this->recurrencePatternLabel(),
+            'horizonExplainer' => $this->horizonExplainer(),
+            'skipPolicyExplainer' => $this->skipPolicyExplainer(),
+            'selectedWeekdays' => $this->selectedWeekdays(),
+            'firstClassDate' => $this->firstClassDate(),
+            'perWeekLabel' => $this->perWeekLabel(),
+            'classCountLabel' => $this->classCountLabel(),
+            'cadenceLabel' => $this->recurring && $this->weekdays !== [] ? $this->cadenceLabel() : null,
+            'scheduleComplete' => $this->scheduleComplete(),
+            'scheduleHint' => $this->scheduleHint(),
             'billingModeChosen' => $this->recurring || $this->phaseIndex($currentPhase) > $this->phaseIndex('billing_mode'),
             'learningComplete' => $this->learningComplete(),
             'policy' => [
@@ -1263,7 +1794,12 @@ final class BookingWizard extends Component
     {
         $this->banner = '';
 
-        if (! $this->type || ! $this->subject || ! $this->grade || ! $this->date) {
+        // A repeating schedule shares one time across every class, so the
+        // times offered are the FIRST CLASS's — not the start
+        // boundary's, which may not be a class day at all.
+        $slotDate = $this->recurring ? $this->firstClassDate() : $this->date;
+
+        if (! $this->type || ! $this->subject || ! $this->grade || ! $slotDate) {
             $this->availableSlots = [];
 
             return;
@@ -1271,7 +1807,7 @@ final class BookingWizard extends Component
 
         try {
             $this->availableSlots = $this->wizard
-                ->availableSlots($this->type, $this->subject, (int) $this->grade, CarbonImmutable::parse($this->date, $this->timezone), $this->timezone, $this->lockedInstructorId, $this->browsingAcademicContext())
+                ->availableSlots($this->type, $this->subject, (int) $this->grade, CarbonImmutable::parse($slotDate, $this->timezone), $this->timezone, $this->lockedInstructorId, $this->browsingAcademicContext())
                 ->all();
         } catch (BookingException $exception) {
             $this->availableSlots = [];
@@ -1373,8 +1909,20 @@ final class BookingWizard extends Component
             'selectedSlotStartsAt' => ['required', 'string', Rule::in(collect($this->availableSlots)->pluck('starts_at')->all())],
             'timezone' => ['required', 'timezone'],
             'notes' => ['nullable', 'string', 'max:1000'],
-            'frequency' => ['required', Rule::in(['daily', 'weekly'])],
-            'occurrences' => ['required', 'integer', 'between:2,'.RecurrenceData::MAX_OCCURRENCES],
+            // No product cap on the number of classes. The only bound is
+            // the enumeration guard the scheduler already needs to walk a
+            // calendar safely — a processing limit, not a limit on what a
+            // student may ask for.
+            'occurrences' => ['required_if:endCondition,after_count', 'integer', 'min:1', 'max:'.RecurrenceRuleData::MAX_ENUMERATED_CANDIDATES],
+            'endCondition' => ['required', Rule::enum(RecurrenceEndCondition::class)],
+            'endDate' => ['required_if:endCondition,on_date', 'nullable', 'date_format:Y-m-d', 'after_or_equal:'.now($this->timezone)->toDateString()],
+            'weekdays' => ['required', 'array', 'min:1'],
+            'weekdays.*' => ['integer', 'between:0,6'],
+            // "Starting from" is a boundary, not a class date, so it is
+            // not checked against the available-dates list the way a
+            // one-time class's date is — firstClassDate() resolves the
+            // real class day and the preview checks THAT.
+            'startDate' => ['required', 'date_format:Y-m-d', 'after_or_equal:'.now($this->timezone)->toDateString()],
             'educationSystemId' => ['required', 'string', Rule::in(collect($this->educationSystems)->pluck('id')->all())],
             'educationSystemLevelId' => ['required', 'string', Rule::in(collect($this->levels)->pluck('id')->all())],
             'academicSubjectId' => ['required', 'string', Rule::in(collect($this->academicSubjects)->pluck('id')->all())],
@@ -1396,7 +1944,9 @@ final class BookingWizard extends Component
         }
 
         if ($this->recurring) {
-            $rules += collect($this->fieldRules())->only(['frequency', 'occurrences'])->all();
+            $rules += collect($this->fieldRules())
+                ->only(['occurrences', 'endCondition', 'endDate', 'weekdays', 'weekdays.*'])
+                ->all();
         }
 
         return $rules;
@@ -1413,7 +1963,9 @@ final class BookingWizard extends Component
 
     /**
      * The ordered phase list for the current selections. Paid types add
-     * a billing-mode choice; a recurring choice adds a frequency step.
+     * a billing-mode choice. A repeating schedule adds no step of its
+     * own — its settings live inside the schedule step, beside the
+     * calendar and the times.
      * Free Demo and single-session Paid Lesson skip both.
      *
      * @return list<string>
@@ -1433,10 +1985,6 @@ final class BookingWizard extends Component
 
         if ($this->isPaidType()) {
             $phases[] = 'billing_mode';
-
-            if ($this->recurring) {
-                $phases[] = 'frequency';
-            }
         }
 
         $phases[] = 'date';
@@ -1481,14 +2029,38 @@ final class BookingWizard extends Component
     }
 
     /** @return list<array<string, mixed>> */
+    /**
+     * The month grid.
+     *
+     * The two modes ask the calendar different questions, so it answers
+     * different things:
+     *
+     *  - One-time: "which days can I have a class?" — selectable means
+     *    the instructor actually has slots that day.
+     *  - Repeating: "when should this start?" — the start is a boundary,
+     *    and it may deliberately land on a day that is not a class day
+     *    at all, so any day inside the bookable window is selectable.
+     *    Days that match the chosen weekdays are marked, and the one
+     *    that will actually be the first class is marked distinctly.
+     *
+     * @return list<array<string, mixed>|null>
+     */
     private function calendar(): array
     {
         $month = $this->monthDate();
         $days = [];
 
-        for ($i = 0; $i < $month->dayOfWeek; $i++) {
+        // Monday-first, matching both the grid header and the Mon–Sun
+        // class-day buttons. Carbon numbers Sunday as 0, so the offset is
+        // shifted rather than used directly.
+        for ($i = 0, $lead = ((int) $month->dayOfWeek + 6) % 7; $i < $lead; $i++) {
             $days[] = null;
         }
+
+        $today = CarbonImmutable::now($this->timezone)->startOfDay();
+        $lastBookable = $today->addDays(max(1, app(BookingSettings::class)->maximum_advance_booking_days));
+        $weekdays = $this->selectedWeekdays();
+        $firstClass = $this->firstClassDate();
 
         for ($day = 1; $day <= $month->daysInMonth; $day++) {
             $date = $month->setDay($day);
@@ -1498,7 +2070,11 @@ final class BookingWizard extends Component
                 'day' => $day,
                 'iso' => $iso,
                 'label' => $date->format('l, F j'),
-                'available' => in_array($iso, $this->dates, true),
+                'available' => $this->recurring
+                    ? ($date->greaterThanOrEqualTo($today) && $date->lessThanOrEqualTo($lastBookable))
+                    : in_array($iso, $this->dates, true),
+                'is_class_day' => $this->recurring && in_array((int) $date->dayOfWeek, $weekdays, true),
+                'is_first_class' => $firstClass === $iso,
                 'selected' => $this->date === $iso,
             ];
         }
@@ -1515,7 +2091,7 @@ final class BookingWizard extends Component
 
         match ($this->stageOf($this->currentPhase())) {
             'learning' => $this->learningComplete() ? $this->goToPhase($this->resumeSchedulePhase()) : null,
-            'schedule' => $this->selectedSlotStartsAt !== null && ! ($this->recurring && $this->frequency === null)
+            'schedule' => $this->scheduleComplete()
                 ? $this->goToPhase($this->fundingOptions === [] ? 'review' : 'funding')
                 : null,
             default => null,
@@ -1627,15 +2203,11 @@ final class BookingWizard extends Component
             return 'time';
         }
 
-        if ($this->recurring && $this->frequency === null) {
-            return 'frequency';
-        }
-
-        if ($this->dates !== [] || ! $this->isPaidType()) {
+        if ($this->dates !== [] || $this->recurring || ! $this->isPaidType()) {
             return 'date';
         }
 
-        return $this->recurring ? 'frequency' : 'billing_mode';
+        return 'billing_mode';
     }
 
     /** @return list<array{key:string,label:string,number:int,state:string,summary:?string}> */
@@ -1685,21 +2257,220 @@ final class BookingWizard extends Component
         $startsAt = CarbonImmutable::parse($this->selectedSlotStartsAt)->timezone($this->timezone);
         $summary = $startsAt->format('D, j M').' • '.$startsAt->format('g:i A');
 
-        return $this->recurring && $this->frequency !== null
-            ? $summary.' • '.ucfirst((string) $this->frequency).' × '.$this->occurrences
-            : $summary;
+        if (! $this->recurring || $this->weekdays === []) {
+            return $summary;
+        }
+
+        return $summary.' • '.$this->weekdayNames().' • '.$this->classCountLabel();
     }
 
+    /**
+     * The schedule in one sentence, in the student's own words and
+     * their own timezone.
+     *
+     * Assembled from the same values the pattern is built from, so the
+     * sentence and the schedule cannot say different things. An ongoing
+     * schedule is described as ongoing and never given a class count.
+     */
     private function recurrenceSummary(): ?string
     {
-        if (! $this->recurring || $this->frequency === null || $this->selectedSlotStartsAt === null) {
+        if (! $this->recurring || $this->weekdays === [] || $this->selectedSlotStartsAt === null) {
             return null;
         }
 
         $startsAt = CarbonImmutable::parse($this->selectedSlotStartsAt)->timezone($this->timezone);
-        $cadence = $this->frequency === 'weekly' ? 'Every '.$startsAt->format('l') : 'Every day';
 
-        return sprintf('%s at %s • Starting %s • %d sessions', $cadence, $startsAt->format('g:i A'), $startsAt->format('j F'), $this->occurrences);
+        return implode(' • ', array_filter([
+            $this->cadenceLabel(),
+            'at '.$startsAt->format('g:i A'),
+            // The FIRST CLASS, not the "starting from" boundary the
+            // student picked — those can be different days and only one
+            // of them is a class.
+            'first class '.$startsAt->format('D, j M Y'),
+            $this->endingLabel(),
+        ]));
+    }
+
+    /**
+     * The pattern without a start date — what the collapsed "Repeat" row
+     * shows once the schedule stage is behind the student.
+     */
+    private function recurrencePatternLabel(): ?string
+    {
+        if (! $this->recurring || $this->weekdays === []) {
+            return null;
+        }
+
+        return implode(' · ', array_filter([$this->cadenceLabel(), $this->endingLabel()]));
+    }
+
+    /**
+     * The cadence in one phrase. All seven days is said as "Every day",
+     * because that is what the student chose it to mean.
+     */
+    private function cadenceLabel(): string
+    {
+        $days = $this->selectedWeekdays();
+
+        if ($days === []) {
+            return 'Weekly';
+        }
+
+        return count($days) === 7 ? 'Every day' : 'Every '.$this->weekdayNames();
+    }
+
+    /** "3 classes per week" — the density, stated plainly. */
+    private function perWeekLabel(): ?string
+    {
+        $count = count($this->selectedWeekdays());
+
+        return $count === 0 ? null : sprintf('%d %s per week', $count, $count === 1 ? 'class' : 'classes');
+    }
+
+    /** How many classes the schedule holds, as far as it is knowable. */
+    private function classCountLabel(): string
+    {
+        if ($this->endCondition === 'never') {
+            return 'ongoing';
+        }
+
+        $total = $this->previewMeta['total'] ?? null;
+
+        if ($total !== null) {
+            return $total.' '.($total === 1 ? 'class' : 'classes');
+        }
+
+        return $this->endCondition === 'on_date'
+            ? 'until '.($this->endDate ?? 'a date')
+            : $this->occurrences.' '.($this->occurrences === 1 ? 'class' : 'classes');
+    }
+
+    private function endingLabel(): ?string
+    {
+        return match ($this->endCondition) {
+            'on_date' => $this->endDate !== null
+                ? 'until '.CarbonImmutable::parse($this->endDate)->format('j M Y')
+                : null,
+            'never' => 'with no end date — it continues until you cancel it',
+            default => sprintf('%d %s', max(1, $this->occurrences), $this->occurrences === 1 ? 'class' : 'classes'),
+        };
+    }
+
+    /**
+     * The selected weekdays as a readable list, in the student's own
+     * calendar. Empty until at least one day is chosen.
+     */
+    private function weekdayNames(): string
+    {
+        $days = array_map(
+            static fn (int $day): string => Weekday::from($day)->label(),
+            $this->selectedWeekdays(),
+        );
+
+        if ($days === []) {
+            return '';
+        }
+
+        if (count($days) === 1) {
+            return $days[0];
+        }
+
+        $last = array_pop($days);
+
+        return implode(', ', $days).' and '.$last;
+    }
+
+    /**
+     * Whether the schedule step has everything it needs.
+     *
+     * For a repeating schedule that includes having no unresolved
+     * conflicts: the student has been shown each problem date and can
+     * move it, drop it, or change the days, and moving on with them
+     * unresolved would mean confirming fewer classes than the schedule
+     * claims. submit() refuses the same thing independently, so this is
+     * the courtesy, not the guarantee.
+     */
+    private function scheduleComplete(): bool
+    {
+        if ($this->selectedSlotStartsAt === null) {
+            return false;
+        }
+
+        if (! $this->recurring) {
+            return true;
+        }
+
+        return $this->weekdays !== [] && (int) ($this->previewMeta['conflicts'] ?? 0) === 0;
+    }
+
+    /** Why the schedule step is not finished yet, in the student's words. */
+    private function scheduleHint(): string
+    {
+        if ($this->recurring && $this->weekdays === []) {
+            return 'Choose the days your classes repeat on';
+        }
+
+        if ($this->selectedSlotStartsAt === null) {
+            return $this->recurring ? 'Pick a start date and a class time' : 'Pick a date and time to continue';
+        }
+
+        if ($this->recurring && (int) ($this->previewMeta['conflicts'] ?? 0) > 0) {
+            return 'Sort out the dates that need attention below';
+        }
+
+        return 'Pick a date and time to continue';
+    }
+
+    /**
+     * Explains the confirmation horizon in the student's own terms:
+     * what is reserved, what is merely scheduled, and that nothing is
+     * being charged for the part that is not reserved yet.
+     */
+    private function horizonExplainer(): ?string
+    {
+        if (! $this->recurring || $this->previewMeta === [] || isset($this->previewMeta['error'])) {
+            return null;
+        }
+
+        $planned = (int) ($this->previewMeta['planned'] ?? 0);
+        $days = (int) ($this->previewMeta['horizon_days'] ?? 0);
+
+        if ($this->previewMeta['ongoing'] ?? false) {
+            return sprintf(
+                'This schedule has no end date. We book and hold your classes about %d days ahead at a time, and add the next ones automatically as those dates come around. You are only ever charged for classes that have been booked.',
+                $days,
+            );
+        }
+
+        if ($planned < 1) {
+            return 'Every class in this schedule is reserved as soon as you confirm.';
+        }
+
+        return sprintf(
+            'We book your classes about %d days ahead. The other %d %s in this schedule %s reserved automatically as %s dates come closer — you are only charged for classes that have been booked.',
+            $days,
+            $planned,
+            $planned === 1 ? 'class' : 'classes',
+            $planned === 1 ? 'is' : 'are',
+            $planned === 1 ? 'its' : 'their',
+        );
+    }
+
+    /**
+     * How a removed date affects the schedule — different by design, and
+     * stated before the student confirms rather than discovered after.
+     */
+    private function skipPolicyExplainer(): ?string
+    {
+        if (! $this->recurring) {
+            return null;
+        }
+
+        return match ($this->endCondition) {
+            'on_date' => 'Classes you remove are not replaced: the schedule still ends on the date you chose, with one class fewer.',
+            'never' => 'Classes you remove are simply not booked; the schedule carries on as normal afterwards.',
+            default => 'Classes you remove do not count towards your total: the schedule runs one date further so you still get the number of classes you asked for.',
+        };
     }
 
     private function timezoneLabel(): string

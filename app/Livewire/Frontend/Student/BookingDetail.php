@@ -16,16 +16,20 @@ use App\Booking\Enums\BookingActor;
 use App\Booking\Enums\BookingPaymentStatus;
 use App\Booking\Enums\BookingStatus;
 use App\Booking\Enums\RecordingPlaybackState;
+use App\Booking\Enums\RecurrenceEndCondition;
+use App\Booking\Enums\SeriesChangeScope;
 use App\Booking\Exceptions\BookingException;
 use App\Booking\Exceptions\InvalidPaymentWebhookException;
 use App\Booking\Exceptions\LessonAlreadyStartedException;
 use App\Booking\Payments\RazorpayPaymentProvider;
+use App\Booking\Services\BookingSeriesService;
 use App\Booking\Services\CancellationRefundPolicy;
 use App\Booking\Services\RecordingPlaybackAccessResolver;
 use App\Booking\Services\RescheduleLimitPolicy;
 use App\Booking\Support\FakePaymentSimulator;
 use App\Models\Booking;
 use App\Models\BookingPayment;
+use App\Models\BookingSeries;
 use App\Models\Wallet;
 use App\Settings\FeatureSettings;
 use App\Support\MoneyFormatter;
@@ -64,6 +68,24 @@ final class BookingDetail extends Component
     public array $rescheduleSlots = [];
 
     public string $cancelReason = '';
+
+    /**
+     * Which classes a cancellation applies to when this booking belongs
+     * to a repeating schedule: this one, this and everything after it,
+     * or every remaining class. Defaults to the narrowest choice — a
+     * student cancelling one class must never end a whole schedule by
+     * accident.
+     */
+    public string $cancelScope = 'this_only';
+
+    /** Which page of the schedule is being shown. */
+    public int $seriesPage = 1;
+
+    public bool $extendPanelOpen = false;
+
+    public int $extendByClasses = 4;
+
+    public string $extendToDate = '';
 
     public string $banner = '';
 
@@ -214,6 +236,29 @@ final class BookingDetail extends Component
         $this->banner = '';
 
         try {
+            $scope = SeriesChangeScope::tryFrom($this->cancelScope) ?? SeriesChangeScope::ThisOnly;
+            $series = $this->ownedSeries();
+
+            if ($series !== null && $scope !== SeriesChangeScope::ThisOnly) {
+                // Ends the schedule going forward — completed classes,
+                // their payments and any per-class exceptions are left
+                // exactly as they are. Each class still goes through the
+                // ordinary cancellation path, so refund policy and
+                // notifications behave identically to cancelling one.
+                app(BookingSeriesService::class)->cancelFrom(
+                    $series,
+                    $this->booking,
+                    $scope,
+                    BookingActor::Student,
+                    filled($this->cancelReason) ? $this->cancelReason : null,
+                );
+
+                $this->booking = $this->booking->refresh()->loadMissing(['type', 'instructor']);
+                $this->cancelPanelOpen = false;
+
+                return;
+            }
+
             $updated = $this->bookingService->cancel($this->booking, new CancelBookingData(
                 cancelledBy: BookingActor::Student,
                 reason: filled($this->cancelReason) ? $this->cancelReason : null,
@@ -229,6 +274,92 @@ final class BookingDetail extends Component
         } catch (BookingException $exception) {
             $this->banner = $exception->getMessage();
         }
+    }
+
+    /**
+     * Adds more classes to a finite schedule without touching any that
+     * already exist.
+     *
+     * The rule's end moves and the ordinary generation pass fills in the
+     * new dates; every booking already made keeps its id, reference,
+     * payment and meeting. Nothing is recreated, so an extension can
+     * never disturb a class that has been paid for.
+     */
+    public function extendSeries(): void
+    {
+        $series = $this->ownedSeries();
+
+        if ($series === null) {
+            return;
+        }
+
+        $this->banner = '';
+
+        try {
+            $seriesService = app(BookingSeriesService::class);
+
+            $seriesService->extend(
+                $series,
+                additionalClasses: $series->end_condition === RecurrenceEndCondition::AfterCount ? $this->extendByClasses : null,
+                newEndDate: $series->end_condition === RecurrenceEndCondition::OnDate ? ($this->extendToDate ?: null) : null,
+            );
+
+            // Fill whatever the extension brought inside the horizon now,
+            // rather than making the student wait for the hourly sweep to
+            // show them anything.
+            $seriesService->generate($series->refresh());
+
+            $this->extendPanelOpen = false;
+            $this->seriesPage = 1;
+        } catch (BookingException $exception) {
+            $this->banner = $exception->getMessage();
+        }
+    }
+
+    public function openExtendPanel(): void
+    {
+        $this->extendPanelOpen = true;
+        $this->banner = '';
+
+        $series = $this->ownedSeries();
+
+        if ($series?->end_date !== null) {
+            $this->extendToDate = $series->end_date->addMonth()->toDateString();
+        }
+    }
+
+    public function closeExtendPanel(): void
+    {
+        $this->extendPanelOpen = false;
+    }
+
+    public function seriesNextPage(): void
+    {
+        $this->seriesPage++;
+    }
+
+    public function seriesPreviousPage(): void
+    {
+        $this->seriesPage = max(1, $this->seriesPage - 1);
+    }
+
+    /**
+     * This booking's schedule, but only when it belongs to the
+     * authenticated student.
+     *
+     * Ownership is re-checked here rather than inferred from the
+     * booking's own policy check: a series action changes OTHER
+     * bookings, so "may view this one" is not the question being asked.
+     */
+    public function ownedSeries(): ?BookingSeries
+    {
+        $series = $this->booking?->loadMissing('series')->series;
+
+        if ($series === null) {
+            return null;
+        }
+
+        return (int) $series->student_id === (int) auth()->id() ? $series : null;
     }
 
     public function initiatePayment(): void
@@ -556,6 +687,12 @@ final class BookingDetail extends Component
             // the state RecordingPlaybackAccessResolver releases for the
             // authenticated viewer (playback setting, ownership, lifecycle,
             // withholding) and never inspects the recording row itself.
+            // The whole schedule, paginated — a long series must never
+            // try to render every class at once.
+            'series' => $this->ownedSeries(),
+            'seriesSchedule' => ($series = $this->ownedSeries()) !== null
+                ? app(BookingSeriesService::class)->scheduleFor($series, $this->seriesPage)
+                : null,
             'recordingState' => $this->booking !== null
                 ? app(RecordingPlaybackAccessResolver::class)
                     ->stateFor($this->booking->loadMissing('recording'), auth()->user())

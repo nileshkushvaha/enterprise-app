@@ -15,11 +15,17 @@ use App\Booking\DTOs\AssignmentCriteriaData;
 use App\Booking\DTOs\AvailabilityQueryData;
 use App\Booking\DTOs\BookingAcademicContextData;
 use App\Booking\DTOs\CreateBookingData;
+use App\Booking\DTOs\CreateBookingSeriesData;
 use App\Booking\DTOs\RecurrenceData;
+use App\Booking\DTOs\RecurrencePatternData;
+use App\Booking\DTOs\RecurrenceRuleData;
 use App\Booking\DTOs\RecurringBookingResult;
+use App\Booking\DTOs\SeriesSchedulePreviewData;
 use App\Booking\DTOs\TimeSlotData;
 use App\Booking\DTOs\WizardBookingData;
+use App\Booking\Enums\RecurrenceEndCondition;
 use App\Booking\Enums\RecurrenceFrequency;
+use App\Booking\Enums\Weekday;
 use App\Booking\Exceptions\BookingException;
 use App\Booking\Support\AcademicFlowCopy;
 use App\Booking\Types\FreeDemoType;
@@ -36,7 +42,6 @@ use App\Services\Student\StudentProfileCompletenessService;
 use App\Support\Timezone\LocalWallClock;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Str;
 
 /**
  * Authenticated-student wizard booking flow — every caller is logged
@@ -87,6 +92,7 @@ final class WizardBookingService implements WizardBookingServiceInterface
         private readonly PackageBookingEntitlementResolver $packageEntitlements,
         private readonly AvailabilityRepositoryInterface $availabilityRules,
         private readonly StudentProfileCompletenessService $profileCompleteness,
+        private readonly BookingSeriesService $series,
     ) {}
 
     public function availableDates(
@@ -239,11 +245,104 @@ final class WizardBookingService implements WizardBookingServiceInterface
     }
 
     /**
-     * Free Demo never accepts recurrence (BookingException). The teacher
-     * for the first occurrence (locked, or auto-assigned) is reused for
-     * every later occurrence — a recurring series is with one instructor.
+     * Compatibility entry point: "N occurrences, daily or weekly".
+     *
+     * Now a thin translation onto the series path rather than its own
+     * loop, so this shape and the richer wizard shape cannot drift into
+     * two different notions of what a repeating schedule is.
      */
     public function bookRecurring(WizardBookingData $data, RecurrenceData $recurrence): RecurringBookingResult
+    {
+        return $this->bookSeries($data, new RecurrencePatternData(
+            frequency: $recurrence->frequency,
+            interval: $recurrence->interval,
+            endCondition: RecurrenceEndCondition::AfterCount,
+            occurrenceCount: max(1, $recurrence->occurrences),
+        ));
+    }
+
+    /**
+     * Creates a repeating schedule and reserves its classes.
+     *
+     * Free Demo never accepts recurrence (BookingException). The teacher
+     * resolved for the first occurrence — locked, or auto-assigned — is
+     * the series' instructor for its whole life: no later occurrence is
+     * ever given to somebody else, and a date that instructor cannot
+     * teach is reported, never reassigned.
+     *
+     * Nothing here caps the schedule. How many classes exist AT ONCE is
+     * bounded by the confirmation horizon inside BookingSeriesService;
+     * how many the student may ask for is bounded only by the rule they
+     * chose, which may have no end at all.
+     */
+    public function bookSeries(WizardBookingData $data, RecurrencePatternData $pattern, array $skippedDates = [], array $timeOverrides = []): RecurringBookingResult
+    {
+        [$teacherId, $rule, $type] = $this->prepareSeries($data, $pattern);
+
+        // TZ-6 (Product Decision 2 / TZ-AUD-022) preserved exactly: a
+        // series containing a wall-clock reading daylight saving makes
+        // impossible or doubled is refused OUTRIGHT, before a single
+        // class, reservation or payment demand exists. Unlike an
+        // availability clash — a fact about one date the student can work
+        // around — an unrepresentable time means we do not know what they
+        // asked for, and a scheduling platform must not choose for them.
+        $this->assertRuleRepresentable($rule, $skippedDates, $timeOverrides);
+
+        $result = $this->series->create(new CreateBookingSeriesData(
+            typeKey: $data->typeKey,
+            studentId: (int) auth()->id(),
+            instructorId: $teacherId,
+            rule: $rule,
+            durationMinutes: (int) $type->duration_minutes,
+            studentTimezone: $data->timezone,
+            meta: ['subject' => $data->subject, 'grade' => $data->grade],
+            notes: $data->notes,
+            createdBy: (int) auth()->id(),
+            skippedDates: $skippedDates,
+            timeOverrides: $timeOverrides,
+        ));
+
+        return $result;
+    }
+
+    /**
+     * The schedule a pattern would produce, every date inside the
+     * confirmation horizon actually checked — the answer the Review step
+     * shows before anything is reserved.
+     *
+     * Advisory by construction: it runs outside the instructor lock, so
+     * creation re-checks every occurrence under that lock rather than
+     * trusting this. What it guarantees is that the student is never
+     * asked to confirm a schedule whose conflicts they have not seen.
+     *
+     * @param  list<string>  $skippedDates
+     */
+    public function previewSeries(WizardBookingData $data, RecurrencePatternData $pattern, array $skippedDates = [], int $page = 1, array $timeOverrides = []): SeriesSchedulePreviewData
+    {
+        [$teacherId, $rule, $type] = $this->prepareSeries($data, $pattern);
+
+        return $this->series->preview(
+            rule: $rule,
+            instructorId: $teacherId,
+            studentId: (int) auth()->id(),
+            durationMinutes: (int) $type->duration_minutes,
+            bufferMinutes: (int) $type->buffer_minutes,
+            skippedDates: $skippedDates,
+            page: $page,
+            isDemo: ! $type->is_paid,
+            timeOverrides: $timeOverrides,
+        );
+    }
+
+    /**
+     * Shared guards plus the anchoring step, so preview and creation can
+     * never be judged by different rules.
+     *
+     * @return array{int, RecurrenceRuleData, BookingType}
+     *
+     * @throws BookingException
+     */
+    private function prepareSeries(WizardBookingData $data, RecurrencePatternData $pattern): array
     {
         $this->assertAuthenticated();
         $this->assertProfileComplete();
@@ -274,104 +373,93 @@ final class WizardBookingService implements WizardBookingServiceInterface
         }
 
         $teacherId = $this->resolveTeacher($data, $type, $data->grade, null);
-        $occurrences = max(2, min($recurrence->occurrences, RecurrenceData::MAX_OCCURRENCES));
-        $groupId = (string) Str::uuid();
 
-        // TZ-6 (Product Decision 1): a recurring series is anchored to the
-        // INSTRUCTOR'S availability clock, not the student's.
-        //
-        // The series exists because the instructor publishes "Mondays at
-        // 19:00" — that rule is theirs, and it must keep meaning 19:00 to
-        // them all year. Anchoring to the student instead (the previous
-        // behavior, characterized in TZ-2A) held the STUDENT's clock
-        // still and therefore walked the instructor's teaching slot by an
-        // hour for the weeks when the two countries' DST dates differ,
-        // pushing lessons outside the very availability window that
-        // created them.
-        //
-        // Students are unaffected in the sense that matters: every
-        // occurrence is still stored as a UTC instant and still rendered
-        // in their own timezone (TZ-4). What changes is that their local
-        // clock may move by an hour across a transition, while the
-        // instructor's does not.
-        $recurrenceTimezone = $this->availabilityRules->calendarTimezoneFor($teacherId);
-        $anchor = $data->startsAt->setTimezone($recurrenceTimezone);
-
-        // Generated up front, and validated as a whole BEFORE anything is
-        // persisted: a series whose wall clock cannot be represented is
-        // refused outright rather than half-created (see assertRepresentable).
-        $schedule = [];
-        $intendedReadings = [];
-        $anchorTimeOfDay = $anchor->format('H:i:s');
-
-        for ($i = 0; $i < $occurrences; $i++) {
-            $occurrence = $recurrence->nextStartsAt($anchor, $i);
-            $schedule[] = $occurrence;
-
-            // The reading the student ASKED for, not the one PHP settled
-            // on. Carbon normalizes a skipped wall clock the moment it is
-            // constructed (01:30 becomes 02:30), so inspecting the
-            // resulting instant can never reveal the gap. Pairing the
-            // occurrence's DATE — which calendar arithmetic gets right —
-            // with the anchor's original time-of-day reconstructs the
-            // intent, and that is what gets validated.
-            $intendedReadings[] = $occurrence->format('Y-m-d').' '.$anchorTimeOfDay;
-        }
-
-        $this->assertRepresentable($intendedReadings, $recurrenceTimezone);
-
-        $booked = new Collection;
-        $failures = [];
-
-        foreach ($schedule as $startsAt) {
-            try {
-                $booked->push($this->bookings->request($this->occurrenceData($data, $type, $startsAt, $teacherId, $data->grade, extraMeta: ['recurring_group' => $groupId], recurrenceFrequency: $recurrence->frequency)));
-            } catch (BookingException $e) {
-                $failures[$startsAt->toIso8601String()] = $e->getMessage();
-            }
-        }
-
-        if ($booked->isEmpty()) {
-            throw new BookingException('None of the requested sessions could be booked: '.implode(' ', $failures));
-        }
-
-        return new RecurringBookingResult($groupId, $booked, $failures);
+        return [$teacherId, $this->anchorRule($data, $pattern, $teacherId), $type];
     }
 
     /**
-     * TZ-6 (Product Decision 2 / TZ-AUD-022): refuse a series containing
-     * a wall-clock reading that daylight saving makes impossible or
-     * double.
+     * Turns the student's choices into the series' own rule.
      *
-     * Checked for EVERY occurrence before a single one is created, so a
-     * DST-invalid series has no partial effect at all — no booking, no
-     * reservation, no payment demand. That is a stricter guarantee than
-     * the availability-clash path, which deliberately books what it can
-     * and reports the rest (see RecurringBookingResult): a clash is a
-     * fact about a specific date the student can work around, whereas an
-     * unrepresentable time means we do not know what they asked for.
+     * TZ-6 (Product Decision 1): the series is anchored to the
+     * INSTRUCTOR'S availability clock, not the student's.
      *
-     * PHP would answer either case silently — shifting a skipped time
-     * forward, or picking the first of two identical readings — and a
-     * scheduling platform must not choose on the user's behalf.
+     * The series exists because the instructor publishes "Mondays at
+     * 19:00" — that rule is theirs, and it must keep meaning 19:00 to
+     * them all year. Anchoring to the student instead (the behaviour
+     * characterised in TZ-2A) held the STUDENT's clock still and
+     * therefore walked the instructor's teaching slot by an hour for the
+     * weeks when the two countries' DST dates differ, pushing lessons
+     * outside the very availability window that created them.
      *
-     * @param  list<string>  $intendedReadings  `Y-m-d H:i:s` as the series intends them locally
+     * Students are unaffected in the sense that matters: every
+     * occurrence is still stored as a UTC instant and still rendered in
+     * their own timezone (TZ-4).
+     *
+     * The weekdays the student ticked are in THEIR calendar, so they are
+     * translated by the day offset between the two calendars at the
+     * chosen slot — a Monday-evening class for a student in New York can
+     * be a Tuesday for an instructor in Kolkata, and the rule has to say
+     * Tuesday or it would schedule the wrong day.
+     */
+    private function anchorRule(WizardBookingData $data, RecurrencePatternData $pattern, int $teacherId): RecurrenceRuleData
+    {
+        $recurrenceTimezone = $this->availabilityRules->calendarTimezoneFor($teacherId);
+        $anchor = $data->startsAt->setTimezone($recurrenceTimezone);
+        $studentAnchor = $data->startsAt->setTimezone($data->timezone);
+
+        $dayOffset = (int) CarbonImmutable::parse($studentAnchor->toDateString())
+            ->diffInDays(CarbonImmutable::parse($anchor->toDateString()));
+
+        $weekdays = array_map(
+            static fn (Weekday $day): Weekday => Weekday::from((($day->value + $dayOffset) % 7 + 7) % 7),
+            $pattern->weekdays,
+        );
+
+        return new RecurrenceRuleData(
+            frequency: $pattern->frequency,
+            startDate: $anchor->toDateString(),
+            timeOfDay: $anchor->format('H:i:s'),
+            timezone: $recurrenceTimezone,
+            interval: $pattern->interval,
+            weekdays: $weekdays,
+            endCondition: $pattern->endCondition,
+            // The student picked a calendar date in their own timezone;
+            // it bounds the series' calendar, so it is read as the end of
+            // that day and re-expressed in the series' timezone.
+            endDate: $pattern->endDate === null
+                ? null
+                : CarbonImmutable::parse($pattern->endDate, $data->timezone)
+                    ->endOfDay()
+                    ->setTimezone($recurrenceTimezone)
+                    ->toDateString(),
+            occurrenceCount: $pattern->occurrenceCount,
+        );
+    }
+
+    /**
+     * @param  list<string>  $skippedDates
      *
      * @throws BookingException
      */
-    private function assertRepresentable(array $intendedReadings, string $timezone): void
+    private function assertRuleRepresentable(RecurrenceRuleData $rule, array $skippedDates, array $timeOverrides = []): void
     {
-        foreach ($intendedReadings as $reading) {
-            $classification = LocalWallClock::classify($reading, $timezone);
+        // A finite schedule is checked end to end; an ongoing one has no
+        // end to check, so it is checked as far as classes are actually
+        // reserved. Either way the student is told about a date rather
+        // than silently given a different time.
+        $occurrences = $rule->endCondition->isFinite()
+            ? $this->series->occurrencesFor($rule, $skippedDates, $timeOverrides)
+            : $this->series->occurrencesWithinHorizon($rule, $skippedDates, $timeOverrides);
 
-            if ($classification === LocalWallClock::VALID) {
+        foreach ($occurrences as $occurrence) {
+            if ($occurrence->isRepresentable()) {
                 continue;
             }
 
             throw new BookingException(sprintf(
                 'This repeating time cannot be scheduled on %s. %s',
-                CarbonImmutable::parse(substr($reading, 0, 10))->format('j M Y'),
-                LocalWallClock::reason($classification, $timezone),
+                CarbonImmutable::parse($occurrence->localDate)->format('j M Y'),
+                LocalWallClock::reason($occurrence->wallClock, $rule->timezone),
             ));
         }
     }

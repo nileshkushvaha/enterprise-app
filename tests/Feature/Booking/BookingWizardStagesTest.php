@@ -10,6 +10,7 @@ use App\Booking\Enums\Weekday;
 use App\Curriculum\Services\EducationSystemService;
 use App\Livewire\Frontend\Booking\BookingWizard;
 use App\Models\Booking;
+use App\Models\BookingSeries;
 use App\Models\BookingType;
 use App\Models\Country;
 use App\Models\EducationSystemLevel;
@@ -433,11 +434,39 @@ class BookingWizardStagesTest extends TestCase
             ->call('selectAcademicSubject', $this->academic['subject']->id)
             ->call('selectCurriculum', $this->academic['curriculum']->id)
             ->call('continueStage')
-            ->assertDontSee('Set the repeat pattern')
+            ->assertDontSee('Class days')
             ->call('selectBillingMode', 'recurring')
-            ->assertSee('Set the repeat pattern')
-            ->call('selectFrequency', 'weekly', 4)
-            ->assertSee('Weekly · 4 sessions');
+            ->assertSee('Class days')
+            ->call('setOccurrences', 4);
+
+        for ($month = CarbonImmutable::now('UTC')->startOfMonth(); $month->lt($slot->startOfMonth()); $month = $month->addMonthNoOverflow()) {
+            $component->call('nextMonth');
+        }
+
+        $component
+            ->call('toggleWeekday', (int) $slot->dayOfWeek)
+            ->call('selectDate', $slot->toDateString())
+            ->call('selectSlot', $slot->toIso8601String())
+            ->assertSee('Every '.$slot->format('l').' • at 10:00 AM • first class '.$slot->format('D, j M Y').' • 4 classes')
+            ->assertSee('Per class');
+    }
+
+    public function test_a_repeating_schedule_can_be_built_reviewed_and_confirmed(): void
+    {
+        $slot = $this->slot();
+        $secondWeekday = (int) $slot->addDays(2)->dayOfWeek;
+
+        $component = $this->wizardFor($this->student())
+            ->call('selectMode', 'paid_one_to_one')
+            ->call('selectLevel', $this->academic['level']->id)
+            ->call('selectAcademicSubject', $this->academic['subject']->id)
+            ->call('selectCurriculum', $this->academic['curriculum']->id)
+            ->call('continueStage')
+            ->call('selectBillingMode', 'recurring')
+            ->call('toggleWeekday', (int) $slot->dayOfWeek)
+            ->call('toggleWeekday', $secondWeekday)
+            ->call('setEndCondition', 'after_count')
+            ->call('setOccurrences', 20);
 
         for ($month = CarbonImmutable::now('UTC')->startOfMonth(); $month->lt($slot->startOfMonth()); $month = $month->addMonthNoOverflow()) {
             $component->call('nextMonth');
@@ -446,8 +475,235 @@ class BookingWizardStagesTest extends TestCase
         $component
             ->call('selectDate', $slot->toDateString())
             ->call('selectSlot', $slot->toIso8601String())
-            ->assertSee('Every '.$slot->format('l').' at 10:00 AM • Starting '.$slot->format('j F').' • 4 sessions')
-            ->assertSee('Per session');
+            ->assertSet('previewMeta.total', 20)
+            ->assertSet('previewMeta.conflicts', 0)
+            // A schedule longer than the horizon is still fully accepted;
+            // the remainder is planned rather than refused.
+            ->assertSee('Your schedule');
+
+        $component
+            ->call('continueStage')
+            ->call('submit')
+            ->assertSet('result.recurring', true);
+
+        $series = BookingSeries::query()->firstOrFail();
+
+        $this->assertSame(20, (int) $series->occurrence_count);
+        // The form only ever produces a plain weekly cadence now; the
+        // days themselves carry the pattern.
+        $this->assertSame(1, (int) $series->repeat_interval);
+        $this->assertEqualsCanonicalizing(
+            [(int) $slot->dayOfWeek, $secondWeekday],
+            array_map('intval', $series->weekdays),
+        );
+        $this->assertGreaterThan(0, $series->bookings()->count());
+    }
+
+    public function test_recurrence_choices_survive_going_back_and_forth_between_steps(): void
+    {
+        $slot = $this->slot();
+
+        $component = $this->wizardFor($this->student())
+            ->call('selectMode', 'paid_one_to_one')
+            ->call('selectLevel', $this->academic['level']->id)
+            ->call('selectAcademicSubject', $this->academic['subject']->id)
+            ->call('selectCurriculum', $this->academic['curriculum']->id)
+            ->call('continueStage')
+            ->call('selectBillingMode', 'recurring')
+            ->call('toggleWeekday', (int) $slot->dayOfWeek)
+            ->call('setEndCondition', 'never');
+
+        for ($month = CarbonImmutable::now('UTC')->startOfMonth(); $month->lt($slot->startOfMonth()); $month = $month->addMonthNoOverflow()) {
+            $component->call('nextMonth');
+        }
+
+        $component
+            ->call('selectDate', $slot->toDateString())
+            ->call('selectSlot', $slot->toIso8601String())
+            ->call('continueStage')
+            ->call('editStage', 'learning')
+            ->call('continueStage')
+            // Every recurrence choice is still exactly as it was left.
+            ->assertSet('weekdays', [(int) $slot->dayOfWeek])
+            ->assertSet('endCondition', 'never')
+            ->assertSet('selectedSlotStartsAt', $slot->toIso8601String());
+    }
+
+    public function test_switching_back_to_a_one_time_session_clears_the_repeat_settings(): void
+    {
+        $this->wizardFor($this->student())
+            ->call('selectMode', 'paid_one_to_one')
+            ->call('selectLevel', $this->academic['level']->id)
+            ->call('selectAcademicSubject', $this->academic['subject']->id)
+            ->call('selectCurriculum', $this->academic['curriculum']->id)
+            ->call('continueStage')
+            ->call('selectBillingMode', 'recurring')
+            ->call('toggleWeekday', 1)
+            ->call('setEndCondition', 'never')
+            ->call('selectBillingMode', 'single')
+            ->assertSet('recurring', false)
+            ->assertSet('weekdays', [])
+            ->assertSet('endCondition', 'after_count')
+            ->assertSet('schedulePreview', []);
+    }
+
+    public function test_starting_from_resolves_to_the_first_chosen_day_and_adds_no_others(): void
+    {
+        // The heart of the simplified form: "starting from" is a
+        // BOUNDARY. Picking a Friday with Monday/Wednesday classes must
+        // schedule the following Monday — not add Friday to the pattern
+        // to make the chosen date work.
+        $slot = $this->slot();
+        $friday = $slot->next(CarbonImmutable::FRIDAY);
+        $monday = $friday->next(CarbonImmutable::MONDAY);
+
+        $component = $this->wizardFor($this->student())
+            ->call('selectMode', 'paid_one_to_one')
+            ->call('selectLevel', $this->academic['level']->id)
+            ->call('selectAcademicSubject', $this->academic['subject']->id)
+            ->call('selectCurriculum', $this->academic['curriculum']->id)
+            ->call('continueStage')
+            ->call('selectBillingMode', 'recurring')
+            ->call('toggleWeekday', CarbonImmutable::MONDAY)
+            ->call('toggleWeekday', CarbonImmutable::WEDNESDAY)
+            ->call('selectDate', $friday->toDateString());
+
+        $this->assertSame($monday->toDateString(), $component->instance()->firstClassDate());
+        $component->assertSet('weekdays', [CarbonImmutable::MONDAY, CarbonImmutable::WEDNESDAY]);
+        $component->assertSee('First class: '.$monday->format('l, j F Y'));
+    }
+
+    public function test_the_last_selected_day_cannot_be_removed(): void
+    {
+        // A repeating schedule with no days is not a schedule. Refusing
+        // out loud beats accepting it and rendering an empty preview.
+        $component = $this->wizardFor($this->student())
+            ->call('selectMode', 'paid_one_to_one')
+            ->call('selectLevel', $this->academic['level']->id)
+            ->call('selectAcademicSubject', $this->academic['subject']->id)
+            ->call('selectCurriculum', $this->academic['curriculum']->id)
+            ->call('continueStage')
+            ->call('selectBillingMode', 'recurring')
+            ->call('toggleWeekday', CarbonImmutable::MONDAY)
+            ->call('toggleWeekday', CarbonImmutable::MONDAY);
+
+        $component->assertSet('weekdays', [CarbonImmutable::MONDAY]);
+        $this->assertStringContainsString('at least one day', (string) $component->get('banner'));
+    }
+
+    public function test_all_seven_days_is_a_daily_schedule(): void
+    {
+        $slot = $this->slot();
+
+        $component = $this->wizardFor($this->student())
+            ->call('selectMode', 'paid_one_to_one')
+            ->call('selectLevel', $this->academic['level']->id)
+            ->call('selectAcademicSubject', $this->academic['subject']->id)
+            ->call('selectCurriculum', $this->academic['curriculum']->id)
+            ->call('continueStage')
+            ->call('selectBillingMode', 'recurring');
+
+        foreach (range(0, 6) as $day) {
+            $component->call('toggleWeekday', $day);
+        }
+
+        $component
+            ->call('setOccurrences', 4)
+            ->assertSee('7 classes per week')
+            ->assertSee('Every day');
+
+        for ($month = CarbonImmutable::now('UTC')->startOfMonth(); $month->lt($slot->startOfMonth()); $month = $month->addMonthNoOverflow()) {
+            $component->call('nextMonth');
+        }
+
+        $component
+            ->call('selectDate', $slot->toDateString())
+            ->call('selectSlot', $slot->toIso8601String());
+
+        $rows = collect($component->get('schedulePreview'))->pluck('local_date')->all();
+
+        $this->assertSame([
+            $slot->toDateString(),
+            $slot->addDay()->toDateString(),
+            $slot->addDays(2)->toDateString(),
+            $slot->addDays(3)->toDateString(),
+        ], $rows);
+    }
+
+    public function test_the_schedule_step_cannot_be_left_without_days_or_with_conflicts(): void
+    {
+        $component = $this->wizardFor($this->student())
+            ->call('selectMode', 'paid_one_to_one')
+            ->call('selectLevel', $this->academic['level']->id)
+            ->call('selectAcademicSubject', $this->academic['subject']->id)
+            ->call('selectCurriculum', $this->academic['curriculum']->id)
+            ->call('continueStage')
+            ->call('selectBillingMode', 'recurring');
+
+        $step = $component->get('step');
+
+        // No days, no time — Review booking does nothing.
+        $component->call('continueStage')->assertSet('step', $step);
+        $component->assertSee('Choose the days your classes repeat on');
+    }
+
+    public function test_a_schedule_of_more_than_twelve_classes_goes_through_the_form(): void
+    {
+        $slot = $this->slot();
+
+        $component = $this->wizardFor($this->student())
+            ->call('selectMode', 'paid_one_to_one')
+            ->call('selectLevel', $this->academic['level']->id)
+            ->call('selectAcademicSubject', $this->academic['subject']->id)
+            ->call('selectCurriculum', $this->academic['curriculum']->id)
+            ->call('continueStage')
+            ->call('selectBillingMode', 'recurring')
+            ->call('toggleWeekday', (int) $slot->dayOfWeek)
+            ->call('setOccurrences', 45);
+
+        for ($month = CarbonImmutable::now('UTC')->startOfMonth(); $month->lt($slot->startOfMonth()); $month = $month->addMonthNoOverflow()) {
+            $component->call('nextMonth');
+        }
+
+        $component
+            ->call('selectDate', $slot->toDateString())
+            ->call('selectSlot', $slot->toIso8601String())
+            ->assertSet('previewMeta.total', 45)
+            ->call('continueStage')
+            ->call('submit')
+            ->assertSet('result.recurring', true);
+
+        $series = BookingSeries::query()->firstOrFail();
+        $this->assertSame(45, (int) $series->occurrence_count);
+    }
+
+    public function test_changing_the_days_keeps_the_chosen_time_when_it_still_exists(): void
+    {
+        // Correcting the days should not quietly cost the student the
+        // time they already chose.
+        $slot = $this->slot();
+
+        $component = $this->wizardFor($this->student())
+            ->call('selectMode', 'paid_one_to_one')
+            ->call('selectLevel', $this->academic['level']->id)
+            ->call('selectAcademicSubject', $this->academic['subject']->id)
+            ->call('selectCurriculum', $this->academic['curriculum']->id)
+            ->call('continueStage')
+            ->call('selectBillingMode', 'recurring')
+            ->call('toggleWeekday', (int) $slot->dayOfWeek);
+
+        for ($month = CarbonImmutable::now('UTC')->startOfMonth(); $month->lt($slot->startOfMonth()); $month = $month->addMonthNoOverflow()) {
+            $component->call('nextMonth');
+        }
+
+        $component
+            ->call('selectDate', $slot->toDateString())
+            ->call('selectSlot', $slot->toIso8601String())
+            ->assertSet('selectedSlotStartsAt', $slot->toIso8601String())
+            // Adding a day leaves the first class where it was, so the
+            // 10:00 slot is still the chosen one.
+            ->call('toggleWeekday', (int) $slot->addDays(2)->dayOfWeek)
+            ->assertSet('selectedSlotStartsAt', $slot->toIso8601String());
     }
 
     public function test_package_funding_is_chosen_on_the_review_stage(): void

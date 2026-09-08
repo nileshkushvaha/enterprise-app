@@ -42,6 +42,8 @@ final class BookingRepository implements BookingRepositoryInterface
             'notes' => $data->notes,
             'meta' => $data->meta ?: null,
             'recurrence_frequency' => $data->recurrenceFrequency,
+            'booking_series_id' => $data->bookingSeriesId,
+            'series_occurrence_date' => $data->seriesOccurrenceDate,
             ...$attributes,
         ]);
     }
@@ -99,6 +101,18 @@ final class BookingRepository implements BookingRepositoryInterface
             ->forInstructor($instructorId)
             ->overlapping($paddedStart, $paddedEnd, $ignoreBookingId)
             ->lockForUpdate()
+            ->exists();
+    }
+
+    public function studentHasOverlap(
+        int $studentId,
+        CarbonImmutable $startsAt,
+        CarbonImmutable $endsAt,
+        ?string $ignoreBookingId = null,
+    ): bool {
+        return Booking::query()
+            ->forStudent($studentId)
+            ->overlapping($startsAt, $endsAt, $ignoreBookingId)
             ->exists();
     }
 

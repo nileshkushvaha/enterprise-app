@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Booking\Contracts;
 
 use App\Booking\DTOs\RecurrenceData;
+use App\Booking\DTOs\RecurrencePatternData;
 use App\Booking\DTOs\RecurringBookingResult;
+use App\Booking\DTOs\SeriesSchedulePreviewData;
 use App\Booking\DTOs\TimeSlotData;
 use App\Booking\DTOs\WizardBookingData;
 use App\Booking\Exceptions\BookingException;
@@ -65,4 +67,35 @@ interface WizardBookingServiceInterface
      *                          or when the first occurrence cannot be booked
      */
     public function bookRecurring(WizardBookingData $data, RecurrenceData $recurrence): RecurringBookingResult;
+
+    /**
+     * Creates a repeating schedule from the student's full choice of
+     * pattern — daily or weekly, multiple weekdays, every N weeks, and
+     * an end on a date, after a number of classes, or not at all.
+     *
+     * There is no cap on the schedule's length. Classes are reserved
+     * inside the confirmation horizon and the rest are generated as
+     * their dates approach; $skippedDates are occurrences the student
+     * removed while resolving conflicts in the Review step.
+     *
+     * @param  list<string>  $skippedDates  `Y-m-d` in the series' timezone
+     * @param  array<string, string>  $timeOverrides  `Y-m-d => H:i:s`, for individual
+     *                                                classes the student moved to another time on the same date
+     *
+     * @throws BookingException when the type does not allow recurrence,
+     *                          when a wall clock in the schedule is impossible or doubled by
+     *                          daylight saving, or when not one class could be reserved
+     */
+    public function bookSeries(WizardBookingData $data, RecurrencePatternData $pattern, array $skippedDates = [], array $timeOverrides = []): RecurringBookingResult;
+
+    /**
+     * The schedule a pattern would produce, with conflicts resolved
+     * against real availability — what the Review step shows before
+     * anything is reserved. Advisory: creation re-checks under the
+     * instructor lock.
+     *
+     * @param  list<string>  $skippedDates
+     * @param  array<string, string>  $timeOverrides
+     */
+    public function previewSeries(WizardBookingData $data, RecurrencePatternData $pattern, array $skippedDates = [], int $page = 1, array $timeOverrides = []): SeriesSchedulePreviewData;
 }

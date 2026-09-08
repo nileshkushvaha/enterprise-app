@@ -13,6 +13,7 @@ use App\Console\Commands\ExpireLessonRecordings;
 use App\Console\Commands\ExpireLessonReviewEligibility;
 use App\Console\Commands\ExpirePackageEntitlements;
 use App\Console\Commands\FinalizeDueLessons;
+use App\Console\Commands\GenerateBookingSeriesOccurrences;
 use App\Console\Commands\Homework\SendHomeworkDueReminders;
 use App\Console\Commands\ProcessLessonEarningReconciliation;
 use App\Console\Commands\ProcessLessonRefunds;
@@ -129,6 +130,21 @@ app(Schedule::class)
     ->everyFiveMinutes()
     ->withoutOverlapping()
     ->appendOutputTo(storage_path('logs/booking-reservations.log'));
+
+// Roll active recurring class schedules forward into the confirmation
+// horizon. Hourly rather than daily so a schedule created moments ago
+// keeps filling without waiting for tomorrow, and so a horizon that
+// opens up mid-day is used. Fully idempotent — every occurrence is
+// guarded by the (series, occurrence date) unique index — so an
+// overlapping or repeated run creates no duplicate class and no
+// duplicate payment demand; withoutOverlapping()/onOneServer() only
+// avoid the wasted work.
+app(Schedule::class)
+    ->command(GenerateBookingSeriesOccurrences::class)
+    ->hourly()
+    ->withoutOverlapping()
+    ->onOneServer()
+    ->appendOutputTo(storage_path('logs/booking-series-generation.log'));
 
 // Reconcile due payout attempts against the provider (fake provider
 // only, currently). Gated by payout_reconciliation_enabled inside the

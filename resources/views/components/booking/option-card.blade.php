@@ -25,9 +25,13 @@
     $base = 'booking-option group relative flex w-full min-h-11 items-center gap-3 rounded-2xl border-2 text-left transition
         focus:outline-none focus-visible:ring-4 focus-visible:ring-indigo-300/50 disabled:cursor-not-allowed disabled:opacity-50';
     $sizing = $size === 'sm' ? 'px-3 py-2.5' : 'p-4';
+    // The unselected border stays deliberately quiet. A 2px border is
+    // kept in both states so selecting never shifts the layout, but an
+    // unselected card must not read as "partly selected" next to a
+    // selected one — colour is reserved for the selection.
     $state = $selected
         ? 'border-indigo-500 bg-indigo-500/10 text-fg-strong shadow-sm shadow-indigo-500/10'
-        : 'border-edge bg-surface-raised text-fg hover:border-indigo-300 hover:bg-indigo-500/5';
+        : 'border-edge/60 bg-surface-raised text-fg hover:border-indigo-300 hover:bg-indigo-500/5';
     $alignment = $align === 'center' ? 'justify-center text-center' : '';
     $classes = trim((string) preg_replace('/\s+/', ' ', "$base $sizing $state $alignment"));
 @endphp

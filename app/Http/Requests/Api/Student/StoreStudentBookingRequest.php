@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\Api\Student;
 
-use App\Booking\DTOs\RecurrenceData;
+use App\Booking\DTOs\RecurrencePatternData;
 use App\Booking\Enums\RecurrenceFrequency;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -30,9 +30,16 @@ final class StoreStudentBookingRequest extends FormRequest
             // recurring request without an explicit frequency is rejected
             // rather than silently defaulting to weekly.
             'recurring' => ['sometimes', 'boolean'],
-            'occurrences' => ['required_if_accepted:recurring', 'integer', 'between:2,'.RecurrenceData::MAX_OCCURRENCES],
+            //
+            // `occurrences` is no longer capped at twelve. What remains is
+            // an input-sanity bound, not a product limit: a schedule is
+            // stored as a rule and reserved inside the confirmation
+            // horizon, so a long series costs no more work up front than a
+            // short one. The bound here only rejects values that cannot be
+            // a real request.
+            'occurrences' => ['required_if_accepted:recurring', 'integer', 'min:2', 'max:520'],
             'frequency' => ['required_if_accepted:recurring', Rule::enum(RecurrenceFrequency::class)],
-            'interval' => ['sometimes', 'integer', 'between:1,4'],
+            'interval' => ['sometimes', 'integer', 'between:1,'.RecurrencePatternData::MAX_INTERVAL],
         ];
     }
 }

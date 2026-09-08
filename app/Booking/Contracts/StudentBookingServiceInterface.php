@@ -31,7 +31,9 @@ interface StudentBookingServiceInterface
     public function book(StudentBookingData $data): Booking;
 
     /**
-     * Books up to RecurrenceData::MAX_OCCURRENCES weekly repeats.
+     * Books a repeating schedule. No cap on the number of classes: classes
+     * are reserved inside the confirmation horizon and generated forward
+     * from there, so `booked` may be shorter than the number requested.
      * Conflicting occurrences are skipped and reported, not fatal.
      *
      * @throws BookingException when no occurrence could be booked

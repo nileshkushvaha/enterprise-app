@@ -163,8 +163,10 @@ Required on every deploy, in order:
    `php artisan queue:work --queue=notifications --tries=3`
    (supervised). Nothing is delivered without it.
 5. **Scheduler** — `* * * * * php artisan schedule:run` cron. Gates
-   `booking:release-expired` (unpaid reservation cleanup, every
-   5 min) and the existing prune jobs.
+   `booking:release-expired` (unpaid reservation cleanup, every 5 min),
+   `booking:generate-series` (**mandatory** for recurring schedules —
+   without it a series never grows past the classes created at booking
+   time; hourly, idempotent) and the existing prune jobs.
 6. `npm run build` — the booking wizard ships compiled Tailwind.
 
 Settings checklist (Spatie `booking` group): `payment_provider`
@@ -173,7 +175,8 @@ Settings checklist (Spatie `booking` group): `payment_provider`
 `payment_reservation_minutes`, `captcha_enabled` +
 `turnstile_site_key`/`turnstile_secret_key`,
 `max_daily_bookings_per_teacher`, `minimum_booking_notice_minutes`,
-`maximum_advance_booking_days`, notification channel toggles.
+`maximum_advance_booking_days`, `recurring_confirmation_horizon_days`,
+`recurring_generation_batch_size`, notification channel toggles.
 
 ## Subject normalization
 
@@ -205,11 +208,19 @@ The authenticated `/book` wizard (`BookingWizard` Livewire component, `WizardBoo
 - **Teacher choice** is validated: with subject+grade the teacher must
   teach it (`teacher_subjects`); otherwise they must be an
   approved/published instructor.
-- **Recurring** books up to 12 occurrences on a `Daily` or `Weekly` cadence (`RecurrenceFrequency` enum), tagged with a shared
-  `meta.recurring_group` uuid; conflicting occurrences are skipped and reported in
-  `failures` (`RecurringBookingResult::$failures`) — all failing is a 422. The wizard's `WizardBookingService::bookRecurring()`
-  resolves the instructor once (locked via deep-link, or auto-assigned for the first occurrence) and reuses that same instructor for every later occurrence.
-  Recurrence is rejected on a non-paid type with a `BookingException`.
+- **Recurring** creates a `BookingSeries` on a `Daily` or `Weekly`
+  cadence (`RecurrenceFrequency` enum). `occurrences` is **no longer
+  capped at 12** — the request shape is unchanged, but classes are
+  reserved as far as the confirmation horizon reaches and the rest are
+  generated as their dates approach, so `data` may legitimately be
+  shorter than `occurrences`. Every booking still carries the shared
+  `meta.recurring_group` uuid (it is the series id, and still
+  `RecurringBookingResult::$groupId`); conflicting occurrences are
+  reported in `failures` — all failing is a 422. `WizardBookingService`
+  resolves the instructor once (locked via deep-link, or auto-assigned
+  for the first occurrence) and that instructor is the series'
+  instructor for its whole life. Recurrence is rejected on a non-paid
+  type with a `BookingException`.
 - **Payments**: paid types return a payment intent on creation.
   `BookingPaymentServiceInterface` is bound to a clearly marked
   PLACEHOLDER (`BookingPaymentService`) — generates references,
@@ -223,6 +234,155 @@ The authenticated `/book` wizard (`BookingWizard` Livewire component, `WizardBoo
   `expectsJson()` in bootstrap/app.php (exceptions + BookingException
   → 422).
 
+## Recurring class schedules (series)
+
+A repeating booking is a **schedule** — a stored rule — that owns
+individual class bookings, rather than N loose bookings sharing a uuid.
+
+That distinction is what removed the twelve-occurrence limit. The old
+design created every occurrence up front, so "every occurrence" had to
+be finite and small. Storing the rule instead means the length of a
+schedule costs nothing at creation: a student can ask for forty classes,
+or for one with no end at all.
+
+### Tables
+
+| Table | Holds |
+|---|---|
+| `booking_series` | the rule (frequency, `repeat_interval`, `weekdays`, `start_date`, `time_of_day`, end condition), its own `timezone`, the student's `student_timezone`, status, and `generated_through_date` — the generation watermark |
+| `booking_series_exceptions` | per-date deviations: `skipped` (student removed it), `conflict` (became unbookable after the fact), `moved` (same date, different `local_time`) |
+| `bookings.booking_series_id` + `bookings.series_occurrence_date` | the link, with a **UNIQUE** index on the pair |
+
+All additive and nullable; nothing is backfilled. Historical recurring
+bookings keep being identified only by `meta.recurring_group` and are
+deliberately not given a rule — inventing one for a set of dates nobody
+stated one for would be a guess, and a guessed rule would generate real
+classes. New series bookings keep writing `meta.recurring_group` (set to
+the series id), so existing readers, reports and API consumers are
+unaffected.
+
+### Confirmation horizon
+
+`BookingSettings::$recurring_confirmation_horizon_days` (default 60) is
+how far ahead classes are actually created and reserved. Beyond it,
+dates are **planned**: real parts of the schedule, not yet held and not
+charged. `BookingSeriesService::horizonDate()` measures from the series'
+START once that is in the future — otherwise a schedule beginning in six
+months would confirm nothing at the moment the student books it — and is
+always clamped to `maximum_advance_booking_days` measured from today, so
+a series can never reserve further ahead than any other booking may.
+
+`booking:generate-series` (hourly, `withoutOverlapping()`,
+`onOneServer()`) dispatches `GenerateBookingSeriesOccurrences` per active
+series; the job fills one bounded batch
+(`recurring_generation_batch_size`, default 25) and re-dispatches itself
+while the horizon still has room.
+
+### Idempotence
+
+Generation is safe to retry, repeat, or race, in this order of authority:
+
+1. `bookings (booking_series_id, series_occurrence_date)` is UNIQUE — two
+   workers attempting one occurrence produce one row and one caught
+   constraint violation, never two classes and two payment demands.
+2. `generated_through_date` is a watermark, so a resumed run does not
+   re-walk decided work.
+3. A cancelled occurrence keeps its booking row, so regeneration cannot
+   resurrect a class the student called off.
+
+`ShouldBeUnique` on the job is an optimisation, not the guarantee.
+
+### Recurrence math
+
+`RecurrenceScheduler` is the only place a rule becomes dates — the
+wizard preview, the review step, creation, the background job and the
+API all go through it, so the client can never disagree with the server.
+It is pure (no persistence, no clock, no availability) and unit-tested in
+`tests/Unit/Booking/RecurrenceSchedulerTest.php`.
+
+Dates are enumerated in the RULE's timezone. Weeks are anchored on the
+Sunday of the start date's week, so `Weekday`'s Sunday-first numbering is
+also chronological order and "every N weeks" keeps its phase across month
+and year boundaries. Each occurrence pairs the calendar date with the
+rule's own time of day — that pairing, not a fixed UTC offset from the
+first class, is what resolves to an instant, so the intended wall clock
+survives daylight saving. A reading a spring-forward transition deletes
+(or a fall-back doubles) is reported as unrepresentable, never moved:
+`WizardBookingService::assertRuleRepresentable()` refuses the whole
+series before anything is created, exactly as before (TZ-6 / TZ-AUD-022,
+`tests/Feature/Booking/TimezonePolicyClosureTest.php`).
+
+The series' timezone is the INSTRUCTOR's scheduling calendar
+(`AvailabilityRepository::calendarTimezoneFor()`), unchanged from TZ-6's
+product decision. Weekdays the student ticked are in THEIR calendar and
+are translated by the day offset between the two at the chosen slot — a
+Monday-evening class for a student in New York can be a Tuesday for an
+instructor in Kolkata, and the rule has to say Tuesday.
+
+### Conflicts, and what a lost date costs
+
+`SeriesOccurrenceConflictChecker` evaluates one date against the
+instructor's availability (the same `AvailabilityService::ensureAvailable()`
+`BookingService::request()` runs under the instructor lock), the
+student's own overlapping classes
+(`BookingRepositoryInterface::studentHasOverlap()`), the bookable window
+and wall-clock representability. It is only ever given the series'
+existing instructor and has no way to look for another — a date the
+assigned instructor cannot teach is a conflict for the student to
+resolve, never a silent reassignment.
+
+The preview is advisory by nature (it runs outside the lock), which is
+why creation re-checks every occurrence under it.
+
+Nothing is ever silently skipped or shifted:
+
+- **In the wizard**, conflicts are shown before confirmation and must be
+  moved or removed; the CTA is disabled and `submit()` refuses.
+- **In the background**, a date that has become unbookable is written as
+  a `conflict` exception carrying its reason — visible in the student's
+  series view — rather than vanishing.
+
+Whether a lost date costs a class depends on the end condition, and the
+student is told which applies before confirming:
+
+| End condition | A removed/unbookable date |
+|---|---|
+| After N classes | does not count — the schedule reaches one date further, so N classes still happen |
+| On a date | is simply not booked — the last date does not move, so there is one class fewer |
+| Never (ongoing) | is not booked; the schedule carries on |
+
+### Managing a schedule
+
+`BookingSeriesService` owns the operations, all routed through the
+ordinary engine so refund policy, reschedule allowance, the timeline,
+events and notifications behave exactly as for a single booking:
+
+- `skipOccurrence()` — drop one date (cancels its booking if one exists).
+- `moveOccurrence()` — same date, different time, recorded as a `moved`
+  exception; the class keeps its place and still counts.
+- `cancelFrom()` — `SeriesChangeScope::ThisOnly` /
+  `ThisAndFollowing` / `RemainingSeries`. The latter two truncate the
+  RULE rather than deleting the series, so completed classes, payment
+  history and existing exceptions are preserved and nothing further is
+  generated.
+- `extend()` — moves a finite schedule's end. Nothing is recreated:
+  existing bookings keep their ids, references, payments and meetings,
+  and the watermark means generation resumes where it stopped.
+
+Ownership is re-checked for every series action
+(`BookingDetail::ownedSeries()`) rather than inferred from the single
+booking's policy check — a series action changes OTHER bookings, so "may
+view this one" is not the question being asked.
+
+### Payment semantics
+
+Unchanged. Each class is priced, reserved and paid **separately**, with
+its own reference and its own `reserved_until` hold; nothing is charged
+automatically and no refund, authorization or cancellation policy
+changed. The wizard states three separate figures — per class, the
+finite schedule's scheduled value, and the amount payable now — and
+shows an ongoing schedule as having no total.
+
 ## Student booking wizard (student-facing UX)
 
 The `/book` wizard (`BookingWizard` Livewire component,
@@ -234,7 +394,7 @@ machine is presented (`BookingWizard::STAGE_PHASES`).
 | Stage | Internal phases | What the student does |
 |---|---|---|
 | 1 Learning details | `mode`, `level`, `academic_subject`, `curriculum` (legacy: `subject`, `grade`) | Session type, then level → subject → curriculum, disclosed progressively in one panel. Answered questions collapse to a "Change" row (`x-booking.chosen-row`, `editPhase()`). |
-| 2 Schedule | `billing_mode`, `frequency`, `date`, `time` | "How often?" (paid only), repeat pattern (only after "Repeating sessions"), month calendar, grouped Morning/Afternoon/Evening times — one panel, one "Review booking" CTA. |
+| 2 Schedule | `billing_mode`, `date`, `time` | "How often?" (paid only); for a repeating schedule, class days + "how long" inline; month calendar ("Starting from" when repeating); grouped Morning/Afternoon/Evening times; live schedule summary — one panel, one "Review booking" CTA. |
 | 3 Review | `funding`, `review` | Learning / Schedule / Instructor / Pricing cards with Edit links, package choice when one qualifies, notes, configured cancellation/reschedule facts. CTA "Proceed to payment" or "Confirm booking". |
 | 4 Payment / Confirmed | `confirmed` | Unchanged reservation + checkout screen (`partials/confirmed.blade.php`). |
 
@@ -291,13 +451,42 @@ render only when non-zero. Nothing from the browser feeds the price;
 the booking's price is recalculated at creation and shown again on the
 payment screen.
 
-**Recurring.** Only the supported cadence is exposed: Daily / Weekly,
-2–`RecurrenceData::MAX_OCCURRENCES` sessions, first session = the chosen
-date/time. Once a slot is chosen the summary reads "Every Monday at
-6:00 PM • Starting 12 September • 4 sessions" (`recurrenceSummary()`);
-the price is shown per session because each occurrence is reserved and
-paid separately. Package funding stays single-lesson only (selecting
-"Repeating sessions" clears a chosen package and says so).
+**Recurring.** Selecting "Repeating classes" reveals the whole schedule
+inside the **existing Schedule step** — there is no separate pattern
+step to walk into and back out of, and no "Continue to date & time".
+
+| Field | What it does |
+|---|---|
+| **Class days** | Mon–Sun multi-select. This is the ENTIRE cadence control: classes repeat on these days every week, and all seven days IS a daily schedule. A running "3 classes per week" states the density. At least one day must stay selected. |
+| **Starting from** | The existing calendar, used as a BOUNDARY rather than a class date. `firstClassDate()` resolves the first chosen day on or after it and the UI states it outright ("First class: Wednesday, 2 December 2026"). An unselected weekday is never added to make the picked date work. |
+| **Class time** | The existing slot list, loaded for the FIRST CLASS (not the boundary, which may not be a class day). One shared time across every class; the type's duration and the student's timezone are shown beside it. |
+| **How long?** | Three compact options — a whole number of classes, an end date, or "Until I cancel". Never preselects the ongoing option. |
+
+The Daily/Weekly switch and the "repeat every N weeks/days" control are
+**gone from this form**: they were a second way of saying what the day
+list already says, and two ways of saying it meant two things that could
+disagree. `BookingSeries` still stores `frequency` and `repeat_interval`
+and still generates from them, so series created under the old form keep
+their exact pattern and are described by it (`BookingSeries::describe()`
+→ "Every 3 weeks on Tuesday"). Nothing is ever converted.
+
+Below the fields, `previewSeries()` drives a live summary card: days,
+time, first class, **last class**, class count, and the three price
+figures kept apart (per class / total scheduled / payable now — an
+ongoing schedule shows "No total"). Then the dated list, where each
+occurrence shows whether it is *Ready to confirm*, *Planned*,
+*Reserved — payment due* or a conflict, with per-date **Change time**
+(that instructor's other slots on that date only) and **Remove**. The
+list is paginated and has explicit loading, empty, conflict and retry
+states. A removed date stays visible so it can be put back.
+
+The existing **Review booking** action is the only way forward, and it
+is disabled until the days, a start date, a time and any conflicts are
+resolved (`scheduleComplete()`); `submit()` refuses the same thing
+independently. Every choice is ordinary component state, so moving
+between stages preserves it, and changing the days keeps the chosen time
+of day whenever that slot still exists on the new first class
+(`reanchorSchedule()`).
 
 **Payment.** Unchanged: `submit()` reserves, the confirmed screen calls
 `initiatePayment()` / wallet / fake simulator exactly as before, and only
@@ -370,7 +559,7 @@ Exactly two booking modes exist: `free_demo` and `paid_one_to_one` ("Paid Lesson
 
 Every booking is exclusive: one instructor + one exact time admits exactly one active booking. There is no group-capacity or shared-slot mechanism.
 
-`BookingWizard::mount()` never silently selects a type — the phase list (`BookingWizard::phases()`) always starts with `mode` (Free Demo vs Paid Lesson) unless a valid `?type=` query param was supplied (public instructor-profile CTAs pass one explicitly). Paid types add a `billing_mode` phase (Single vs Recurring) and, if recurring, a `frequency` phase (Daily/Weekly + occurrence count) — Free Demo skips both and never enters payment.
+`BookingWizard::mount()` never silently selects a type — the phase list (`BookingWizard::phases()`) always starts with `mode` (Free Demo vs Paid Lesson) unless a valid `?type=` query param was supplied (public instructor-profile CTAs pass one explicitly). Paid types add a `billing_mode` phase (Single vs Recurring) — Free Demo skips it and never enters payment. A repeating schedule adds NO phase of its own; its fields live inside the schedule step alongside the calendar and times.
 
 `BookingService::request()` rejects any type key that isn't an active `booking_types` row, independent of what the Livewire UI offers.
 

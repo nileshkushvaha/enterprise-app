@@ -10,7 +10,9 @@ use App\Booking\Contracts\TeacherCandidateRepositoryInterface;
 use App\Booking\Contracts\WizardBookingServiceInterface;
 use App\Booking\DTOs\BookingAcademicContextData;
 use App\Booking\DTOs\RecurrenceData;
+use App\Booking\DTOs\RecurrencePatternData;
 use App\Booking\DTOs\RecurringBookingResult;
+use App\Booking\DTOs\SeriesSchedulePreviewData;
 use App\Booking\DTOs\TimeSlotData;
 use App\Booking\DTOs\WizardBookingData;
 use App\Booking\Enums\RecurrenceFrequency;
@@ -194,7 +196,7 @@ final class BookingWizardService
      * Null as well for a type that never charges — a free session has no
      * fee to show.
      *
-     * @return array{requires_payment:bool,currency:string,base_formatted:string,discount_formatted:?string,tax_formatted:?string,total_formatted:string}|null
+     * @return array{requires_payment:bool,currency:string,base_formatted:string,discount_formatted:?string,tax_formatted:?string,total_formatted:string,payable_amount:float,minor_units:int}|null
      */
     public function pricePreview(User $student, string $typeKey, ?string $subject, ?int $grade, ?int $instructorId, ?string $academicLevelId): ?array
     {
@@ -223,6 +225,15 @@ final class BookingWizardService
             'discount_formatted' => $price->discountAmount > 0 ? $format($price->discountAmount) : null,
             'tax_formatted' => $price->taxAmount > 0 ? $format($price->taxAmount) : null,
             'total_formatted' => $format($price->payableAmount),
+            // The per-class amount as a NUMBER, and the currency's minor
+            // unit count. A repeating schedule shows three different
+            // figures — one class, a finite schedule of them, and what is
+            // payable right now — and the other two have to be computed
+            // from this rather than by parsing a formatted string back
+            // into a number. Deliberately scalars: this array is a public
+            // Livewire property and has to survive serialisation.
+            'payable_amount' => $price->payableAmount,
+            'minor_units' => $minorUnits,
         ];
     }
 
@@ -316,6 +327,31 @@ final class BookingWizardService
             $this->wizardBookingData($data),
             new RecurrenceData($occurrences, RecurrenceFrequency::from($frequency)),
         );
+    }
+
+    /**
+     * Creates the repeating schedule the student built in the wizard.
+     *
+     * @param  array<string, mixed>  $data
+     * @param  list<string>  $skippedDates
+     * @param  array<string, string>  $timeOverrides
+     */
+    public function bookSeries(array $data, RecurrencePatternData $pattern, array $skippedDates = [], array $timeOverrides = []): RecurringBookingResult
+    {
+        return $this->bookings->bookSeries($this->wizardBookingData($data), $pattern, $skippedDates, $timeOverrides);
+    }
+
+    /**
+     * The schedule that pattern would produce, checked against real
+     * availability inside the confirmation horizon.
+     *
+     * @param  array<string, mixed>  $data
+     * @param  list<string>  $skippedDates
+     * @param  array<string, string>  $timeOverrides
+     */
+    public function previewSeries(array $data, RecurrencePatternData $pattern, array $skippedDates = [], int $page = 1, array $timeOverrides = []): SeriesSchedulePreviewData
+    {
+        return $this->bookings->previewSeries($this->wizardBookingData($data), $pattern, $skippedDates, $page, $timeOverrides);
     }
 
     /** @param array<string, mixed> $data */
@@ -507,6 +543,12 @@ final class BookingWizardService
             'failures' => $result->failures,
             'requires_payment' => $bookings->contains(fn (array $b): bool => $b['requires_payment']),
             'my_bookings_url' => route('dashboard.my-bookings'),
+            // Classes that are scheduled but not yet reserved. Null for an
+            // ongoing schedule, which has no remainder to count — the
+            // confirmed screen must say "ongoing", never a number.
+            'planned_count' => $result->plannedCount,
+            'ongoing' => $result->series?->isOngoing() ?? false,
+            'series_id' => $result->series?->id,
         ];
     }
 }

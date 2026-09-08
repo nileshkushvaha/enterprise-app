@@ -85,6 +85,8 @@ class Booking extends Model
         'notes',
         'meta',
         'recurrence_frequency',
+        'booking_series_id',
+        'series_occurrence_date',
         'created_by',
     ];
 
@@ -104,6 +106,7 @@ class Booking extends Model
             'price' => 'decimal:2',
             'meta' => 'array',
             'recurrence_frequency' => RecurrenceFrequency::class,
+            'series_occurrence_date' => 'immutable_date',
         ];
     }
 
@@ -166,6 +169,20 @@ class Booking extends Model
     public function academicContext(): HasOne
     {
         return $this->hasOne(BookingAcademicContext::class);
+    }
+
+    /**
+     * The recurring schedule this class came from, when one did.
+     *
+     * Null for single bookings AND for historical recurring bookings
+     * created before series existed — those are still identified only
+     * by `meta.recurring_group`, and are deliberately not backfilled:
+     * inventing a rule for a set of dates nobody stated one for would
+     * be a guess, and a guessed rule would then generate real classes.
+     */
+    public function series(): BelongsTo
+    {
+        return $this->belongsTo(BookingSeries::class, 'booking_series_id');
     }
 
     public function payments(): HasMany

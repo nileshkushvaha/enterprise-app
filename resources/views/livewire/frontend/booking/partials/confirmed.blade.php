@@ -9,14 +9,30 @@
         </span>
         <h2 data-booking-step-title tabindex="-1" class="mt-4 text-2xl font-black tracking-tight text-fg-strong outline-none">
             @if($result['requires_payment'])
-                {{ count($result['bookings']) }} sessions reserved pending payment
+                {{ count($result['bookings']) }} {{ \Illuminate\Support\Str::plural('class', count($result['bookings'])) }} reserved pending payment
             @else
-                {{ count($result['bookings']) }} of {{ count($result['bookings']) + count($result['failures']) }} sessions confirmed
+                {{ count($result['bookings']) }} {{ \Illuminate\Support\Str::plural('class', count($result['bookings'])) }} confirmed
             @endif
         </h2>
         <p class="mt-2 text-sm leading-6 text-fg-muted">
-            {{ $result['requires_payment'] ? 'Each session is reserved and paid separately. Complete payment for each one from My Bookings to confirm it.' : 'We have sent a confirmation to '.auth()->user()?->email.'.' }}
+            {{ $result['requires_payment'] ? 'Each class is reserved and paid separately. Complete payment for each one from My Bookings to confirm it.' : 'We have sent a confirmation to '.auth()->user()?->email.'.' }}
         </p>
+
+        {{--
+            The confirmation horizon, said plainly. The student has just
+            booked a schedule that may run far past what we have actually
+            reserved, and they need to know that the rest is real and
+            planned — not forgotten, and not being charged for yet.
+        --}}
+        @if(($result['ongoing'] ?? false))
+            <p class="mt-3 rounded-2xl bg-indigo-500/10 px-4 py-3 text-sm leading-6 text-indigo-900 dark:text-indigo-200">
+                This schedule keeps going until you cancel it. We book your classes a stretch at a time and add the next ones automatically, so you are only ever charged for classes that have been booked.
+            </p>
+        @elseif(($result['planned_count'] ?? 0) > 0)
+            <p class="mt-3 rounded-2xl bg-indigo-500/10 px-4 py-3 text-sm leading-6 text-indigo-900 dark:text-indigo-200">
+                {{ $result['planned_count'] }} more {{ \Illuminate\Support\Str::plural('class', $result['planned_count']) }} in this schedule {{ $result['planned_count'] === 1 ? 'is' : 'are' }} planned. We book them automatically as their dates come closer, and you are only charged for classes that have been booked.
+            </p>
+        @endif
 
         <dl class="mt-6 divide-y divide-edge rounded-2xl border border-edge bg-surface text-left text-sm">
             @foreach($result['bookings'] as $occurrence)
@@ -29,7 +45,7 @@
 
         @if(! empty($result['failures']))
             <div class="mt-4 rounded-2xl border border-amber-300/30 bg-amber-500/10 p-4 text-left text-xs text-amber-800 dark:text-amber-200" role="status">
-                <p class="font-bold">Some sessions could not be booked</p>
+                <p class="font-bold">Some dates could not be booked</p>
                 <ul class="mt-2 list-disc space-y-1 pl-4">
                     @foreach($result['failures'] as $when => $reason)
                         <li>{{ viewer_datetime($when) }} — {{ $reason }}</li>

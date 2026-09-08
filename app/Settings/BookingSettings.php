@@ -42,6 +42,18 @@ class BookingSettings extends Settings
 
     public int $maximum_advance_booking_days;
 
+    /**
+     * How far ahead a repeating series' classes are actually created and
+     * reserved. Dates beyond it are shown to the student as planned and
+     * are confirmed automatically as they come inside the horizon
+     * (booking:generate-series). Never widens the bookable window — the
+     * effective horizon is min(this, $maximum_advance_booking_days).
+     */
+    public int $recurring_confirmation_horizon_days;
+
+    /** Occurrences one generation pass may create per series. */
+    public int $recurring_generation_batch_size;
+
     /** Key of the AssignmentStrategyInterface used to auto-assign teachers. */
     public string $assignment_strategy;
 

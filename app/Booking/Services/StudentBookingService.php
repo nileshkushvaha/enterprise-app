@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Booking\Services;
 
+use App\Booking\Contracts\AvailabilityRepositoryInterface;
 use App\Booking\Contracts\BookingRepositoryInterface;
 use App\Booking\Contracts\BookingServiceInterface;
 use App\Booking\Contracts\BookingTypeRepositoryInterface;
@@ -11,6 +12,7 @@ use App\Booking\Contracts\StudentBookingServiceInterface;
 use App\Booking\Contracts\TeacherCandidateRepositoryInterface;
 use App\Booking\DTOs\AssignmentCriteriaData;
 use App\Booking\DTOs\CreateBookingData;
+use App\Booking\DTOs\CreateBookingSeriesData;
 use App\Booking\DTOs\RecurrenceData;
 use App\Booking\DTOs\RecurringBookingResult;
 use App\Booking\DTOs\StudentBookingData;
@@ -25,7 +27,6 @@ use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Str;
 
 /**
  * Student flow = teacher choice + recurrence on top of the core
@@ -42,6 +43,8 @@ final class StudentBookingService implements StudentBookingServiceInterface
         private readonly TeacherCandidateRepositoryInterface $teachers,
         private readonly StudentFinancialVerificationGate $financialVerification,
         private readonly DemoAvailabilityResolver $demoAvailability,
+        private readonly AvailabilityRepositoryInterface $availabilityRules,
+        private readonly BookingSeriesService $series,
     ) {}
 
     /**
@@ -119,6 +122,27 @@ final class StudentBookingService implements StudentBookingServiceInterface
         return $this->bookOccurrence($data, $data->startsAt);
     }
 
+    /**
+     * The JSON API's recurring shape ("N occurrences, daily or weekly"),
+     * now expressed as a stored SERIES rather than N loose bookings.
+     *
+     * The request/response contract is unchanged — same fields, same
+     * `RecurringBookingResult`, same `meta.recurring_group` on every
+     * booking (it is the series id) — but two things are now true that
+     * were not:
+     *
+     *  - `occurrences` is no longer capped at twelve. A long series is
+     *    reserved as far as the confirmation horizon reaches and
+     *    generated forward from there, so the response's `booked` list
+     *    may legitimately be shorter than `occurrences`; the remainder
+     *    is scheduled, not lost.
+     *  - The cadence is anchored to the INSTRUCTOR's calendar, matching
+     *    the wizard and TZ-6's product decision, so a series no longer
+     *    walks out of the instructor's own availability window when the
+     *    two countries change their clocks on different dates.
+     *
+     * @throws BookingException
+     */
     public function bookRecurring(StudentBookingData $data, RecurrenceData $recurrence): RecurringBookingResult
     {
         $type = $this->types->requireActiveByKey($data->typeKey);
@@ -127,27 +151,33 @@ final class StudentBookingService implements StudentBookingServiceInterface
             throw new BookingException('Recurring sessions are only available for paid booking types.');
         }
 
-        $occurrences = max(2, min($recurrence->occurrences, RecurrenceData::MAX_OCCURRENCES));
-        $groupId = (string) Str::uuid();
+        $student = User::query()->findOrFail($data->studentId);
+        $this->financialVerification->assertEligible($student, $type);
+        $this->assertTeacherBookable($data);
+        $topic = $this->resolveTopic($data);
 
-        $booked = new Collection;
-        $failures = [];
+        // The instructor's own scheduling clock — the same anchor the
+        // wizard uses. See WizardBookingService::anchorRule().
+        $recurrenceTimezone = $this->availabilityRules->calendarTimezoneFor($data->teacherId);
 
-        for ($i = 0; $i < $occurrences; $i++) {
-            $startsAt = $recurrence->nextStartsAt($data->startsAt, $i);
-
-            try {
-                $booked->push($this->bookOccurrence($data, $startsAt, ['recurring_group' => $groupId], $recurrence->frequency));
-            } catch (BookingException $e) {
-                $failures[$startsAt->toIso8601String()] = $e->getMessage();
-            }
-        }
-
-        if ($booked->isEmpty()) {
-            throw new BookingException('None of the requested sessions could be booked: '.implode(' ', $failures));
-        }
-
-        return new RecurringBookingResult($groupId, $booked, $failures);
+        return $this->series->create(new CreateBookingSeriesData(
+            typeKey: $data->typeKey,
+            studentId: $data->studentId,
+            instructorId: $data->teacherId,
+            rule: $recurrence->toRule($data->startsAt, $recurrenceTimezone),
+            durationMinutes: (int) $type->duration_minutes,
+            studentTimezone: $data->timezone,
+            meta: array_filter([
+                'subject' => $data->subject,
+                'grade' => $data->grade,
+                // Snapshot both: the slug mirrors meta.subject's style for
+                // display/analytics; the id survives topic renames.
+                'topic' => $topic?->slug,
+                'topic_id' => $topic?->id,
+            ], static fn (mixed $value): bool => $value !== null),
+            notes: $data->notes,
+            createdBy: $data->studentId,
+        ));
     }
 
     /** @param array<string, mixed> $extraMeta */

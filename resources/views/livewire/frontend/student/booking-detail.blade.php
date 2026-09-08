@@ -277,12 +277,119 @@
                             <p class="mt-2 text-xs text-fg-muted">Eligible refunds are credited to your wallet, not your original payment method.</p>
                         @endif
 
+                        @if($series)
+                            {{--
+                                A class inside a repeating schedule needs
+                                to be explicit about what is being
+                                cancelled. The narrowest option is the
+                                default so ending a whole schedule is
+                                always a deliberate act.
+                            --}}
+                            <fieldset class="mt-4">
+                                <legend class="text-sm font-semibold text-fg">What would you like to cancel?</legend>
+                                <div class="mt-2 space-y-2">
+                                    @foreach(\App\Booking\Enums\SeriesChangeScope::cases() as $scope)
+                                        <label class="flex min-h-11 items-center gap-3 rounded-xl border px-3 py-2 {{ $cancelScope === $scope->value ? 'border-red-400 bg-red-500/10' : 'border-edge bg-surface-raised' }}">
+                                            <input type="radio" name="cancel-scope" value="{{ $scope->value }}" wire:model.live="cancelScope" class="h-4 w-4 accent-red-600 focus-visible:ring-4 focus-visible:ring-red-300/50">
+                                            <span class="text-sm font-semibold text-fg">{{ $scope->label() }}</span>
+                                        </label>
+                                    @endforeach
+                                </div>
+                                <p class="mt-2 text-xs leading-5 text-fg-muted">Classes you have already taken, and anything you have paid for them, are never affected.</p>
+                            </fieldset>
+                        @endif
+
                         <label for="cancel-reason" class="mt-3 block text-sm font-semibold text-fg">Reason (optional)</label>
                         <textarea id="cancel-reason" rows="2" wire:model="cancelReason" maxlength="500"
                                   class="mt-1.5 block w-full rounded-xl border border-edge bg-surface-raised px-3.5 py-2.5 text-sm text-fg-strong shadow-sm focus:border-red-400 focus:outline-none focus:ring-4 focus:ring-red-400/20"></textarea>
                         <x-ui.button type="button" variant="danger" wire:click="confirmCancel" class="mt-3" size="sm">Yes, cancel this booking</x-ui.button>
                     </section>
                 @endif
+            @endif
+        </x-account.card>
+    @endif
+
+    @if($series && $seriesSchedule)
+        {{--
+            The whole repeating schedule, paginated. Classes that exist
+            are shown as they really are (including any that were moved),
+            and dates the rule still owes are shown as planned — the two
+            are never blended, because only one of them is a reservation.
+        --}}
+        <x-account.card class="mt-6">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                    <h2 class="text-lg font-black text-fg-strong">Repeating schedule</h2>
+                    <p class="mt-1 text-sm text-fg-muted">
+                        {{ $series->describe() }}
+                        @if($series->end_condition === \App\Booking\Enums\RecurrenceEndCondition::Never)
+                            · continues until you cancel it
+                        @elseif($seriesSchedule->totalScheduled !== null)
+                            · {{ $seriesSchedule->totalScheduled }} {{ \Illuminate\Support\Str::plural('class', $seriesSchedule->totalScheduled) }}
+                        @endif
+                    </p>
+                </div>
+                @if(! $series->isOngoing() && $series->status !== \App\Booking\Enums\BookingSeriesStatus::Cancelled)
+                    <x-ui.button type="button" variant="secondary" size="sm" wire:click="openExtendPanel">Add more classes</x-ui.button>
+                @endif
+            </div>
+
+            @if($extendPanelOpen)
+                <section class="mt-4 rounded-2xl border border-edge bg-surface-raised p-4" aria-label="Extend this schedule">
+                    @if($series->end_condition === \App\Booking\Enums\RecurrenceEndCondition::AfterCount)
+                        <label for="extend-classes" class="block text-sm font-semibold text-fg">How many more classes?</label>
+                        <input id="extend-classes" type="number" min="1" max="520" wire:model="extendByClasses"
+                               class="mt-2 min-h-11 w-24 rounded-xl border border-edge bg-surface px-3 text-center text-base font-bold text-fg-strong focus:border-indigo-400 focus:outline-none focus:ring-4 focus:ring-indigo-300/30">
+                    @else
+                        <label for="extend-date" class="block text-sm font-semibold text-fg">New last date</label>
+                        <input id="extend-date" type="date" wire:model="extendToDate"
+                               class="mt-2 min-h-11 rounded-xl border border-edge bg-surface px-3 text-base font-bold text-fg-strong focus:border-indigo-400 focus:outline-none focus:ring-4 focus:ring-indigo-300/30">
+                    @endif
+                    <p class="mt-2 text-xs leading-5 text-fg-muted">Your existing classes are untouched — nothing is rebooked and nothing you have paid for changes.</p>
+                    <div class="mt-3 flex gap-2">
+                        <x-ui.button type="button" size="sm" wire:click="extendSeries">Add them</x-ui.button>
+                        <x-ui.button type="button" variant="ghost" size="sm" wire:click="closeExtendPanel">Cancel</x-ui.button>
+                    </div>
+                </section>
+            @endif
+
+            <ol class="mt-4 divide-y divide-edge" aria-label="Classes in this schedule">
+                @foreach($seriesSchedule->occurrences as $occurrence)
+                    @php $row = $occurrence->toDisplayArray(\App\Support\Timezone\ViewerDateTime::timezoneFor()); @endphp
+                    <li class="flex flex-wrap items-center justify-between gap-3 py-3">
+                        <div class="min-w-0">
+                            <p class="text-sm font-bold text-fg-strong">
+                                <span class="tabular-nums text-fg-muted">{{ $row['sequence'] }}.</span>
+                                {{ $row['date_label'] }}@if($row['time_label']) · {{ $row['time_label'] }}@endif
+                            </p>
+                            <p class="mt-0.5 text-xs font-semibold text-fg-muted">{{ $row['status_label'] }}@if($row['booking_reference']) · {{ $row['booking_reference'] }}@endif</p>
+                        </div>
+                        @if($row['booking_id'] && $row['booking_id'] !== $booking->id)
+                            <a href="{{ route('dashboard.my-bookings.show', $row['booking_id']) }}"
+                               class="inline-flex min-h-11 items-center rounded-xl px-3 text-sm font-bold text-indigo-600 hover:bg-surface-hover focus:outline-none focus-visible:ring-4 focus-visible:ring-indigo-300/50 dark:text-indigo-300">
+                                Open<span class="sr-only"> the class on {{ $row['date_label'] }}</span>
+                            </a>
+                        @elseif($row['booking_id'] === $booking->id)
+                            <span class="rounded-full bg-indigo-500/10 px-3 py-1 text-xs font-black uppercase tracking-wide text-indigo-700 dark:text-indigo-200">This class</span>
+                        @endif
+                    </li>
+                @endforeach
+            </ol>
+
+            @if($seriesPage > 1 || $seriesSchedule->hasMore)
+                <div class="mt-3 flex items-center justify-between gap-3">
+                    <button type="button" wire:click="seriesPreviousPage" @disabled($seriesPage <= 1)
+                        class="min-h-11 rounded-xl border border-edge px-3 text-sm font-bold text-fg transition hover:bg-surface-hover focus:outline-none focus-visible:ring-4 focus-visible:ring-indigo-300/50 disabled:cursor-not-allowed disabled:opacity-40">Earlier</button>
+                    <span class="text-xs font-semibold text-fg-muted" aria-live="polite">Page {{ $seriesPage }}</span>
+                    <button type="button" wire:click="seriesNextPage" @disabled(! $seriesSchedule->hasMore)
+                        class="min-h-11 rounded-xl border border-edge px-3 text-sm font-bold text-fg transition hover:bg-surface-hover focus:outline-none focus-visible:ring-4 focus-visible:ring-indigo-300/50 disabled:cursor-not-allowed disabled:opacity-40">Later</button>
+                </div>
+            @endif
+
+            @if($seriesSchedule->plannedCount > 0 || $series->isOngoing())
+                <p class="mt-4 text-xs leading-5 text-fg-muted">
+                    We book your classes about {{ $seriesSchedule->horizonDays }} days ahead. Dates marked <em>Planned</em> are part of your schedule and are booked automatically as they come closer — you are only charged for classes that have been booked.
+                </p>
             @endif
         </x-account.card>
     @endif

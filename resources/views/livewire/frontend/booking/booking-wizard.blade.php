@@ -13,15 +13,25 @@
             'action' => 'continueStage',
             'label' => 'Review booking',
             'loading' => 'Loading…',
-            'disabled' => $selectedSlotStartsAt === null,
-            'hint' => 'Pick a date and time to continue',
+            // For a repeating schedule this also covers "days chosen"
+            // and "no unresolved conflicts" — the server refuses the same
+            // things independently in continueStage() and submit().
+            'disabled' => ! $scheduleComplete,
+            'hint' => $scheduleHint,
         ],
         'review' => [
             'action' => 'submit',
             'label' => $isPaid && ! $packageEntitlementId ? 'Proceed to payment' : 'Confirm booking',
             'loading' => $isPaid ? 'Reserving your time…' : 'Booking…',
-            'disabled' => $currentPhase === 'funding',
-            'hint' => 'Choose how you would like to pay',
+            // A repeating schedule with dates we know cannot be booked is
+            // not confirmable. Confirming over them would quietly deliver
+            // fewer classes than the schedule says, so the button stays
+            // shut until each one is moved or removed (the server refuses
+            // the same submission independently).
+            'disabled' => $currentPhase === 'funding' || ($recurring && ($previewMeta['conflicts'] ?? 0) > 0),
+            'hint' => $recurring && ($previewMeta['conflicts'] ?? 0) > 0
+                ? 'Sort out the dates that need attention below'
+                : 'Choose how you would like to pay',
         ],
         default => null,
     };
