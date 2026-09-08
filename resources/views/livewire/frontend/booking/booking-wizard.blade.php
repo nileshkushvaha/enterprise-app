@@ -94,7 +94,20 @@
                     </div>
                 @endif
 
-                <section class="booking-step-panel rounded-3xl border border-edge bg-surface-raised p-5 shadow-sm shadow-indigo-950/5 sm:p-7">
+                {{-- Each step change brings this card back into view: steps
+                     differ in height, so the browser would otherwise keep the
+                     previous offset and leave the student scrolled past the
+                     new step. scroll-mt-24 clears the sticky site header, and
+                     the behavior is chosen in JS because a scrollIntoView()
+                     argument overrides the reduced-motion CSS. --}}
+                <section
+                    class="booking-step-panel scroll-mt-24 rounded-3xl border border-edge bg-surface-raised p-5 shadow-sm shadow-indigo-950/5 sm:p-7"
+                    x-data
+                    @booking-step-changed.window="$el.scrollIntoView({
+                        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+                        block: 'start',
+                    })"
+                >
                     <p class="sr-only" aria-live="polite">Stage {{ ($stageIndex === false ? 0 : $stageIndex) + 1 }} of {{ count($stages) }}: {{ $stages[$stageIndex === false ? 0 : $stageIndex]['label'] }}</p>
 
                     @if($banner)

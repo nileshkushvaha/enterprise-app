@@ -116,6 +116,30 @@ class BookingWizardLivewireTest extends TestCase
             ->assertSee('Book a Session');
     }
 
+    /**
+     * A student mid-booking must not be invited to go browse instructors or
+     * apply as one: the shared pre-footer marketing band is opted out of on
+     * this page, and on a short wizard step it used to sit high enough to
+     * read as the page's own hero.
+     */
+    public function test_the_booking_page_carries_no_pre_footer_marketing_band(): void
+    {
+        $this->actingAs($this->student())
+            ->get(route('booking.create'))
+            ->assertOk()
+            ->assertDontSee('data-pre-footer-cta', false)
+            ->assertDontSee('Become an instructor')
+            ->assertDontSee('Every meaningful learning journey');
+    }
+
+    /** The opt-out is one page's, not everyone's — the band stays on the marketing pages. */
+    public function test_other_pages_still_show_the_pre_footer_marketing_band(): void
+    {
+        $this->get(route('home'))
+            ->assertOk()
+            ->assertSee('data-pre-footer-cta', false);
+    }
+
     public function test_wizard_shows_times_in_the_students_own_timezone_not_the_server_default(): void
     {
         $student = $this->student();

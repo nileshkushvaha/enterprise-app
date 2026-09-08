@@ -155,6 +155,30 @@ class BookingWizardStagesTest extends TestCase
             ->assertSee('Edit');
     }
 
+    /**
+     * Steps differ in height: after the slot grid the student is scrolled
+     * far down, so a short next step renders above the fold they are looking
+     * at and they are left staring at the page footer. The component asks
+     * the page to bring the step card back into view on every move — forward
+     * and back — and the blade listens for it.
+     */
+    public function test_every_step_change_asks_the_page_to_bring_the_step_into_view(): void
+    {
+        $component = $this->wizardFor($this->student())
+            ->call('selectMode', 'paid_one_to_one')
+            ->call('selectLevel', $this->academic['level']->id)
+            ->call('selectAcademicSubject', $this->academic['subject']->id)
+            ->call('selectCurriculum', $this->academic['curriculum']->id)
+            ->assertDispatched('booking-step-changed');
+
+        $component->call('continueStage')
+            ->assertSet('step', 5)
+            ->assertDispatched('booking-step-changed');
+
+        $component->call('backStage')
+            ->assertDispatched('booking-step-changed');
+    }
+
     public function test_free_demo_continues_straight_to_the_calendar(): void
     {
         $this->wizardFor($this->student())

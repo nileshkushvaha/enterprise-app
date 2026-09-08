@@ -1456,10 +1456,23 @@ final class BookingWizard extends Component
         return $phases;
     }
 
+    /**
+     * The one place the wizard's position changes — every Continue, Back,
+     * Edit and auto-advancing selection funnels through here, which is why
+     * the step-changed event belongs here rather than at each call site.
+     *
+     * The event exists because a step's height varies wildly (a slot grid
+     * is tall, a confirmation is short): without it the browser keeps the
+     * old scroll offset and the student is left staring at the page footer
+     * with the new step above the fold. The blade listens and brings the
+     * step card into view.
+     */
     private function goToPhase(string $phase): void
     {
         $index = array_search($phase, $this->phases(), true);
         $this->step = $index === false ? 1 : $index + 1;
+
+        $this->dispatch('booking-step-changed');
     }
 
     private function monthDate(): CarbonImmutable

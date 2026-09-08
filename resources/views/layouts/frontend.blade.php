@@ -156,7 +156,13 @@
 
         @yield('content')
 
-        <x-frontend.pre-footer-cta />
+        {{-- A page in the middle of a task (the booking wizard) opts out:
+             the band's "Explore instructors" / "Become an instructor" calls
+             to action would invite the visitor away mid-flow, and on a short
+             step it sits high enough to read as the page's own hero. --}}
+        @unless($__env->hasSection('hide-pre-footer-cta'))
+            <x-frontend.pre-footer-cta />
+        @endunless
         <livewire:frontend.layout.site-footer
             :app-name="$appName"
             :logo="$logo"
