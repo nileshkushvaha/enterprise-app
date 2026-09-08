@@ -6,6 +6,7 @@ namespace App\Booking\Services;
 
 use App\Booking\Contracts\BookingMeetingServiceInterface;
 use App\Booking\Contracts\BookingRepositoryInterface;
+use App\Booking\Contracts\EndsActiveMeetings;
 use App\Booking\Contracts\MeetingProviderInterface;
 use App\Booking\DTOs\MeetingCreationContext;
 use App\Booking\DTOs\MeetingCreationResult;
@@ -30,6 +31,8 @@ use App\Models\User;
 use App\Services\AuditTrailService;
 use App\Services\Student\StudentLifecycleService;
 use App\Settings\MeetingSettings;
+use Carbon\CarbonImmutable;
+use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -286,8 +289,12 @@ final class BookingMeetingService implements BookingMeetingServiceInterface
             return MeetingJoinAvailability::NotReady;
         }
 
-        $windowStartsAt = ($meeting->starts_at ?? $booking->starts_at)->subMinutes($this->settings->meeting_link_visible_before_minutes);
-        $windowEndsAt = ($meeting->ends_at ?? $booking->ends_at)->addMinutes($this->settings->meeting_link_visible_after_minutes);
+        $windowStartsAt = $this->windowStartsAt($meeting->starts_at ?? $booking->starts_at);
+        $windowEndsAt = $this->windowEndsAt($meeting->ends_at ?? $booking->ends_at);
+
+        if ($windowStartsAt === null || $windowEndsAt === null) {
+            return MeetingJoinAvailability::NotReady;
+        }
 
         if (now()->lt($windowStartsAt)) {
             return MeetingJoinAvailability::TooEarly;
@@ -335,6 +342,127 @@ final class BookingMeetingService implements BookingMeetingServiceInterface
      *    [starts_at, ends_at]; all instants compared absolutely, so
      *    display timezones never shift the window).
      */
+    public function joinWindowEndsAt(BookingMeeting $meeting): ?CarbonImmutable
+    {
+        return $this->windowEndsAt($meeting->ends_at ?? $meeting->booking?->ends_at);
+    }
+
+    /**
+     * Shuts a finished lesson's meeting down at the provider.
+     *
+     * The window this closes at is the SAME one joinAvailabilityFor()
+     * stops serving the link at (ends_at +
+     * meeting_link_visible_after_minutes), so participants never see a
+     * link to a meeting that has been closed, and a meeting is never
+     * closed while SIRI is still offering it. Ordinary lessons therefore
+     * end exactly where the platform already said they would.
+     *
+     * Deliberately narrow: it only ever ends what is running. It never
+     * touches booking or lesson state, never cancels a meeting, and
+     * never deletes anything — the row keeps its history and simply
+     * records when it was closed.
+     *
+     * @throws BookingException when the provider fails (the sweep retries)
+     */
+    public function closeExpiredMeeting(BookingMeeting $meeting): bool
+    {
+        if (! $this->settings->meeting_auto_close_enabled) {
+            return false;
+        }
+
+        if ($meeting->status !== MeetingStatus::Created || $this->closedAt($meeting) !== null) {
+            return false;
+        }
+
+        $windowEndsAt = $this->joinWindowEndsAt($meeting);
+
+        // gt(), not gte(): joinAvailabilityFor() still answers Available
+        // AT the boundary instant, so closing must wait until strictly
+        // past it. One instant of disagreement is one instant in which a
+        // participant is handed a link to a meeting that has been shut.
+        if ($windowEndsAt === null || ! now()->gt($windowEndsAt)) {
+            return false;
+        }
+
+        try {
+            $provider = $this->providers->resolve($meeting->provider);
+        } catch (BookingException) {
+            // The provider is disabled or misconfigured now. Nothing to
+            // close through it, and this is not the place to raise that
+            // alarm — meeting creation already does.
+            return false;
+        }
+
+        if (! $provider instanceof EndsActiveMeetings) {
+            return false;
+        }
+
+        if (! $provider->endActiveMeeting($meeting)) {
+            // The provider had nothing it could act on for this meeting
+            // (e.g. a Calendar-created Google conference). Recorded as
+            // closed so the sweep stops revisiting it; link withholding
+            // remains the control for those lessons.
+            $this->markClosed($meeting, closedAtProvider: false);
+
+            return false;
+        }
+
+        $this->markClosed($meeting, closedAtProvider: true);
+
+        $booking = $meeting->booking;
+
+        if ($booking !== null) {
+            $this->audit->logSystem(
+                'bookings',
+                'meeting_auto_closed',
+                sprintf('Meeting closed for booking %s after its join window ended.', $booking->reference),
+                $booking,
+                ['provider' => $meeting->provider],
+            );
+        }
+
+        return true;
+    }
+
+    /** When this meeting was closed by the window sweep, if it has been. */
+    private function closedAt(BookingMeeting $meeting): ?string
+    {
+        $closedAt = $meeting->metadata['closed_at'] ?? null;
+
+        return is_string($closedAt) && $closedAt !== '' ? $closedAt : null;
+    }
+
+    /**
+     * Metadata only — never the status column. `status` describes how
+     * the meeting was CREATED (pending/created/failed/cancelled), and
+     * overloading it with "finished" would change the meaning of every
+     * existing read of it, including the join-window guard itself.
+     */
+    private function markClosed(BookingMeeting $meeting, bool $closedAtProvider): void
+    {
+        $meeting->forceFill([
+            'metadata' => [
+                ...($meeting->metadata ?? []),
+                'closed_at' => now()->toIso8601String(),
+                'closed_at_provider' => $closedAtProvider,
+            ],
+        ])->save();
+    }
+
+    private function windowStartsAt(?CarbonInterface $startsAt): ?CarbonImmutable
+    {
+        return $startsAt === null
+            ? null
+            : CarbonImmutable::parse($startsAt)->subMinutes(max(0, $this->settings->meeting_link_visible_before_minutes));
+    }
+
+    private function windowEndsAt(?CarbonInterface $endsAt): ?CarbonImmutable
+    {
+        return $endsAt === null
+            ? null
+            : CarbonImmutable::parse($endsAt)->addMinutes(max(0, $this->settings->meeting_link_visible_after_minutes));
+    }
+
     public function studentJoinUrlFor(Booking $booking, ?User $viewer): ?string
     {
         if ($viewer === null || $booking->student_id !== $viewer->id) {

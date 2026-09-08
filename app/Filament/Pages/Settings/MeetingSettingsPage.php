@@ -85,6 +85,7 @@ class MeetingSettingsPage extends Page
             'platform_meeting_account' => $meeting->platform_meeting_account,
             'meeting_link_visible_before_minutes' => $meeting->meeting_link_visible_before_minutes,
             'meeting_link_visible_after_minutes' => $meeting->meeting_link_visible_after_minutes,
+            'meeting_auto_close_enabled' => $meeting->meeting_auto_close_enabled,
             'meeting_recording_enabled' => $meeting->recording_enabled,
             'effective_recording_availability' => app(RecordingAvailabilityResolver::class)->isAvailable() ? 'Available' : 'Unavailable',
             'recording_retention_days' => $meeting->recording_retention_days,
@@ -183,7 +184,10 @@ class MeetingSettingsPage extends Page
                         $this->integerInput('meeting_link_visible_before_minutes', 'Visible Before (minutes)', 0, 10080)
                             ->helperText('How long before the start the join link appears to participants.'),
                         $this->integerInput('meeting_link_visible_after_minutes', 'Visible After (minutes)', 0, 10080)
-                            ->helperText('How long after the start the join link stays available.'),
+                            ->helperText('How long after the lesson ends the join link stays available. Also when the meeting is closed, if auto-close is on.'),
+                        Toggle::make('meeting_auto_close_enabled')
+                            ->label('Close Meetings After the Window')
+                            ->helperText('Ends the meeting at the provider once that window passes, so a class and its recording cannot run on past the lesson. Applies to Google Meet lessons SIRI created the space for.'),
                         Toggle::make('meeting_recording_enabled')
                             ->label('Record Sessions by Default')
                             ->helperText('Records new lessons when the provider supports it. Also requires the Recording feature flag in Platform Foundation.'),
@@ -397,6 +401,7 @@ class MeetingSettingsPage extends Page
             $settings->platform_meeting_account = $data['platform_meeting_account'] ?? null;
             $settings->meeting_link_visible_before_minutes = (int) $data['meeting_link_visible_before_minutes'];
             $settings->meeting_link_visible_after_minutes = (int) $data['meeting_link_visible_after_minutes'];
+            $settings->meeting_auto_close_enabled = (bool) $data['meeting_auto_close_enabled'];
             $settings->recording_enabled = (bool) ($data['meeting_recording_enabled'] ?? false);
             $settings->recording_retention_days = (int) $data['recording_retention_days'];
             $settings->recording_student_playback_enabled = (bool) ($data['recording_student_playback_enabled'] ?? false);

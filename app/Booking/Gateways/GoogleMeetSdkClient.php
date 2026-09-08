@@ -10,6 +10,7 @@ use Google\Client;
 use Google\Service\Exception as GoogleServiceException;
 use Google\Service\Meet;
 use Google\Service\Meet\ArtifactConfig;
+use Google\Service\Meet\EndActiveConferenceRequest;
 use Google\Service\Meet\RecordingConfig;
 use Google\Service\Meet\Space;
 use Google\Service\Meet\SpaceConfig;
@@ -128,6 +129,43 @@ final class GoogleMeetSdkClient implements GoogleMeetClient
             }
 
             return ['name' => $name, 'meetingCode' => $code, 'meetingUri' => $uri];
+        } catch (GatewayRequestException $e) {
+            throw $e;
+        } catch (GoogleServiceException $e) {
+            throw $this->translateApiException($e, $delegatedSubject);
+        } catch (Throwable $e) {
+            throw new GatewayRequestException($e->getMessage(), previous: $e);
+        }
+    }
+
+    public function endActiveConference(string $credentialsJson, string $delegatedSubject, string $spaceName): void
+    {
+        try {
+            $this->service($credentialsJson, $delegatedSubject, self::SPACE_SCOPES)
+                ->spaces->endActiveConference($spaceName, new EndActiveConferenceRequest);
+        } catch (GatewayRequestException $e) {
+            throw $e;
+        } catch (GoogleServiceException $e) {
+            throw $this->translateApiException($e, $delegatedSubject);
+        } catch (Throwable $e) {
+            throw new GatewayRequestException($e->getMessage(), previous: $e);
+        }
+    }
+
+    public function restrictSpaceAccess(string $credentialsJson, string $delegatedSubject, string $spaceName, string $accessType): void
+    {
+        try {
+            $config = new SpaceConfig;
+            $config->setAccessType($accessType);
+
+            $space = new Space;
+            $space->setConfig($config);
+
+            // The update mask is what keeps this a narrow write: only
+            // the access type moves, and the space's artifact/recording
+            // configuration is left exactly as created.
+            $this->service($credentialsJson, $delegatedSubject, self::SPACE_SCOPES)
+                ->spaces->patch($spaceName, $space, ['updateMask' => 'config.accessType']);
         } catch (GatewayRequestException $e) {
             throw $e;
         } catch (GoogleServiceException $e) {

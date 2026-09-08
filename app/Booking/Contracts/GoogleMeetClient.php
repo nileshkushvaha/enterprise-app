@@ -100,4 +100,33 @@ interface GoogleMeetClient
      * @throws GatewayRequestException
      */
     public function createSpace(string $credentialsJson, string $delegatedSubject, bool $autoRecording): array;
+
+    /**
+     * Ends whatever conference is running in the space right now, which
+     * is also what stops an automatic recording. A no-op at Google when
+     * no conference is active, so callers may treat a clean return as
+     * "nothing is running in there any more" either way.
+     *
+     * Only works on a space this app created through the Meet API
+     * (meetings.space.created) — a Calendar-created conference cannot be
+     * ended this way, and the caller must degrade rather than fail.
+     *
+     * @param  string  $spaceName  "spaces/{space}", as returned by createSpace()
+     *
+     * @throws GatewayRequestException
+     */
+    public function endActiveConference(string $credentialsJson, string $delegatedSubject, string $spaceName): void;
+
+    /**
+     * Narrows the space's access type (e.g. to RESTRICTED, where only
+     * the owning platform account may start or join). Ending a
+     * conference alone would leave the link able to start a NEW one —
+     * a Meet space outlives any single conference — so closing a lesson
+     * for good is: restrict, then end.
+     *
+     * @param  string  $accessType  OPEN | TRUSTED | RESTRICTED
+     *
+     * @throws GatewayRequestException
+     */
+    public function restrictSpaceAccess(string $credentialsJson, string $delegatedSubject, string $spaceName, string $accessType): void;
 }

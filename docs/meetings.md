@@ -279,6 +279,62 @@ is a policy and terms-of-service matter, not a technical one.
 
 ---
 
+## 5b. Meeting window — when a lesson can be joined, and when it closes
+
+A lesson's meeting is bounded by the lesson's own timeslot. For a
+10:00–11:00 class with the shipped settings (15/15):
+
+```text
+        09:45              10:00 ─── lesson ─── 11:00              11:15
+          │                                                          │
+   join link appears                                    link withdrawn AND
+   (visible_before)                                     meeting closed at the
+                                                        provider (visible_after)
+```
+
+**One window, two enforcement points.**
+`BookingMeetingService::joinAvailabilityFor()` decides what SIRI hands
+out; `closeExpiredMeeting()` decides what stays alive at the provider.
+Both read the same `ends_at + meeting_link_visible_after_minutes`, and
+the boundary instant itself is still joinable — closing waits until
+strictly past it, so a participant is never shown a link to a meeting
+that has been shut.
+
+**Why closing matters, not just hiding the link.** A Meet space
+outlives any single conference. Withholding the link stops SIRI
+advertising it, but a copied link could still keep a conference running
+— or start a new one — after class, and on a recording-eligible lesson
+that conference **keeps recording**: footage of an empty or unrelated
+room, stored and retained as if it were the lesson.
+
+**How a lesson is closed** (`meetings:close-expired`, every five
+minutes, `MeetingSettings::meeting_auto_close_enabled`):
+
+1. the space is narrowed to `accessType: RESTRICTED`, so a kept link
+   cannot start another conference in it;
+2. any conference still running is ended, which is also what stops an
+   automatic recording.
+
+Restriction is best-effort — if it fails, the conference is still
+ended, because stopping what is running matters more than preventing a
+hypothetical rejoin. The sweep is idempotent (a closed meeting records
+`metadata.closed_at` and leaves it), isolates failures per meeting, and
+looks back only 48 hours so it never becomes a scan of all history.
+
+**Boundary, stated plainly.** Only a space SIRI created through the
+Meet API can be closed this way — Meet's `meetings.space.created` scope
+does not reach a Calendar-created conference. Lessons that fell back to
+a Calendar conference (see §3) are governed by link withholding alone;
+they are recorded as `closed_at_provider: false` rather than silently
+retried forever. Manual and Zoom meetings implement no closing
+capability today and are simply skipped.
+
+Nothing else moves: closing ends what is running and writes
+`metadata.closed_at`. It never changes `booking_meetings.status` (which
+describes how the meeting was CREATED), the booking, or the lesson.
+
+---
+
 ## 6. Storage independence
 
 Meeting provider and storage backend are orthogonal:
@@ -301,6 +357,8 @@ configuration change for both providers at once.
 | Setting | Purpose |
 |---|---|
 | `meetings_enabled` | platform kill switch, all providers |
+| `meeting_link_visible_before_minutes` / `..._after_minutes` | the join window around the lesson (ships 15/15) |
+| `meeting_auto_close_enabled` | close the meeting at the provider when that window ends (§5b) |
 | `default_provider` | provider for new meetings |
 | `google_meet_enabled` / `zoom_enabled` / `manual_provider_enabled` | may create meetings |
 | `google_meet_recording_enabled` / `zoom_recording_enabled` | may record |

@@ -317,8 +317,5 @@ later policy makes meetings mandatory for lessons. See `docs/lessons.md`.
   is reserved but unimplemented).
 - Meeting cancellation cascading from booking cancellation (admin must
   use "Mark Meeting Cancelled" explicitly).
-- `meeting_link_visible_before/after_minutes` time-window gating on the
-  student-facing join link (pre-existing settings, still not wired to
-  a visibility check).
 - Wallet debit, wallet recharge, instructor payout, recording storage,
   attendance tracking, class completion — unrelated to meeting creation.

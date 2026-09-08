@@ -10,6 +10,7 @@ use App\Lessons\Enums\LessonStatus;
 use App\Models\Booking;
 use App\Models\BookingMeeting;
 use App\Models\User;
+use Carbon\CarbonImmutable;
 
 /**
  * Creates and stores meeting details for confirmed bookings, idempotently
@@ -69,4 +70,26 @@ interface BookingMeetingServiceInterface
      * — never meeting->join_url directly.
      */
     public function studentJoinUrlFor(Booking $booking, ?User $viewer): ?string;
+
+    /**
+     * The instant this meeting's join window closes: its scheduled end
+     * plus MeetingSettings::meeting_link_visible_after_minutes. The same
+     * value joinAvailabilityFor() stops returning Available at — one
+     * calculation, never a second copy — and the instant from which
+     * closeExpiredMeeting() may shut the meeting down at the provider.
+     */
+    public function joinWindowEndsAt(BookingMeeting $meeting): ?CarbonImmutable;
+
+    /**
+     * Ends a finished lesson's meeting at the provider once its join
+     * window has passed, so a class (and any automatic recording) cannot
+     * run on indefinitely.
+     *
+     * Returns true only when the provider actually closed something.
+     * False covers every legitimate "nothing to do": auto-close off, the
+     * window still open, a meeting that is not Created, a provider with
+     * no closing capability, or a meeting already closed. Provider
+     * failures throw, so the sweep can retry them.
+     */
+    public function closeExpiredMeeting(BookingMeeting $meeting): bool;
 }

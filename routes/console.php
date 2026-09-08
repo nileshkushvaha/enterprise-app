@@ -7,6 +7,7 @@ use App\Console\Commands\Ai\CheckAiBudgetThreshold;
 use App\Console\Commands\Alerts\CheckMissingMeetingLinksCommand;
 use App\Console\Commands\AutoCompleteLessons;
 use App\Console\Commands\CaptureLessonRecordings;
+use App\Console\Commands\CloseExpiredMeetings;
 use App\Console\Commands\CreditEligibleReferralRewards;
 use App\Console\Commands\ExpireLessonRecordings;
 use App\Console\Commands\ExpireLessonReviewEligibility;
@@ -203,6 +204,20 @@ app(Schedule::class)
     ->withoutOverlapping()
     ->onOneServer()
     ->appendOutputTo(storage_path('logs/meetings-sync-pending.log'));
+
+// Close lesson meetings whose join window has ended, so a class — and
+// any automatic recording running with it — cannot continue past its
+// own timeslot. Same window the join link is withheld at, so nothing is
+// closed while participants can still legitimately be inside it.
+// Idempotent (a closed meeting records closed_at and leaves the sweep)
+// and per-meeting failure-isolated; onOneServer() keeps a multi-node
+// deployment from making the same provider call several times over.
+app(Schedule::class)
+    ->command(CloseExpiredMeetings::class)
+    ->everyFiveMinutes()
+    ->withoutOverlapping()
+    ->onOneServer()
+    ->appendOutputTo(storage_path('logs/meetings-close-expired.log'));
 
 // Wallet refunds: credits approved lesson-outcome refund dispositions
 // through the wallet domain. Idempotent (ledger idempotency keys),

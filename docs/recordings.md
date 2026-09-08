@@ -241,6 +241,14 @@ is the access control; a leaked link would let a stranger into a class
 start. Meet's default `TRUSTED` (outsiders knock) is available by
 configuration but requires a Workspace member present.
 
+**Auto-recording is bounded by the lesson's window.** A space that
+records every conference automatically would keep recording anything
+held in it afterwards, so `meetings:close-expired` restricts the space
+and ends its conference once the join window closes — see
+`docs/meetings.md` §5b. The recording that was captured during the
+lesson is unaffected; only a conference running past the window is
+stopped.
+
 Workspace prerequisites: the edition must include Meet recording, and
 Admin console → Apps → Google Workspace → Google Meet → Recording must
 allow recording (and automatic recording) for the platform account's

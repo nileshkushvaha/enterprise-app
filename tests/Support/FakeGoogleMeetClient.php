@@ -43,6 +43,16 @@ final class FakeGoogleMeetClient implements GoogleMeetClient
 
     public string $nextMeetingCode = 'auto-rec-spce';
 
+    /** @var list<string> space resource names whose active conference was ended */
+    public array $conferencesEnded = [];
+
+    /** @var array<string, string> space resource name => access type it was narrowed to */
+    public array $spacesRestricted = [];
+
+    public ?GatewayRequestException $throwOnEndActiveConference = null;
+
+    public ?GatewayRequestException $throwOnRestrictSpaceAccess = null;
+
     public function requestedScopes(): array
     {
         return ['https://www.googleapis.com/auth/meetings.space.readonly', 'https://www.googleapis.com/auth/meetings.space.created', 'https://www.googleapis.com/auth/meetings.space.settings'];
@@ -68,6 +78,28 @@ final class FakeGoogleMeetClient implements GoogleMeetClient
     public function verifyTokenAcquisition(string $credentialsJson, string $delegatedSubject): void
     {
         $this->calls[] = 'verifyTokenAcquisition';
+    }
+
+    public function endActiveConference(string $credentialsJson, string $delegatedSubject, string $spaceName): void
+    {
+        $this->calls[] = 'endActiveConference';
+
+        if ($this->throwOnEndActiveConference !== null) {
+            throw $this->throwOnEndActiveConference;
+        }
+
+        $this->conferencesEnded[] = $spaceName;
+    }
+
+    public function restrictSpaceAccess(string $credentialsJson, string $delegatedSubject, string $spaceName, string $accessType): void
+    {
+        $this->calls[] = 'restrictSpaceAccess';
+
+        if ($this->throwOnRestrictSpaceAccess !== null) {
+            throw $this->throwOnRestrictSpaceAccess;
+        }
+
+        $this->spacesRestricted[$spaceName] = $accessType;
     }
 
     public function listConferenceRecords(

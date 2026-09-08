@@ -22,6 +22,19 @@ class MeetingSettings extends Settings
 
     public int $meeting_link_visible_after_minutes;
 
+    /**
+     * Close a lesson's meeting at the provider once that visible-after
+     * window has passed, so a class — and any automatic recording —
+     * cannot run on indefinitely. Uses the same window as link
+     * visibility rather than a second number: participants never see a
+     * link to a closed meeting, and no meeting is closed while SIRI is
+     * still offering it.
+     *
+     * Only providers that can do it act on this (Google Meet spaces
+     * SIRI created through the Meet API); everything else is unaffected.
+     */
+    public bool $meeting_auto_close_enabled;
+
     /** SRS §26.36/§26.43 — how far ahead of an upcoming online lesson the missing-meeting-link sweep starts alerting. */
     public int $missing_meeting_link_threshold_minutes;
 

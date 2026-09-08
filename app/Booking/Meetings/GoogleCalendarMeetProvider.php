@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Booking\Meetings;
 
 use App\Booking\Contracts\DiscoversRecordingArtifacts;
+use App\Booking\Contracts\EndsActiveMeetings;
 use App\Booking\Contracts\GoogleCalendarClient;
 use App\Booking\Contracts\GoogleMeetClient;
 use App\Booking\Contracts\MeetingProviderInterface;
@@ -61,7 +62,7 @@ use Throwable;
  * returns a minimal plain array, and exception messages are sanitized
  * before they reach BookingMeetingService.
  */
-final class GoogleCalendarMeetProvider implements DiscoversRecordingArtifacts, MeetingProviderInterface, MeetingRecordingProviderInterface
+final class GoogleCalendarMeetProvider implements DiscoversRecordingArtifacts, EndsActiveMeetings, MeetingProviderInterface, MeetingRecordingProviderInterface
 {
     use BuildsSafeMeetingContent;
     use SanitizesProviderMessages;
@@ -75,6 +76,14 @@ final class GoogleCalendarMeetProvider implements DiscoversRecordingArtifacts, M
      * Google's API ever accepts.
      */
     private const string GOOGLE_MEET_CONFERENCE_TYPE = 'hangoutsMeet';
+
+    /**
+     * What a closed lesson's space is narrowed to. RESTRICTED means only
+     * the owning platform account may start or join, so a join URL kept
+     * by a participant cannot open a new conference in it after the
+     * lesson's window has passed.
+     */
+    private const string CLOSED_SPACE_ACCESS_TYPE = 'RESTRICTED';
 
     public function __construct(
         private readonly GoogleCalendarClient $client,
@@ -266,6 +275,67 @@ final class GoogleCalendarMeetProvider implements DiscoversRecordingArtifacts, M
         }
 
         return new MeetingCancellationResult(status: MeetingStatus::Cancelled);
+    }
+
+    // ── EndsActiveMeetings ─────────────────────────────────────────────
+
+    /**
+     * Closes a lesson's Meet space once its join window is over: the
+     * space is restricted first so the link cannot start a fresh
+     * conference, then any conference still running is ended — which is
+     * also what stops an automatic recording that would otherwise keep
+     * capturing an empty (or worse, unrelated) room.
+     *
+     * Only a space SIRI created through the Meet API can be operated
+     * this way; a Calendar-created conference carries no space resource
+     * name we are allowed to act on, so those lessons return false and
+     * stay governed by link withholding alone. That is a real boundary
+     * of Meet's scope model, deliberately not papered over.
+     *
+     * Restriction is best-effort: if it fails, ending the conference is
+     * still attempted, because stopping what is running now matters
+     * more than preventing a hypothetical rejoin.
+     */
+    public function endActiveMeeting(BookingMeeting $meeting): bool
+    {
+        $space = $this->spaceNameFor($meeting);
+
+        if ($space === null) {
+            return false;
+        }
+
+        $credentials = $this->credentialsOrFail();
+        $subject = $this->delegatedSubjectOrFail();
+
+        try {
+            $this->meet->restrictSpaceAccess($credentials, $subject, $space, self::CLOSED_SPACE_ACCESS_TYPE);
+        } catch (Throwable $e) {
+            Log::warning('Google Meet space could not be restricted while closing a finished lesson; ending its conference anyway.', [
+                'meeting_id' => $meeting->id,
+                'reason' => $this->sanitize($e->getMessage()),
+            ]);
+        }
+
+        try {
+            $this->meet->endActiveConference($credentials, $subject, $space);
+        } catch (Throwable $e) {
+            throw new BookingException($this->sanitize($e->getMessage()));
+        }
+
+        return true;
+    }
+
+    /**
+     * The Meet API space resource name persisted at creation
+     * (resultFromSpace's metadata). A meeting created before
+     * auto-recording spaces existed, or one that fell back to a
+     * Calendar conference, simply has none.
+     */
+    private function spaceNameFor(BookingMeeting $meeting): ?string
+    {
+        $space = $meeting->metadata['space'] ?? null;
+
+        return is_string($space) && $space !== '' ? $space : null;
     }
 
     // ── MeetingRecordingProviderInterface / DiscoversRecordingArtifacts ──
