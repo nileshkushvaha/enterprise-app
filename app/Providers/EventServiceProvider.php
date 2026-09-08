@@ -39,6 +39,7 @@ use App\Listeners\Booking\CreateMeetingOnBookingConfirmed;
 use App\Listeners\Booking\RecordBookingLifecycleAudit;
 use App\Listeners\Booking\SendBookingNotifications;
 use App\Listeners\Booking\SendMeetingNotifications;
+use App\Listeners\Booking\SettleSeriesPrepaymentOnWalletRechargeSucceeded;
 use App\Listeners\Booking\SyncPaymentOnCancellation;
 use App\Listeners\Compliance\EvaluateConfirmedMessageRisksOnFindingConfirmed;
 use App\Listeners\Compliance\EvaluateExcessiveBookingCancellationsOnBookingCancelled;
@@ -274,6 +275,9 @@ class EventServiceProvider extends ServiceProvider
         WalletRechargeSucceeded::class => [
             [SendWalletNotifications::class, 'handleRechargeSucceeded'],
             GenerateInvoiceOnWalletRechargeSucceeded::class,
+            // Only acts on a top-up the student raised to pay for a
+            // schedule's classes; an ordinary recharge is left alone.
+            SettleSeriesPrepaymentOnWalletRechargeSucceeded::class,
         ],
         // Promotional-credit notifications.
         PromotionalCreditIssued::class => [

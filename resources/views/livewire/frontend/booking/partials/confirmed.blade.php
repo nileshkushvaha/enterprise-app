@@ -15,8 +15,63 @@
             @endif
         </h2>
         <p class="mt-2 text-sm leading-6 text-fg-muted">
-            {{ $result['requires_payment'] ? 'Each class is reserved and paid separately. Complete payment for each one from My Bookings to confirm it.' : 'We have sent a confirmation to '.auth()->user()?->email.'.' }}
+            @if($result['requires_payment'])
+                {{ ($seriesPrepayment['count'] ?? 0) > 1
+                    ? 'Pay for them all at once below, or one at a time from My Bookings.'
+                    : 'Complete payment from My Bookings to confirm it.' }}
+            @else
+                We have sent a confirmation to {{ auth()->user()?->email }}.
+            @endif
         </p>
+
+        {{--
+            One checkout for every reserved class. Each class still keeps
+            its own price, reservation and refund rules — this only
+            changes how many times the student is asked for money.
+        --}}
+        @if($result['requires_payment'] && ($seriesPrepayment['count'] ?? 0) > 1)
+            <div class="mt-5 rounded-2xl border-2 border-indigo-500/40 bg-indigo-500/5 p-4 text-left sm:p-5">
+                <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                    <p class="text-base font-black text-fg-strong">Pay for all {{ $seriesPrepayment['count'] }} classes</p>
+                    <p class="text-lg font-black text-fg-strong">{{ $seriesPrepayment['total_formatted'] }}</p>
+                </div>
+
+                <p class="mt-1 text-sm leading-6 text-fg-muted">
+                    @if($seriesPrepayment['covered_by_wallet'])
+                        Your balance of {{ $seriesPrepayment['balance_formatted'] }} covers this. Nothing further to pay.
+                    @else
+                        One payment of {{ $seriesPrepayment['shortfall_formatted'] }} confirms every class below.
+                        @if($seriesPrepayment['balance_formatted'] !== $seriesPrepayment['total_formatted'])
+                            Your balance of {{ $seriesPrepayment['balance_formatted'] }} is used first.
+                        @endif
+                    @endif
+                </p>
+
+                @if(($seriesPrepayment['planned_count'] ?? 0) > 0)
+                    <p class="mt-1.5 text-xs leading-5 text-fg-faint">
+                        This covers the {{ $seriesPrepayment['count'] }} classes reserved so far. The {{ $seriesPrepayment['planned_count'] }} still planned are booked closer to the time and paid for then.
+                    </p>
+                @endif
+
+                <div class="mt-3.5 flex flex-wrap items-center gap-3">
+                    <x-ui.button type="button" wire:click="payForAllClasses" wire:loading.attr="disabled" wire:target="payForAllClasses">
+                        <span wire:loading.remove wire:target="payForAllClasses">
+                            {{ $seriesPrepayment['covered_by_wallet'] ? 'Confirm all classes' : 'Pay '.$seriesPrepayment['shortfall_formatted'] }}
+                        </span>
+                        <span wire:loading wire:target="payForAllClasses" class="inline-flex items-center gap-2">
+                            <x-ui.spinner size="sm" /> Working…
+                        </span>
+                    </x-ui.button>
+                    <a href="{{ $result['my_bookings_url'] }}" class="text-sm font-bold text-indigo-600 underline decoration-indigo-300 underline-offset-2 hover:text-indigo-700 dark:text-indigo-300">
+                        Pay one at a time instead
+                    </a>
+                </div>
+            </div>
+        @elseif($result['requires_payment'] && ($seriesPrepayment['blocked'] ?? null))
+            <p class="mt-4 rounded-2xl border border-amber-300/40 bg-amber-500/10 px-4 py-3 text-left text-sm text-amber-900 dark:text-amber-200" role="status">
+                {{ $seriesPrepayment['blocked'] }}
+            </p>
+        @endif
 
         {{--
             The confirmation horizon, said plainly. The student has just

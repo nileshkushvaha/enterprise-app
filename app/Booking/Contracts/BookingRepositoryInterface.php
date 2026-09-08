@@ -114,6 +114,17 @@ interface BookingRepositoryInterface
      */
     public function freeDemoConsumed(CreateBookingData $data): bool;
 
+    /**
+     * Several bookings by id, eager-loaded for result rendering.
+     *
+     * Exists so a screen showing N classes costs one query rather than
+     * N — plus N more for each row's type and academic context.
+     *
+     * @param  list<string>  $ids
+     * @return Collection<int, Booking>
+     */
+    public function findManyForResult(array $ids): Collection;
+
     /** @return Collection<int, Booking> active bookings intersecting [$from, $to) */
     public function activeBetween(int $instructorId, CarbonImmutable $from, CarbonImmutable $to): Collection;
 

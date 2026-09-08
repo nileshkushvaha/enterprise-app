@@ -169,6 +169,18 @@ final class BookingRepository implements BookingRepositoryInterface
             ->count();
     }
 
+    public function findManyForResult(array $ids): Collection
+    {
+        if ($ids === []) {
+            return new Collection;
+        }
+
+        return Booking::query()
+            ->whereKey($ids)
+            ->with(['type', 'academicContext'])
+            ->get();
+    }
+
     public function activeBetween(int $instructorId, CarbonImmutable $from, CarbonImmutable $to): Collection
     {
         return Booking::query()

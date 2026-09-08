@@ -51,7 +51,8 @@ interface WalletRechargeServiceInterface
      *                         recharge, the amount is outside the currency's configured
      *                         range, or the gateway rejects the order
      */
-    public function initiate(User $student, int $amountMinor): PaymentCheckoutData;
+    /** @param array<string, mixed> $metadata non-sensitive context describing why this recharge was raised */
+    public function initiate(User $student, int $amountMinor, array $metadata = []): PaymentCheckoutData;
 
     /**
      * Re-presents the open payment attempt for a recharge the student

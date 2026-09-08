@@ -17,14 +17,17 @@ use App\Booking\Exceptions\InvalidPaymentWebhookException;
 use App\Booking\Exceptions\NoEligibleTeacherException;
 use App\Booking\Exceptions\SlotUnavailableException;
 use App\Booking\Payments\RazorpayPaymentProvider;
+use App\Booking\Services\BookingSeriesPrepaymentService;
 use App\Booking\Services\BookingSeriesService;
 use App\Booking\Services\BookingWizardService;
 use App\Booking\Support\FakePaymentSimulator;
 use App\Curriculum\DTOs\AcademicContextData;
+use App\Models\BookingSeries;
 use App\Models\Country;
 use App\Models\EducationSystem;
 use App\Models\User;
 use App\Models\Wallet;
+use App\Payments\DTOs\PaymentCheckoutData;
 use App\Settings\BookingSettings;
 use App\Settings\FeatureSettings;
 use App\Support\MoneyFormatter;
@@ -1141,6 +1144,7 @@ final class BookingWizard extends Component
                 );
                 $this->bookingId = $result->booked->first()?->id;
                 $this->result = $this->wizard->recurringResult($result);
+                $this->refreshSeriesPrepayment();
             } else {
                 $booking = $this->wizard->book($payload);
                 $this->bookingId = $booking->id;
@@ -1262,6 +1266,178 @@ final class BookingWizard extends Component
         // Stays inside the schedule stage, so nothing would have scrolled
         // — but the student needs to see why their time vanished.
         $this->announcePanel();
+    }
+
+    /**
+     * The one-checkout quote for a repeating schedule's reserved
+     * classes. Display only — every amount is recomputed under a lock
+     * when the money actually moves.
+     *
+     * @var array<string, mixed>
+     */
+    public array $seriesPrepayment = [];
+
+    /**
+     * Pays for EVERY reserved class of this schedule in one go.
+     *
+     * If the wallet already covers the bill nothing external happens at
+     * all — the classes are settled and confirmed immediately. Otherwise
+     * one checkout is opened for exactly the shortfall, and the classes
+     * are settled when it lands (see
+     * SettleSeriesPrepaymentOnWalletRechargeSucceeded), so closing the
+     * tab on the way back cannot leave them unpaid.
+     */
+    public function payForAllClasses(): void
+    {
+        $this->paymentBanner = '';
+        $this->paymentOrder = [];
+
+        $series = $this->currentSeries();
+
+        if ($series === null) {
+            return;
+        }
+
+        if (auth()->user()?->profile?->country_id === null) {
+            $this->paymentBanner = 'Please complete your profile (country) before paying for these classes.';
+
+            return;
+        }
+
+        try {
+            $prepayments = app(BookingSeriesPrepaymentService::class);
+            $quote = $prepayments->quote($series, auth()->user());
+
+            if ($quote->coveredByWallet()) {
+                $result = $prepayments->settleFromWallet($series, auth()->user());
+
+                $this->paymentBanner = $result->allPaid()
+                    ? ''
+                    : sprintf(
+                        '%d of %d classes were paid. The rest could not be confirmed and the money for them is still in your balance — open My Bookings to sort them out.',
+                        $result->paidCount(),
+                        $result->paidCount() + count($result->failures),
+                    );
+
+                $this->refreshAfterSeriesPayment();
+
+                return;
+            }
+
+            $this->openCheckout($prepayments->initiateTopUp($series, auth()->user()));
+        } catch (BookingException $exception) {
+            $this->paymentBanner = $exception->getMessage();
+        }
+    }
+
+    private function currentSeries(): ?BookingSeries
+    {
+        $id = $this->result['series_id'] ?? null;
+
+        return $id === null ? null : BookingSeries::query()->find($id);
+    }
+
+    /**
+     * Re-reads what the student now owes, and each class's own state, so
+     * the confirmation screen shows what actually happened rather than
+     * what it showed before the money moved.
+     */
+    private function refreshAfterSeriesPayment(): void
+    {
+        $this->refreshSeriesPrepayment();
+        $this->refreshWalletOption();
+
+        if (($this->result['bookings'] ?? []) === []) {
+            return;
+        }
+
+        // One query for the whole list rather than one per row.
+        $bookings = $this->bookings->findManyForResult(
+            array_column($this->result['bookings'], 'id'),
+        )->keyBy('id');
+
+        $this->result['bookings'] = array_map(
+            fn (array $row): array => isset($bookings[$row['id']])
+                ? $this->wizard->result($bookings[$row['id']])
+                : $row,
+            $this->result['bookings'],
+        );
+
+        $this->result['requires_payment'] = collect($this->result['bookings'])
+            ->contains(static fn (array $row): bool => (bool) ($row['requires_payment'] ?? false));
+    }
+
+    /**
+     * Snapshot of what is still owed across the schedule. Never
+     * authoritative — the service recomputes everything at settlement.
+     */
+    private function refreshSeriesPrepayment(): void
+    {
+        $this->seriesPrepayment = [];
+
+        $series = $this->currentSeries();
+
+        if ($series === null || ! app(FeatureSettings::class)->wallet_enabled) {
+            return;
+        }
+
+        $quote = app(BookingSeriesPrepaymentService::class)->quote($series, auth()->user());
+
+        if (! $quote->isPayable()) {
+            $this->seriesPrepayment = $quote->blockedReason === null
+                ? []
+                : ['blocked' => $quote->blockedReason];
+
+            return;
+        }
+
+        $minorUnits = MoneyFormatter::minorUnitsFor((string) $quote->currencyCode);
+
+        $this->seriesPrepayment = [
+            'count' => $quote->count(),
+            'total_formatted' => MoneyFormatter::format($quote->totalMinor, (string) $quote->currencyCode, $minorUnits),
+            'covered_by_wallet' => $quote->coveredByWallet(),
+            'shortfall_formatted' => MoneyFormatter::format($quote->shortfallMinor, (string) $quote->currencyCode, $minorUnits),
+            'balance_formatted' => MoneyFormatter::format($quote->walletBalanceMinor, (string) $quote->currencyCode, $minorUnits),
+            'planned_count' => $quote->plannedCount,
+        ];
+    }
+
+    /** Hands a gateway-neutral checkout to the browser. */
+    private function openCheckout(PaymentCheckoutData $checkout): void
+    {
+        $payload = $checkout->checkoutPayload;
+
+        if ($checkout->provider === 'razorpay') {
+            $this->paymentOrder = $payload;
+            $this->dispatch(
+                'razorpay-checkout-ready',
+                orderId: $payload['order_id'],
+                keyId: $payload['key_id'],
+                amountMinor: $checkout->amountMinor,
+                currency: $checkout->currencyCode,
+                name: auth()->user()->name,
+                email: auth()->user()->email,
+            );
+
+            return;
+        }
+
+        if ($checkout->provider === 'stripe') {
+            // Secrets travel only in the transient dispatch payload,
+            // never on a public Livewire property — same rule as
+            // initiatePayment().
+            $this->paymentOrder = ['provider' => 'stripe'];
+            $this->dispatch(
+                'stripe-checkout-ready',
+                clientSecret: $payload['client_secret'],
+                publishableKey: $payload['publishable_key'],
+            );
+
+            return;
+        }
+
+        $this->paymentOrder = $payload;
     }
 
     public function initiatePayment(): void
@@ -1507,6 +1683,7 @@ final class BookingWizard extends Component
             'paymentOrder',
             'paymentBanner',
             'walletOption',
+            'seriesPrepayment',
             'fundingOptions',
             'packageEntitlementId',
             'pricePreview',

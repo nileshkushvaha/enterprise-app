@@ -222,7 +222,33 @@ final class AvailabilityRepository implements AvailabilityRepositoryInterface
      * order. With no rules at all — a brand-new instructor — the
      * canonical user timezone answers it.
      */
+    /**
+     * Memo for calendarTimezoneFor(), scoped to THIS repository
+     * instance — which is one availability pass (a wizard preview, one
+     * generation run), never the application.
+     *
+     * Deliberately limited to the timezone. It is configuration, and a
+     * stale read cannot let an unavailable slot through: windows,
+     * holidays, leave, existing bookings and the daily cap are all still
+     * queried live on every check. The instructor-approval check is
+     * NOT memoized for exactly that reason — it is a safety gate, and
+     * AvailabilityService re-runs it under the booking lock precisely so
+     * a teacher deactivated mid-pass cannot still be booked.
+     *
+     * @var array<int, string>
+     */
+    private array $calendarTimezones = [];
+
     public function calendarTimezoneFor(int $teacherId): string
+    {
+        if (isset($this->calendarTimezones[$teacherId])) {
+            return $this->calendarTimezones[$teacherId];
+        }
+
+        return $this->calendarTimezones[$teacherId] = $this->resolveCalendarTimezone($teacherId);
+    }
+
+    private function resolveCalendarTimezone(int $teacherId): string
     {
         $ruleTimezone = TeacherAvailability::query()
             ->active()

@@ -72,8 +72,13 @@ final class WalletRechargeService implements WalletRechargeServiceInterface
      * Every eligibility question is answered BEFORE any money state
      * exists: a refused recharge creates no WalletRecharge, no Payment,
      * and reaches no provider.
+     *
+     * @param  array<string, mixed>  $metadata  non-sensitive context describing WHY this
+     *                                          recharge was raised, so a caller that tops up for a specific purpose
+     *                                          (e.g. paying for a schedule's classes) can finish that job when the
+     *                                          money lands. Never credentials, provider signatures, or card details.
      */
-    public function initiate(User $student, int $amountMinor): PaymentCheckoutData
+    public function initiate(User $student, int $amountMinor, array $metadata = []): PaymentCheckoutData
     {
         $this->studentLifecycle->assertEligibleForStudentAction($student);
 
@@ -99,7 +104,7 @@ final class WalletRechargeService implements WalletRechargeServiceInterface
 
         $provider = $this->resolveRechargeCapableProvider($student, $wallet->currency_code);
 
-        $recharge = $this->openRecharge($student, $wallet, $amountMinor);
+        $recharge = $this->openRecharge($student, $wallet, $amountMinor, $metadata);
 
         try {
             // The provider key is passed in, never chosen here, and the
@@ -157,7 +162,8 @@ final class WalletRechargeService implements WalletRechargeServiceInterface
      * student, an operator, and the provider's order notes all use to
      * name this recharge.
      */
-    private function openRecharge(User $student, Wallet $wallet, int $amountMinor): WalletRecharge
+    /** @param array<string, mixed> $metadata */
+    private function openRecharge(User $student, Wallet $wallet, int $amountMinor, array $metadata = []): WalletRecharge
     {
         $reference = 'WRCH-'.strtoupper(Str::random(12));
 
@@ -168,6 +174,7 @@ final class WalletRechargeService implements WalletRechargeServiceInterface
             'currency_code' => $wallet->currency_code,
             'status' => WalletRechargeStatus::Requested,
             'reference' => $reference,
+            'metadata' => $metadata === [] ? null : $metadata,
             'created_by' => $student->id,
         ]));
 
