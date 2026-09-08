@@ -12,7 +12,7 @@ use App\Enums\InstructorStatus;
 use App\Enums\StudentStatus;
 use App\Http\Resources\Student\StudentBookingResource;
 use App\Listeners\Booking\SendMeetingNotifications;
-use App\Livewire\Frontend\Student\BookingHistory;
+use App\Livewire\Frontend\Student\BookingDetail;
 use App\Models\Booking;
 use App\Models\BookingMeeting;
 use App\Models\BookingType;
@@ -319,8 +319,7 @@ class StudentMeetingLinkAccessTest extends TestCase
         $booking->meeting->update(['starts_at' => now()->addHours(5), 'ends_at' => now()->addHours(6)]);
 
         Livewire::actingAs($student)
-            ->test(BookingHistory::class)
-            ->call('viewBooking', $booking->id)
+            ->test(BookingDetail::class, ['bookingId' => $booking->id])
             ->assertDontSee(self::JOIN_URL);
     }
 
@@ -455,8 +454,7 @@ class StudentMeetingLinkAccessTest extends TestCase
         [$booking, $student] = $this->confirmedBookingWithMeeting($status);
 
         Livewire::actingAs($student)
-            ->test(BookingHistory::class)
-            ->call('viewBooking', $booking->id)
+            ->test(BookingDetail::class, ['bookingId' => $booking->id])
             ->assertDontSee(self::JOIN_URL);
     }
 
@@ -465,8 +463,7 @@ class StudentMeetingLinkAccessTest extends TestCase
         [$booking, $student] = $this->confirmedBookingWithMeeting();
 
         Livewire::actingAs($student)
-            ->test(BookingHistory::class)
-            ->call('viewBooking', $booking->id)
+            ->test(BookingDetail::class, ['bookingId' => $booking->id])
             ->assertSee(self::JOIN_URL);
     }
 

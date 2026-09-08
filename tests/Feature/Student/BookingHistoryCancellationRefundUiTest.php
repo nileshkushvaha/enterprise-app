@@ -6,7 +6,7 @@ namespace Tests\Feature\Student;
 
 use App\Booking\Enums\BookingPaymentStatus;
 use App\Booking\Enums\BookingStatus;
-use App\Livewire\Frontend\Student\BookingHistory;
+use App\Livewire\Frontend\Student\BookingDetail;
 use App\Models\Booking;
 use App\Models\BookingPayment;
 use App\Models\BookingType;
@@ -86,8 +86,7 @@ class BookingHistoryCancellationRefundUiTest extends TestCase
         $booking = $this->paidBooking(CarbonImmutable::now()->addDays(3));
 
         Livewire::actingAs($this->student)
-            ->test(BookingHistory::class)
-            ->call('viewBooking', $booking->id)
+            ->test(BookingDetail::class, ['bookingId' => $booking->id])
             ->call('openCancelPanel')
             ->assertSee('Eligible for a full wallet refund.')
             ->assertDontSee('outside the refund window');
@@ -99,8 +98,7 @@ class BookingHistoryCancellationRefundUiTest extends TestCase
         $booking = $this->paidBooking(CarbonImmutable::now()->addHours(2));
 
         Livewire::actingAs($this->student)
-            ->test(BookingHistory::class)
-            ->call('viewBooking', $booking->id)
+            ->test(BookingDetail::class, ['bookingId' => $booking->id])
             ->call('openCancelPanel')
             ->assertSee('outside the refund window')
             ->assertSee('refund deadline was')
@@ -113,8 +111,7 @@ class BookingHistoryCancellationRefundUiTest extends TestCase
         $booking = $this->paidBooking(CarbonImmutable::now()->addDays(3));
 
         Livewire::actingAs($this->student)
-            ->test(BookingHistory::class)
-            ->call('viewBooking', $booking->id)
+            ->test(BookingDetail::class, ['bookingId' => $booking->id])
             ->call('openCancelPanel')
             ->call('confirmCancel')
             ->assertSee('The amount paid has been credited to your wallet.');
@@ -126,8 +123,7 @@ class BookingHistoryCancellationRefundUiTest extends TestCase
         $booking = $this->paidBooking(CarbonImmutable::now()->addHours(2));
 
         Livewire::actingAs($this->student)
-            ->test(BookingHistory::class)
-            ->call('viewBooking', $booking->id)
+            ->test(BookingDetail::class, ['bookingId' => $booking->id])
             ->call('openCancelPanel')
             ->call('confirmCancel')
             ->assertSee('This cancellation was outside the refund window, so no refund was issued.');
@@ -139,15 +135,16 @@ class BookingHistoryCancellationRefundUiTest extends TestCase
         $booking = $this->paidBooking(CarbonImmutable::now()->addHours(2));
 
         $test = Livewire::actingAs($this->student)
-            ->test(BookingHistory::class)
-            ->call('viewBooking', $booking->id)
+            ->test(BookingDetail::class, ['bookingId' => $booking->id])
             ->call('openCancelPanel')
             ->call('confirmCancel')
             ->assertSee('This cancellation was outside the refund window, so no refund was issued.');
 
         $this->setWindow(0);
 
-        $test->call('viewBooking', $booking->id)
+        // Re-rendering after the setting changed still shows the frozen
+        // outcome — it is read back from the payment, never recalculated.
+        $test->call('$refresh')
             ->assertSee('This cancellation was outside the refund window, so no refund was issued.');
     }
 
@@ -168,8 +165,7 @@ class BookingHistoryCancellationRefundUiTest extends TestCase
         ]);
 
         Livewire::actingAs($this->student)
-            ->test(BookingHistory::class)
-            ->call('viewBooking', $booking->id)
+            ->test(BookingDetail::class, ['bookingId' => $booking->id])
             ->call('openCancelPanel')
             ->assertDontSee('Eligible for a full wallet refund.')
             ->assertDontSee('outside the refund window')

@@ -9,7 +9,7 @@ use App\Booking\Enums\BookingActor;
 use App\Booking\Enums\BookingPaymentStatus;
 use App\Booking\Enums\BookingStatus;
 use App\Booking\Enums\Weekday;
-use App\Livewire\Frontend\Student\BookingHistory;
+use App\Livewire\Frontend\Student\BookingDetail;
 use App\Models\Booking;
 use App\Models\BookingActivity;
 use App\Models\BookingType;
@@ -81,8 +81,7 @@ class BookingHistoryRescheduleLimitUiTest extends TestCase
         $booking = $this->bookingAt(CarbonImmutable::now()->addDays(1)->setTime(10, 0));
 
         Livewire::actingAs($this->student)
-            ->test(BookingHistory::class)
-            ->call('viewBooking', $booking->id)
+            ->test(BookingDetail::class, ['bookingId' => $booking->id])
             ->call('openReschedulePanel')
             ->assertSee('2 reschedules remaining');
     }
@@ -93,8 +92,7 @@ class BookingHistoryRescheduleLimitUiTest extends TestCase
         $booking = $this->bookingAt(CarbonImmutable::now()->addDays(1)->setTime(10, 0));
 
         Livewire::actingAs($this->student)
-            ->test(BookingHistory::class)
-            ->call('viewBooking', $booking->id)
+            ->test(BookingDetail::class, ['bookingId' => $booking->id])
             ->call('openReschedulePanel')
             ->assertSee('1 reschedule remaining')
             ->assertDontSee('1 reschedules remaining');
@@ -112,8 +110,7 @@ class BookingHistoryRescheduleLimitUiTest extends TestCase
         ]);
 
         Livewire::actingAs($this->student)
-            ->test(BookingHistory::class)
-            ->call('viewBooking', $booking->id)
+            ->test(BookingDetail::class, ['bookingId' => $booking->id])
             ->assertSee('You have reached the reschedule limit for this lesson.')
             ->assertDontSee('wire:click="openReschedulePanel"', false);
     }
@@ -130,8 +127,7 @@ class BookingHistoryRescheduleLimitUiTest extends TestCase
         ]);
 
         $test = Livewire::actingAs($this->student)
-            ->test(BookingHistory::class)
-            ->call('viewBooking', $booking->id)
+            ->test(BookingDetail::class, ['bookingId' => $booking->id])
             ->call('openReschedulePanel')
             ->assertSee('1 reschedule remaining');
 
@@ -145,7 +141,7 @@ class BookingHistoryRescheduleLimitUiTest extends TestCase
         $test->set('rescheduleDate', $newDate->toDateString())
             ->call('selectRescheduleSlot', $newDate->setTime(10, 0)->toIso8601String())
             ->call('confirmReschedule')
-            ->assertSet('modalBanner', 'You have reached the reschedule limit for this lesson.');
+            ->assertSet('banner', 'You have reached the reschedule limit for this lesson.');
 
         $this->assertSame(
             1,
@@ -162,8 +158,7 @@ class BookingHistoryRescheduleLimitUiTest extends TestCase
         $newDate = CarbonImmutable::now()->addDays(2);
 
         Livewire::actingAs($this->student)
-            ->test(BookingHistory::class)
-            ->call('viewBooking', $booking->id)
+            ->test(BookingDetail::class, ['bookingId' => $booking->id])
             ->call('openReschedulePanel')
             ->assertSee('2 reschedules remaining')
             ->set('rescheduleDate', $newDate->toDateString())

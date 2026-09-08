@@ -33,6 +33,13 @@ interface BookingRepositoryInterface
 
     public function findOrFail(string $id): Booking;
 
+    /**
+     * Same as findOrFail() but also resolves soft-deleted bookings —
+     * the student booking list renders trashed rows (paginatedForUser
+     * uses withTrashed), so their detail page has to resolve them too.
+     */
+    public function findWithTrashedOrFail(string $id): Booking;
+
     public function findByReference(string $reference): ?Booking;
 
     /**

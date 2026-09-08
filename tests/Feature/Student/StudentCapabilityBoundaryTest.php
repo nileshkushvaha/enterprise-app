@@ -12,7 +12,7 @@ use App\Enums\StudentStatus;
 use App\Exceptions\Student\StudentActionNotAvailableException;
 use App\Homework\Enums\HomeworkStatus;
 use App\Homework\Services\HomeworkService;
-use App\Livewire\Frontend\Student\BookingHistory;
+use App\Livewire\Frontend\Student\BookingDetail;
 use App\Models\AcademicCategory;
 use App\Models\Booking;
 use App\Models\BookingMeeting;
@@ -382,8 +382,7 @@ class StudentCapabilityBoundaryTest extends TestCase
         [$student, $booking] = $this->confirmedBookingWithMeeting(StudentStatus::Active);
 
         Livewire::actingAs($student)
-            ->test(BookingHistory::class)
-            ->call('viewBooking', $booking->id)
+            ->test(BookingDetail::class, ['bookingId' => $booking->id])
             ->assertSee('https://meet.example.test/abc');
 
         Http::assertNothingSent();
@@ -395,8 +394,7 @@ class StudentCapabilityBoundaryTest extends TestCase
         [$student, $booking] = $this->confirmedBookingWithMeeting($status);
 
         Livewire::actingAs($student)
-            ->test(BookingHistory::class)
-            ->call('viewBooking', $booking->id)
+            ->test(BookingDetail::class, ['bookingId' => $booking->id])
             ->assertDontSee('https://meet.example.test/abc');
     }
 

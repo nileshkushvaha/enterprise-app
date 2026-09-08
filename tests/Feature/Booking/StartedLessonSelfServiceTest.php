@@ -11,7 +11,7 @@ use App\Booking\Enums\BookingActor;
 use App\Booking\Enums\BookingPaymentStatus;
 use App\Booking\Enums\BookingStatus;
 use App\Booking\Exceptions\LessonAlreadyStartedException;
-use App\Livewire\Frontend\Student\BookingHistory;
+use App\Livewire\Frontend\Student\BookingDetail;
 use App\Models\Booking;
 use App\Models\BookingType;
 use App\Models\User;
@@ -66,8 +66,7 @@ class StartedLessonSelfServiceTest extends TestCase
         $booking = $this->confirmedBooking(CarbonImmutable::now()->subHours(3));
 
         Livewire::actingAs($this->student)
-            ->test(BookingHistory::class)
-            ->call('viewBooking', $booking->id)
+            ->test(BookingDetail::class, ['bookingId' => $booking->id])
             ->assertSee('This lesson has ended')
             ->assertDontSee('Cancel booking')
             ->assertDontSeeHtml('wire:click="openReschedulePanel"');
@@ -78,8 +77,7 @@ class StartedLessonSelfServiceTest extends TestCase
         $booking = $this->confirmedBooking(CarbonImmutable::now()->subMinutes(10));
 
         Livewire::actingAs($this->student)
-            ->test(BookingHistory::class)
-            ->call('viewBooking', $booking->id)
+            ->test(BookingDetail::class, ['bookingId' => $booking->id])
             ->assertSee('This lesson is in progress')
             ->assertDontSee('Cancel booking');
     }
@@ -89,8 +87,7 @@ class StartedLessonSelfServiceTest extends TestCase
         $booking = $this->confirmedBooking(CarbonImmutable::now()->addDays(2));
 
         Livewire::actingAs($this->student)
-            ->test(BookingHistory::class)
-            ->call('viewBooking', $booking->id)
+            ->test(BookingDetail::class, ['bookingId' => $booking->id])
             ->assertSee('Cancel booking')
             ->assertDontSee('This lesson has ended');
     }
@@ -100,8 +97,7 @@ class StartedLessonSelfServiceTest extends TestCase
         $booking = $this->confirmedBooking(CarbonImmutable::now()->subMinutes(5));
 
         Livewire::actingAs($this->student)
-            ->test(BookingHistory::class)
-            ->call('viewBooking', $booking->id)
+            ->test(BookingDetail::class, ['bookingId' => $booking->id])
             ->call('openCancelPanel')
             ->assertSet('cancelPanelOpen', false)
             ->assertSee('can no longer be cancelled');

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Display;
 
+use App\Livewire\Frontend\Student\BookingDetail;
 use App\Livewire\Frontend\Student\BookingHistory;
 use App\Livewire\Frontend\Student\UpcomingClasses;
 use App\Models\Booking;
@@ -131,10 +132,16 @@ class ViewerTimezoneDisplayTest extends TestCase
         // while the detail panel beside it rendered a converted time, for
         // the same booking on the same screen.
         $student = $this->student('Asia/Kolkata');
-        $this->bookingFor($student);
+        $booking = $this->bookingFor($student);
 
         Livewire::actingAs($student)
             ->test(BookingHistory::class)
+            ->assertSee('Aug 16, 2026')
+            ->assertSee('5:00 AM')
+            ->assertDontSee('11:30 PM');
+
+        Livewire::actingAs($student)
+            ->test(BookingDetail::class, ['bookingId' => $booking->id])
             ->assertSee('Aug 16, 2026')
             ->assertSee('5:00 AM')
             ->assertDontSee('11:30 PM');

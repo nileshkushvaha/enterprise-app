@@ -16,7 +16,7 @@ use App\Booking\Enums\BookingPaymentStatus;
 use App\Booking\Enums\BookingStatus;
 use App\Booking\Enums\Weekday;
 use App\Booking\Exceptions\BookingException;
-use App\Livewire\Frontend\Student\BookingHistory;
+use App\Livewire\Frontend\Student\BookingDetail;
 use App\Models\Booking;
 use App\Models\BookingPayment;
 use App\Models\BookingType;
@@ -161,8 +161,7 @@ class StudentCheckoutFrontendTest extends TestCase
         $booking = $this->paidBooking($student);
 
         Livewire::actingAs($student)
-            ->test(BookingHistory::class)
-            ->call('viewBooking', $booking->id)
+            ->test(BookingDetail::class, ['bookingId' => $booking->id])
             ->assertSee('Pay now');
     }
 
@@ -174,8 +173,7 @@ class StudentCheckoutFrontendTest extends TestCase
         $booking = $this->paidBooking($student);
 
         Livewire::actingAs($student)
-            ->test(BookingHistory::class)
-            ->call('viewBooking', $booking->id)
+            ->test(BookingDetail::class, ['bookingId' => $booking->id])
             ->assertSee('Pay now')
             ->assertDontSee('Pay from wallet');
     }
@@ -192,8 +190,7 @@ class StudentCheckoutFrontendTest extends TestCase
         app(WalletLedgerService::class)->credit($wallet, 100000, WalletLedgerEntryType::PromotionalCredit, $student);
 
         Livewire::actingAs($student)
-            ->test(BookingHistory::class)
-            ->call('viewBooking', $booking->id)
+            ->test(BookingDetail::class, ['bookingId' => $booking->id])
             ->assertSee('Wallet balance')
             ->assertSee('Pay from wallet');
     }
@@ -210,8 +207,7 @@ class StudentCheckoutFrontendTest extends TestCase
         app(WalletLedgerService::class)->credit($wallet, 100, WalletLedgerEntryType::PromotionalCredit, $student);
 
         Livewire::actingAs($student)
-            ->test(BookingHistory::class)
-            ->call('viewBooking', $booking->id)
+            ->test(BookingDetail::class, ['bookingId' => $booking->id])
             ->assertSee('not sufficient')
             ->assertDontSee('Pay from wallet');
     }
@@ -222,8 +218,7 @@ class StudentCheckoutFrontendTest extends TestCase
         $booking = $this->freeBooking($student);
 
         Livewire::actingAs($student)
-            ->test(BookingHistory::class)
-            ->call('viewBooking', $booking->id)
+            ->test(BookingDetail::class, ['bookingId' => $booking->id])
             ->assertDontSee('Pay now')
             ->assertDontSee('wallet balance');
     }
@@ -240,8 +235,7 @@ class StudentCheckoutFrontendTest extends TestCase
         app(BookingPaymentServiceInterface::class)->markPaid($booking, $reference);
 
         Livewire::actingAs($student)
-            ->test(BookingHistory::class)
-            ->call('viewBooking', $booking->id)
+            ->test(BookingDetail::class, ['bookingId' => $booking->id])
             ->assertDontSee('Pay now')
             ->assertSee('Paid');
     }
@@ -263,8 +257,7 @@ class StudentCheckoutFrontendTest extends TestCase
         $this->assertSame(BookingPaymentStatus::Pending, $booking->payment_status);
 
         Livewire::actingAs($student)
-            ->test(BookingHistory::class)
-            ->call('viewBooking', $booking->id)
+            ->test(BookingDetail::class, ['bookingId' => $booking->id])
             ->assertDontSee('Pay now');
     }
 
@@ -282,8 +275,7 @@ class StudentCheckoutFrontendTest extends TestCase
         $this->assertSame(BookingStatus::Cancelled, $booking->refresh()->status);
 
         Livewire::actingAs($student)
-            ->test(BookingHistory::class)
-            ->call('viewBooking', $booking->id)
+            ->test(BookingDetail::class, ['bookingId' => $booking->id])
             ->assertDontSee('Pay now');
     }
 
@@ -301,8 +293,7 @@ class StudentCheckoutFrontendTest extends TestCase
         app(BookingPaymentServiceInterface::class)->initiate($booking);
 
         $html = Livewire::actingAs($student)
-            ->test(BookingHistory::class)
-            ->call('viewBooking', $booking->id)
+            ->test(BookingDetail::class, ['bookingId' => $booking->id])
             ->html();
 
         $this->assertStringNotContainsString('order_META1', $html);
@@ -319,8 +310,7 @@ class StudentCheckoutFrontendTest extends TestCase
         $booking = $this->paidBooking($owner);
 
         Livewire::actingAs($intruder)
-            ->test(BookingHistory::class)
-            ->call('viewBooking', $booking->id)
+            ->test(BookingDetail::class, ['bookingId' => $booking->id])
             ->assertForbidden();
     }
 
@@ -349,8 +339,7 @@ class StudentCheckoutFrontendTest extends TestCase
         $student->unsetRelation('profile');
 
         Livewire::actingAs($student)
-            ->test(BookingHistory::class)
-            ->call('viewBooking', $booking->id)
+            ->test(BookingDetail::class, ['bookingId' => $booking->id])
             ->call('initiatePayment')
             ->assertSee('complete your profile');
 
@@ -405,8 +394,7 @@ class StudentCheckoutFrontendTest extends TestCase
         $booking = $this->paidBooking($student);
 
         Livewire::actingAs($student)
-            ->test(BookingHistory::class)
-            ->call('viewBooking', $booking->id)
+            ->test(BookingDetail::class, ['bookingId' => $booking->id])
             ->call('initiatePayment')
             ->assertSee('Simulate success')
             ->call('simulateFakePayment', true);
@@ -424,8 +412,7 @@ class StudentCheckoutFrontendTest extends TestCase
         $booking = $this->paidBooking($student);
 
         Livewire::actingAs($student)
-            ->test(BookingHistory::class)
-            ->call('viewBooking', $booking->id)
+            ->test(BookingDetail::class, ['bookingId' => $booking->id])
             ->call('initiatePayment')
             ->call('simulateFakePayment', false);
 
@@ -457,8 +444,7 @@ class StudentCheckoutFrontendTest extends TestCase
         $this->app->detectEnvironment(fn (): string => 'production');
 
         Livewire::actingAs($student)
-            ->test(BookingHistory::class)
-            ->call('viewBooking', $booking->id)
+            ->test(BookingDetail::class, ['bookingId' => $booking->id])
             ->call('initiatePayment')
             ->call('simulateFakePayment', true);
 
@@ -503,8 +489,7 @@ class StudentCheckoutFrontendTest extends TestCase
         ))->refresh();
 
         $component = Livewire::actingAs($student)
-            ->test(BookingHistory::class)
-            ->call('viewBooking', $booking->id)
+            ->test(BookingDetail::class, ['bookingId' => $booking->id])
             ->call('initiatePayment');
 
         $html = $component->html();

@@ -1204,7 +1204,7 @@ is called and does return `client_secret` to the component's PHP-side
 messaging beyond the existing pending/failed box:
 
 - `paid` → a plain "Paid" confirmation.
-- `refunded` → "Refunded", unless `BookingHistory::paymentWasCreditedToWallet()`
+- `refunded` → "Refunded", unless `BookingDetail::paymentWasCreditedToWallet()`
   (a cheap `booking_payments.metadata->wallet_ledger_entry_id` existence
   check, no sensitive data) is true, in which case: "Payment received
   after this booking's slot was released — the amount was credited to
@@ -1213,8 +1213,8 @@ messaging beyond the existing pending/failed box:
   manual-resolution state is never shown to a student (it cannot be —
   guest bookings have no student-portal session to view it from) and
   no other student's payment details are ever queried, since the
-  wallet-credit check is scoped to `$this->selectedBooking`, which is
-  only ever set after the existing `'view'` policy gate passes.
+  wallet-credit check is scoped to `$this->booking`, which is only
+  ever set after the existing `'view'` policy gate passes on mount.
 
 ### Guest and instructor boundaries — unchanged, re-confirmed
 

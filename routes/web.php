@@ -312,6 +312,10 @@ Route::prefix('dashboard')->name('dashboard.')->middleware([
     // ── Student Dashboard — Booking Engine sections (Livewire-backed) ──
     Route::get('/upcoming-classes', [StudentUpcomingClassesController::class, 'index'])->name('upcoming-classes');
     Route::get('/my-bookings', [StudentBookingHistoryController::class, 'index'])->name('my-bookings');
+    // Dedicated booking detail page (replaces the old list modal).
+    // Authorization is re-checked inside the controller on every request
+    // (BookingPolicy::view()) and again when the Livewire component mounts.
+    Route::get('/my-bookings/{booking}', [StudentBookingHistoryController::class, 'show'])->name('my-bookings.show');
     Route::get('/payments', [StudentPaymentsController::class, 'index'])->name('payments');
     Route::get('/wallet', [StudentWalletController::class, 'index'])->name('wallet');
     Route::get('/invoices', [StudentInvoicesController::class, 'index'])->name('invoices');

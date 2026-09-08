@@ -107,6 +107,7 @@ final class StudentDashboardService
         $joinUrl = $this->bookingMeetings->studentJoinUrlFor($booking, $student);
 
         return [
+            'id' => $booking->id,
             'reference' => $booking->reference,
             'subject' => $booking->meta['subject'] ?? $booking->type?->name ?? 'Lesson',
             'instructor' => $booking->instructor?->name ?? 'Instructor to be assigned',

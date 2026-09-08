@@ -426,7 +426,7 @@ throws `BookingException` rather than degrading to another flow.
   even if their `TeacherSubject` range matches.
 - A historical Booking created before country-aware booking may have no
   `BookingAcademicContext` row —
-  `Booking::academicContext()` is nullable by design; `booking-history.blade.php`
+  `Booking::academicContext()` is nullable by design; `booking-detail.blade.php`
   falls back to the legacy `meta.grade` display for those rows.
 
 Regression coverage: `tests/Feature/Booking/CountryAcademicDemoBookingTest.php`

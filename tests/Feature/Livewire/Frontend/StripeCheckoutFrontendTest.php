@@ -9,7 +9,7 @@ use App\Booking\Contracts\StripeGatewayClient;
 use App\Booking\Contracts\StudentBookingServiceInterface;
 use App\Booking\DTOs\StudentBookingData;
 use App\Booking\Enums\Weekday;
-use App\Livewire\Frontend\Student\BookingHistory;
+use App\Livewire\Frontend\Student\BookingDetail;
 use App\Models\Booking;
 use App\Models\Currency;
 use App\Models\TeacherAvailability;
@@ -103,8 +103,7 @@ class StripeCheckoutFrontendTest extends TestCase
     public function test_initiate_payment_dispatches_stripe_checkout_ready_with_the_client_secret_never_on_a_public_property(): void
     {
         $component = Livewire::actingAs($this->student)
-            ->test(BookingHistory::class)
-            ->call('viewBooking', $this->booking->id)
+            ->test(BookingDetail::class, ['bookingId' => $this->booking->id])
             ->call('initiatePayment');
 
         $component->assertDispatched('stripe-checkout-ready', clientSecret: 'pi_frontend_test_secret_xyz', publishableKey: self::PUBLISHABLE_KEY);
@@ -119,8 +118,7 @@ class StripeCheckoutFrontendTest extends TestCase
     public function test_check_payment_status_never_marks_a_booking_paid_itself_only_a_webhook_can(): void
     {
         $component = Livewire::actingAs($this->student)
-            ->test(BookingHistory::class)
-            ->call('viewBooking', $this->booking->id)
+            ->test(BookingDetail::class, ['bookingId' => $this->booking->id])
             ->call('initiatePayment')
             ->call('checkPaymentStatus');
 
@@ -128,14 +126,13 @@ class StripeCheckoutFrontendTest extends TestCase
         // finds the booking still pending; it must never have settled it.
         $this->booking->refresh();
         $this->assertSame('pending', $this->booking->payment_status->value);
-        $component->assertSet('modalBanner', '');
+        $component->assertSet('banner', '');
     }
 
     public function test_check_payment_status_reflects_a_webhook_settled_outcome_without_calling_it_itself(): void
     {
         Livewire::actingAs($this->student)
-            ->test(BookingHistory::class)
-            ->call('viewBooking', $this->booking->id)
+            ->test(BookingDetail::class, ['bookingId' => $this->booking->id])
             ->call('initiatePayment');
 
         // Simulate the *server-side* effect a signed Stripe webhook would
@@ -145,11 +142,10 @@ class StripeCheckoutFrontendTest extends TestCase
         app(BookingPaymentServiceInterface::class)->markPaid($this->booking, $reference);
 
         $component = Livewire::actingAs($this->student)
-            ->test(BookingHistory::class)
-            ->call('viewBooking', $this->booking->id)
+            ->test(BookingDetail::class, ['bookingId' => $this->booking->id])
             ->call('checkPaymentStatus');
 
-        $component->assertSet('modalBanner', '');
+        $component->assertSet('banner', '');
         $this->assertSame('paid', $this->booking->refresh()->payment_status->value);
     }
 }

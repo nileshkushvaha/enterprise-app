@@ -38,7 +38,7 @@
                         <p class="text-sm font-semibold text-fg-strong">{{ $booking->currency }} {{ number_format((float) $booking->price, 2) }}</p>
                     @endif
                     @if($canCompletePayment)
-                        <a href="{{ route('dashboard.my-bookings', ['booking' => $booking->id]) }}" class="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-indigo-600 px-3 text-xs font-bold text-white shadow-sm transition hover:bg-indigo-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400" data-complete-payment>
+                        <a href="{{ route('dashboard.my-bookings.show', $booking) }}" class="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-indigo-600 px-3 text-xs font-bold text-white shadow-sm transition hover:bg-indigo-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400" data-complete-payment>
                             Complete payment
                             <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5"/></svg>
                         </a>

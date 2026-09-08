@@ -1,0 +1,589 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Livewire\Frontend\Student;
+
+use App\Booking\Contracts\AvailabilityServiceInterface;
+use App\Booking\Contracts\BookingMeetingServiceInterface;
+use App\Booking\Contracts\BookingPaymentServiceInterface;
+use App\Booking\Contracts\BookingRepositoryInterface;
+use App\Booking\Contracts\BookingServiceInterface;
+use App\Booking\DTOs\AvailabilityQueryData;
+use App\Booking\DTOs\CancelBookingData;
+use App\Booking\DTOs\RescheduleBookingData;
+use App\Booking\Enums\BookingActor;
+use App\Booking\Enums\BookingPaymentStatus;
+use App\Booking\Enums\BookingStatus;
+use App\Booking\Enums\RecordingPlaybackState;
+use App\Booking\Exceptions\BookingException;
+use App\Booking\Exceptions\InvalidPaymentWebhookException;
+use App\Booking\Exceptions\LessonAlreadyStartedException;
+use App\Booking\Payments\RazorpayPaymentProvider;
+use App\Booking\Services\CancellationRefundPolicy;
+use App\Booking\Services\RecordingPlaybackAccessResolver;
+use App\Booking\Services\RescheduleLimitPolicy;
+use App\Booking\Support\FakePaymentSimulator;
+use App\Models\Booking;
+use App\Models\BookingPayment;
+use App\Models\Wallet;
+use App\Settings\FeatureSettings;
+use App\Support\MoneyFormatter;
+use App\Wallet\Support\WalletMoneyFormatter;
+use Carbon\CarbonImmutable;
+use Illuminate\Contracts\View\View;
+use Illuminate\Support\Facades\Gate;
+use Livewire\Component;
+
+/**
+ * The student's dedicated booking detail PAGE (`/dashboard/my-bookings/{booking}`).
+ *
+ * Everything here used to live in a modal inside BookingHistory; the
+ * behaviour — authorisation, reschedule, cancel, payment — is unchanged,
+ * only its surface is. BookingHistory is now a list, and this component
+ * owns a single booking. Authorisation is enforced twice on purpose: the
+ * controller authorises before rendering the page, and mount() re-checks
+ * on every Livewire request so no state change can be driven against a
+ * booking the viewer may not see.
+ */
+final class BookingDetail extends Component
+{
+    public string $bookingId = '';
+
+    public ?Booking $booking = null;
+
+    public bool $reschedulePanelOpen = false;
+
+    public bool $cancelPanelOpen = false;
+
+    public string $rescheduleDate = '';
+
+    public ?string $rescheduleSlotStartsAt = null;
+
+    /** @var list<array<string, mixed>> */
+    public array $rescheduleSlots = [];
+
+    public string $cancelReason = '';
+
+    public string $banner = '';
+
+    /** @var array<string, mixed> */
+    public array $paymentOrder = [];
+
+    private BookingRepositoryInterface $repository;
+
+    private BookingServiceInterface $bookingService;
+
+    private AvailabilityServiceInterface $availability;
+
+    private BookingPaymentServiceInterface $payments;
+
+    private RazorpayPaymentProvider $razorpay;
+
+    private CancellationRefundPolicy $refundPolicy;
+
+    private RescheduleLimitPolicy $reschedulePolicy;
+
+    public function boot(
+        BookingRepositoryInterface $repository,
+        BookingServiceInterface $bookingService,
+        AvailabilityServiceInterface $availability,
+        BookingPaymentServiceInterface $payments,
+        RazorpayPaymentProvider $razorpay,
+        CancellationRefundPolicy $refundPolicy,
+        RescheduleLimitPolicy $reschedulePolicy,
+    ): void {
+        $this->repository = $repository;
+        $this->bookingService = $bookingService;
+        $this->availability = $availability;
+        $this->payments = $payments;
+        $this->razorpay = $razorpay;
+        $this->refundPolicy = $refundPolicy;
+        $this->reschedulePolicy = $reschedulePolicy;
+    }
+
+    public function mount(string $bookingId): void
+    {
+        $this->bookingId = $bookingId;
+
+        $booking = $this->repository->findWithTrashedOrFail($bookingId);
+
+        Gate::authorize('view', $booking);
+
+        $this->booking = $booking->loadMissing(['type', 'instructor']);
+    }
+
+    public function openReschedulePanel(): void
+    {
+        if (! $this->booking) {
+            return;
+        }
+
+        if ($this->booking->hasStarted()) {
+            $this->banner = LessonAlreadyStartedException::forReschedule()->getMessage();
+
+            return;
+        }
+
+        Gate::authorize('reschedule', $this->booking);
+
+        $this->cancelPanelOpen = false;
+        $this->reschedulePanelOpen = true;
+    }
+
+    public function closeReschedulePanel(): void
+    {
+        $this->reschedulePanelOpen = false;
+        $this->rescheduleDate = '';
+        $this->rescheduleSlotStartsAt = null;
+        $this->rescheduleSlots = [];
+    }
+
+    public function openCancelPanel(): void
+    {
+        if (! $this->booking) {
+            return;
+        }
+
+        if ($this->booking->hasStarted()) {
+            $this->banner = LessonAlreadyStartedException::forCancellation()->getMessage();
+
+            return;
+        }
+
+        Gate::authorize('cancel', $this->booking);
+
+        $this->reschedulePanelOpen = false;
+        $this->cancelPanelOpen = true;
+    }
+
+    public function closeCancelPanel(): void
+    {
+        $this->cancelPanelOpen = false;
+        $this->cancelReason = '';
+    }
+
+    public function updatedRescheduleDate(): void
+    {
+        $this->loadRescheduleSlots();
+    }
+
+    public function selectRescheduleSlot(string $startsAt): void
+    {
+        $this->rescheduleSlotStartsAt = $startsAt;
+    }
+
+    public function confirmReschedule(): void
+    {
+        if (! $this->booking) {
+            return;
+        }
+
+        Gate::authorize('reschedule', $this->booking);
+
+        if (! $this->rescheduleSlotStartsAt) {
+            return;
+        }
+
+        $this->banner = '';
+
+        try {
+            $updated = $this->bookingService->reschedule($this->booking, new RescheduleBookingData(
+                startsAt: CarbonImmutable::parse($this->rescheduleSlotStartsAt),
+                actor: BookingActor::Student,
+            ));
+
+            $this->booking = $updated->loadMissing(['type', 'instructor']);
+            $this->reschedulePanelOpen = false;
+            $this->rescheduleDate = '';
+            $this->rescheduleSlotStartsAt = null;
+            $this->rescheduleSlots = [];
+        } catch (BookingException $exception) {
+            $this->banner = $exception->getMessage();
+        }
+    }
+
+    public function confirmCancel(): void
+    {
+        if (! $this->booking) {
+            return;
+        }
+
+        Gate::authorize('cancel', $this->booking);
+
+        $this->banner = '';
+
+        try {
+            $updated = $this->bookingService->cancel($this->booking, new CancelBookingData(
+                cancelledBy: BookingActor::Student,
+                reason: filled($this->cancelReason) ? $this->cancelReason : null,
+            ));
+
+            // The synchronous refund-execution listener
+            // mutates payment_status on its own freshly-queried copy of
+            // the booking, not this in-memory $updated instance, so a
+            // refresh is required or the page would keep showing the
+            // pre-refund "Paid" state.
+            $this->booking = $updated->refresh()->loadMissing(['type', 'instructor']);
+            $this->cancelPanelOpen = false;
+        } catch (BookingException $exception) {
+            $this->banner = $exception->getMessage();
+        }
+    }
+
+    public function initiatePayment(): void
+    {
+        if (! $this->booking) {
+            return;
+        }
+
+        Gate::authorize('pay', $this->booking);
+
+        $this->banner = '';
+        $this->paymentOrder = [];
+
+        // A resolvable billing country is required before
+        // checkout — PaymentProviderResolver's country-aware routing
+        // would otherwise silently fall through to the platform
+        // default, which is correct for *routing* but not a substitute for
+        // asking the student to complete their profile first. Checked here
+        // (the UI entry point), not inside BookingPaymentService::initiate()
+        // itself, which many other callers (webhooks, direct service tests)
+        // also use for concerns unrelated to profile completeness.
+        if (auth()->user()?->profile?->country_id === null) {
+            $this->banner = 'Please complete your profile (country) before paying for this booking.';
+
+            return;
+        }
+
+        try {
+            $this->payments->initiate($this->booking);
+            $payload = $this->payments->checkoutPayload($this->booking);
+
+            // Gateway-neutral: backend decides the provider, frontend only
+            // reacts to it. Only Razorpay has a client-side checkout step
+            // today — Stripe Elements/Checkout is intentionally deferred
+            // (see docs/architecture/phase-10-razorpay-checkout-payment-capture.md),
+            // and the fake provider has no real checkout UI
+            // at all, only the "Simulate payment" controls below.
+            if (($payload['provider'] ?? null) === 'razorpay') {
+                $this->paymentOrder = $payload;
+                $this->dispatch(
+                    'razorpay-checkout-ready',
+                    orderId: $payload['order_id'],
+                    keyId: $payload['key_id'],
+                    amountMinor: $payload['amount_minor'],
+                    currency: $payload['currency'],
+                    name: auth()->user()?->name ?? '',
+                    email: auth()->user()?->email ?? '',
+                );
+            } elseif (($payload['provider'] ?? null) === 'stripe') {
+                // client_secret/publishable_key travel only in the transient
+                // dispatch payload, never stored on $paymentOrder (a public,
+                // client-hydrated property): real, sensitive gateway data
+                // with no reason to round-trip through server-rendered
+                // state. The frontend mounts Stripe's Payment Element and
+                // calls stripe.confirmPayment() directly with Stripe; this
+                // component never receives that outcome back — only a
+                // signed webhook may settle the booking (see
+                // checkPaymentStatus(), which only ever reads state).
+                $this->paymentOrder = ['provider' => 'stripe'];
+                $this->dispatch(
+                    'stripe-checkout-ready',
+                    clientSecret: $payload['client_secret'],
+                    publishableKey: $payload['publishable_key'],
+                );
+            } else {
+                $this->paymentOrder = $payload;
+            }
+        } catch (BookingException $exception) {
+            $this->banner = $exception->getMessage();
+        }
+    }
+
+    /**
+     * Pays this booking directly from the student's wallet — no
+     * gateway, no redirect, settles in this one request. See
+     * BookingWizard::payWithWallet() for the identical pattern.
+     */
+    public function payWithWallet(): void
+    {
+        if (! $this->booking) {
+            return;
+        }
+
+        Gate::authorize('pay', $this->booking);
+
+        $this->banner = '';
+
+        try {
+            $booking = $this->payments->payWithWallet($this->booking, auth()->user());
+
+            $this->booking = $booking->refresh()->loadMissing(['type', 'instructor']);
+        } catch (BookingException $exception) {
+            $this->banner = $exception->getMessage();
+        }
+    }
+
+    /**
+     * Polled by the Stripe Payment Element partial after
+     * stripe.confirmPayment() returns client-side — never trusted as
+     * settlement itself, only a signal to re-check what the server
+     * already knows. Only a signed webhook
+     * ever calls markPaid()/markFailed() for Stripe; this method makes
+     * no state change of its own, it only re-reads and re-renders.
+     */
+    public function checkPaymentStatus(): void
+    {
+        if (! $this->booking) {
+            return;
+        }
+
+        Gate::authorize('pay', $this->booking);
+
+        $booking = $this->booking->refresh();
+
+        if ($booking->payment_status->value === 'paid') {
+            $this->banner = '';
+        } elseif ($booking->payment_status->value === 'failed') {
+            $this->banner = 'Payment failed. Please try again.';
+        }
+
+        $this->booking = $booking->loadMissing(['type', 'instructor']);
+    }
+
+    public function verifyPayment(string $orderId, string $paymentId, string $signature): void
+    {
+        if (! $this->booking) {
+            return;
+        }
+
+        Gate::authorize('pay', $this->booking);
+
+        $this->banner = '';
+
+        try {
+            // Non-authoritative by design — see BookingWizard::
+            // verifyPayment() for why calling markPaid() here produced
+            // confirmed bookings with no receipt and no notifications.
+            $this->razorpay->verifyCheckout($this->booking, $orderId, $paymentId, $signature);
+
+            $this->booking = $this->booking->refresh()->loadMissing(['type', 'instructor']);
+        } catch (InvalidPaymentWebhookException|BookingException $exception) {
+            $this->banner = $exception->getMessage();
+        }
+    }
+
+    /**
+     * Local/testing-only convenience: the fake provider has no real
+     * checkout UI to complete, so this is the only way to exercise the
+     * "success"/"failure" paths from the browser without real gateway
+     * credentials. Mirrors PaymentProviderResolver's own environment
+     * guard rather than trusting the button being hidden — the button
+     * not rendering in production is a UX nicety, not the safety
+     * boundary.
+     */
+    public function simulateFakePayment(bool $success): void
+    {
+        if (! $this->booking || ! app(FakePaymentSimulator::class)->isAvailable()) {
+            return;
+        }
+
+        Gate::authorize('pay', $this->booking);
+
+        $this->banner = '';
+
+        try {
+            $booking = $this->booking->refresh();
+
+            // Same settlement path a signed webhook takes — see
+            // FakePaymentSimulator.
+            app(FakePaymentSimulator::class)->simulate($booking, $success);
+
+            $this->booking = $booking->refresh()->loadMissing(['type', 'instructor']);
+        } catch (BookingException $exception) {
+            $this->banner = $exception->getMessage();
+        }
+    }
+
+    /**
+     * Whether this booking's payment was recovered as a wallet
+     * credit rather than actively refunded —
+     * cheap, safe metadata check, no sensitive payload exposed.
+     */
+    public function paymentWasCreditedToWallet(): bool
+    {
+        if (! $this->booking) {
+            return false;
+        }
+
+        return BookingPayment::query()
+            ->where('booking_id', $this->booking->id)
+            ->whereNotNull('metadata->wallet_ledger_entry_id')
+            ->exists();
+    }
+
+    /**
+     * The student-facing reschedule allowance for this
+     * booking. Purely informational: BookingService::reschedule()
+     * re-derives and enforces the same decision under the instructor
+     * lock, so a stale render here can never let a student bypass the
+     * configured limit.
+     *
+     * @return array{allowed: bool, remaining: int}|null
+     */
+    public function rescheduleAllowance(): ?array
+    {
+        if (! $this->booking || $this->booking->status->isTerminal()) {
+            return null;
+        }
+
+        $decision = $this->reschedulePolicy->decide($this->booking, BookingActor::Student);
+
+        return ['allowed' => $decision->allowed, 'remaining' => $decision->remaining()];
+    }
+
+    /**
+     * Pre-confirmation preview only, shown while the cancel
+     * panel is open on a still-paid booking. Deliberately uses now(): no
+     * commitment has happened yet, so there is nothing frozen to read
+     * back yet — this is exactly the one place a live recalculation is
+     * correct. Returns null when there is nothing to refund (free demo,
+     * unpaid/failed booking) so the view can omit the section entirely.
+     *
+     * @return array{eligible: bool, cutoff_at: ?CarbonImmutable}|null
+     */
+    public function cancellationRefundPreview(): ?array
+    {
+        if (! $this->booking || $this->booking->payment_status !== BookingPaymentStatus::Paid) {
+            return null;
+        }
+
+        $decision = $this->refundPolicy->decide($this->booking, BookingActor::Student, CarbonImmutable::now());
+
+        return ['eligible' => $decision->eligible, 'cutoff_at' => $decision->cutoffAt];
+    }
+
+    /**
+     * The actual FROZEN outcome after cancellation, read
+     * back from the payment's own metadata (the same durable record
+     * BookingPaymentService wrote at cancellation time) — never a
+     * fresh policy recalculation, so this always matches what actually
+     * happened even if the setting has since changed.
+     */
+    public function cancellationOutcomeMessage(): ?string
+    {
+        if (! $this->booking || $this->booking->status !== BookingStatus::Cancelled) {
+            return null;
+        }
+
+        // Builder::value('metadata->refund_resolution') would silently
+        // return null here: Eloquent resolves a value() column back to
+        // an attribute via Str::afterLast($column, '.'), which only
+        // understands dot-paths, not MySQL's -> JSON operator — so the
+        // full row is read instead and the cast array is used directly.
+        $resolution = BookingPayment::query()
+            ->where('booking_id', $this->booking->id)
+            ->latest('created_at')
+            ->first()
+            ?->metadata['refund_resolution'] ?? null;
+
+        return match ($resolution) {
+            'wallet_credited' => 'The amount paid has been credited to your wallet.',
+            'not_eligible_late_cancellation' => 'This cancellation was outside the refund window, so no refund was issued.',
+            'manual_resolution_required' => 'Your refund is being reviewed by our team.',
+            default => null,
+        };
+    }
+
+    /**
+     * Display-only wallet-balance snapshot for the payment-awaiting
+     * section — never authoritative; payWithWallet() re-validates
+     * balance and eligibility itself before debiting anything. Reads
+     * the wallet if one already exists but never creates one merely
+     * from viewing this screen.
+     *
+     * @return array{available: bool, sufficient?: bool, balance_formatted?: string}|null
+     */
+    public function walletOption(): ?array
+    {
+        if (! $this->booking || ! app(FeatureSettings::class)->wallet_enabled) {
+            return null;
+        }
+
+        if (! $this->booking->payment_status->isPayable()) {
+            return null;
+        }
+
+        $wallet = Wallet::query()
+            ->forUser((int) auth()->id())
+            ->where('currency_code', $this->booking->currency)
+            ->with('currency')
+            ->first();
+
+        if ($wallet === null) {
+            return ['available' => false];
+        }
+
+        $minorUnits = MoneyFormatter::minorUnitsFor((string) $this->booking->currency);
+        $amountMinor = (int) round(((float) $this->booking->price) * (10 ** $minorUnits));
+
+        return [
+            'available' => true,
+            'sufficient' => $wallet->available_balance_minor >= $amountMinor,
+            'balance_formatted' => WalletMoneyFormatter::format($wallet->available_balance_minor, $wallet->currency, $wallet->currency_code),
+        ];
+    }
+
+    public function render(): View
+    {
+        return view('livewire.frontend.student.booking-detail', [
+            // The join URL comes exclusively from
+            // the authoritative BookingMeetingService::studentJoinUrlFor()
+            // (ownership + strict Active lifecycle on a fresh read +
+            // visibility setting + booking/meeting status) — this
+            // component renders only what the domain service releases,
+            // and the blade never reads meeting->join_url directly. A
+            // stale request after suspension therefore receives HTML
+            // with no provider URL. Boundary: a URL already copied
+            // externally cannot be revoked without provider integration;
+            // this controls what the application serves.
+            'joinUrl' => $this->booking !== null
+                ? app(BookingMeetingServiceInterface::class)
+                    ->studentJoinUrlFor($this->booking, auth()->user())
+                : null,
+            // Same discipline for the recording: the blade renders only
+            // the state RecordingPlaybackAccessResolver releases for the
+            // authenticated viewer (playback setting, ownership, lifecycle,
+            // withholding) and never inspects the recording row itself.
+            'recordingState' => $this->booking !== null
+                ? app(RecordingPlaybackAccessResolver::class)
+                    ->stateFor($this->booking->loadMissing('recording'), auth()->user())
+                : RecordingPlaybackState::Hidden,
+        ]);
+    }
+
+    private function loadRescheduleSlots(): void
+    {
+        $this->rescheduleSlotStartsAt = null;
+
+        if (! $this->booking || ! $this->rescheduleDate) {
+            $this->rescheduleSlots = [];
+
+            return;
+        }
+
+        $timezone = $this->booking->timezone;
+        $date = CarbonImmutable::parse($this->rescheduleDate, $timezone)->startOfDay();
+
+        $this->rescheduleSlots = $this->availability->slots(new AvailabilityQueryData(
+            instructorId: $this->booking->instructor_id,
+            typeKey: $this->booking->type->key,
+            from: $date,
+            to: $date->addDay(),
+            timezone: $timezone,
+        ))->map(fn ($slot): array => [
+            'starts_at' => $slot->startsAt->toIso8601String(),
+        ])->values()->all();
+    }
+}

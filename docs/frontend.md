@@ -344,12 +344,36 @@ comes from existing services — no new read paths were invented:
 | Dashboard | `DashboardOverview` | `StudentBookingServiceInterface` + `HomeworkServiceInterface` |
 | Upcoming Classes | `UpcomingClasses` | `StudentBookingServiceInterface::upcomingClasses()` |
 | Bookings | `BookingHistory` | `StudentBookingServiceInterface::bookingHistory()` (paginated, status filter) |
+| Booking detail | `BookingDetail` | `BookingRepositoryInterface::findWithTrashedOrFail()` + booking services (reschedule / cancel / pay) |
 | Payments | `PaymentHistory` | `StudentBookingServiceInterface::paymentHistory()` (paginated) |
 | Homework | `HomeworkList` | `HomeworkServiceInterface` (paginated + submit action) |
 | Attendance | `AttendanceHistory` | `StudentBookingServiceInterface::attendanceStats()/attendanceHistory()` |
 | Progress | `ProgressOverview` | `StudentBookingServiceInterface::progressStats()/subjectBreakdown()` |
 | Notifications | `NotificationsPanel` | `auth()->user()->notifications()` (same as the pre-existing controller) |
 | Profile / Settings | *(reused, not rebuilt)* | `resources/views/profile/show.blade.php` + `ProfileController` |
+
+#### Bookings list → booking detail page
+
+`BookingHistory` (`/dashboard/my-bookings`) only lists. Opening a row
+navigates to `/dashboard/my-bookings/{booking}`
+(`StudentBookingHistoryController::show`), a real page with a back
+button — the detail used to be a modal on the list. Everything that
+acts on one booking (join link, recording, reschedule, cancel, pay,
+wallet payment) lives in `BookingDetail` on that page.
+
+- List state (`status`, `per_page`, `page`) lives in the URL, is
+  carried on every row link, and is rebuilt from a validated whitelist
+  in `StudentBookingHistoryController::listState()` so the back button
+  returns to the same filter and page. Nothing else from the query
+  string is echoed back into the page.
+- Authorization is checked in the controller (`BookingPolicy::view()`)
+  and again when `BookingDetail` mounts, so no Livewire call can act on
+  a booking the viewer may not see.
+- The list renders soft-deleted bookings (`paginatedForUser` uses
+  `withTrashed`), so the detail page resolves them with
+  `findWithTrashedOrFail()` rather than leaving dead links.
+- The legacy deep link `/dashboard/my-bookings?booking={id}` redirects
+  to the booking's own page.
 
 ### Attendance & Progress are derived, not new tables
 

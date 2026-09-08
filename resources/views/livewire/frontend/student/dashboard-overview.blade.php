@@ -17,9 +17,9 @@
                     @elseif($lesson['meeting_status'] === 'Created' && !$lesson['join_window_open'])
                         <span class="rounded-xl border border-edge bg-surface-raised px-4 py-3 text-sm text-fg-muted">Join link available near lesson time</span>
                     @endif
-                    <a href="{{ route('dashboard.my-bookings') }}" class="rounded-xl border border-edge bg-surface-raised px-4 py-3 text-sm font-semibold text-fg-strong hover:bg-surface-hover">View Booking</a>
-                    @if($lesson['can_reschedule'])<a href="{{ route('dashboard.my-bookings') }}" class="inline-flex min-h-11 items-center rounded-xl px-3 py-3 text-sm font-semibold text-indigo-600 dark:text-indigo-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300">Reschedule</a>@endif
-                    @if($lesson['can_cancel'])<a href="{{ route('dashboard.my-bookings') }}" class="inline-flex min-h-11 items-center rounded-xl px-3 py-3 text-sm font-semibold text-rose-600 dark:text-rose-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-300">Cancel</a>@endif
+                    <a href="{{ route('dashboard.my-bookings.show', $lesson['id']) }}" class="rounded-xl border border-edge bg-surface-raised px-4 py-3 text-sm font-semibold text-fg-strong hover:bg-surface-hover">View Booking</a>
+                    @if($lesson['can_reschedule'])<a href="{{ route('dashboard.my-bookings.show', $lesson['id']) }}" class="inline-flex min-h-11 items-center rounded-xl px-3 py-3 text-sm font-semibold text-indigo-600 dark:text-indigo-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300">Reschedule</a>@endif
+                    @if($lesson['can_cancel'])<a href="{{ route('dashboard.my-bookings.show', $lesson['id']) }}" class="inline-flex min-h-11 items-center rounded-xl px-3 py-3 text-sm font-semibold text-rose-600 dark:text-rose-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-300">Cancel</a>@endif
                 </div>
             </div>
         </section>

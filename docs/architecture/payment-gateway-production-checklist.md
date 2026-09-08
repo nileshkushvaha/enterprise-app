@@ -10,7 +10,7 @@ gates.
 ## Current state (as of Phase 10.2E)
 
 - **The checkout UI's public Livewire state was audited for secret
-  exposure and one real gap was closed.** `BookingWizard`/`BookingHistory`
+  exposure and one real gap was closed.** `BookingWizard`/`BookingDetail`
   no longer assign Stripe's `checkoutPayload()` (which includes a
   live, usable `client_secret`) to the public `$paymentOrder` property
   — only `['provider' => 'stripe']` is kept while the Stripe frontend
@@ -44,7 +44,7 @@ gates.
   should list only `index`/`store`/`teachers`/`previous-teachers`/`slots`).
 - **Provider verification is mandatory before a booking can become
   `paid`.** The only remaining callers of `BookingPaymentService::markPaid()`
-  are: `BookingHistory`/`BookingWizard`'s `verifyPayment()` (calls
+  are: `BookingDetail`/`BookingWizard`'s `verifyPayment()` (calls
   `RazorpayPaymentProvider::verifyCheckout()` — real signature check —
   first, every time), `BookingPaymentWebhookController` (signature-verified
   webhook), and `simulateFakePayment()` (re-checks
@@ -113,7 +113,7 @@ gates.
   `booking_payments` row instead. Neither path ever confirms the
   booking, clears its reservation, or creates a meeting.
 - **Authenticated student checkout frontend is provider-neutral**
-  (Phase 10.2C): `BookingWizard`/`BookingHistory` now branch on the
+  (Phase 10.2C): `BookingWizard`/`BookingDetail` now branch on the
   resolved provider instead of always dispatching a Razorpay-shaped
   event. `BookingPaymentService::initiate()` also gained the terminal-
   booking guard `markPaid()` already had — a cancelled/expired booking
@@ -155,7 +155,7 @@ gates.
       check before the end-to-end test below.
 - [ ] Razorpay checkout script tested end-to-end with real sandbox
       credentials from a **student browser session** (`BookingWizard`
-      step 7 and `BookingHistory`'s retry-payment modal), not just the
+      step 7 and `BookingDetail`'s retry-payment section), not just the
       backend webhook — confirm `checkout.razorpay.com/v1/checkout.js`
       actually loads and the modal opens with the correct amount/
       currency, then confirm the browser's network tab shows no
@@ -236,7 +236,7 @@ gates.
       a student with no `country_id` on their profile sees "Please
       complete your profile (country) before paying for this booking."
       instead of a checkout modal, on both the wizard's confirmation
-      step and `BookingHistory`'s retry-payment modal.
+      step and `BookingDetail`'s retry-payment section.
 - [ ] Payment method visibility spot-checked in a real browser session,
       not just the test suite: a paid, correctly-priced booking type
       shows "Pay now" and the wallet "coming soon" note; a free/demo
@@ -356,7 +356,7 @@ gates.
       visually confirm on a staging/production-like deploy rather than
       relying on the code review alone.
 - [ ] Cancelled/expired-reservation bookings confirmed to hide the
-      "Pay Now" button in both `BookingWizard` and `BookingHistory` —
+      "Pay Now" button in both `BookingWizard` and `BookingDetail` —
       and confirm the backend also rejects a direct/replayed initiate
       attempt (`BookingPaymentService::initiate()`'s terminal-status
       guard, Phase 10.2C) rather than relying on the button being

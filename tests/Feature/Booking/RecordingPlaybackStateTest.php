@@ -9,7 +9,7 @@ use App\Booking\Enums\RecordingStatus;
 use App\Booking\Services\RecordingPlaybackAccessResolver;
 use App\Enums\StudentStatus;
 use App\Lessons\Enums\LessonOutcome;
-use App\Livewire\Frontend\Student\BookingHistory;
+use App\Livewire\Frontend\Student\BookingDetail;
 use App\Models\Booking;
 use App\Models\Lesson;
 use App\Models\Recording;
@@ -210,8 +210,7 @@ final class RecordingPlaybackStateTest extends TestCase
         $recording = $this->recordingFor($booking, RecordingStatus::Available);
 
         Livewire::actingAs($this->student)
-            ->test(BookingHistory::class)
-            ->call('viewBooking', $booking->id)
+            ->test(BookingDetail::class, ['bookingId' => $booking->id])
             ->assertSee('Recording available')
             ->assertSee(route('dashboard.recordings.watch', $recording), false);
     }
@@ -222,8 +221,7 @@ final class RecordingPlaybackStateTest extends TestCase
         $recording = $this->recordingFor($booking, RecordingStatus::Pending);
 
         Livewire::actingAs($this->student)
-            ->test(BookingHistory::class)
-            ->call('viewBooking', $booking->id)
+            ->test(BookingDetail::class, ['bookingId' => $booking->id])
             ->assertSee('Recording processing')
             ->assertDontSee(route('dashboard.recordings.watch', $recording), false);
     }
@@ -236,8 +234,7 @@ final class RecordingPlaybackStateTest extends TestCase
         $this->recordingFor($booking, RecordingStatus::Available);
 
         Livewire::actingAs($this->student)
-            ->test(BookingHistory::class)
-            ->call('viewBooking', $booking->id)
+            ->test(BookingDetail::class, ['bookingId' => $booking->id])
             ->assertDontSee('Recording available')
             ->assertDontSee('dashboard/recordings/');
     }

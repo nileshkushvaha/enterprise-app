@@ -11,7 +11,7 @@ use App\Booking\Enums\BookingPaymentRecordStatus;
 use App\Booking\Enums\BookingPaymentStatus;
 use App\Booking\Enums\BookingStatus;
 use App\Booking\Enums\Weekday;
-use App\Livewire\Frontend\Student\BookingHistory;
+use App\Livewire\Frontend\Student\BookingDetail;
 use App\Models\Booking;
 use App\Models\BookingPayment;
 use App\Models\BookingType;
@@ -284,8 +284,7 @@ class RazorpayCheckoutLivewireTest extends TestCase
         ));
 
         $component = Livewire::actingAs($student)
-            ->test(BookingHistory::class)
-            ->call('viewBooking', $booking->id)
+            ->test(BookingDetail::class, ['bookingId' => $booking->id])
             ->call('initiatePayment');
 
         $orderId = $component->get('paymentOrder')['order_id'];
@@ -310,8 +309,7 @@ class RazorpayCheckoutLivewireTest extends TestCase
         ));
 
         $component = Livewire::actingAs($student)
-            ->test(BookingHistory::class)
-            ->call('viewBooking', $booking->id)
+            ->test(BookingDetail::class, ['bookingId' => $booking->id])
             ->call('initiatePayment');
 
         $orderId = $component->get('paymentOrder')['order_id'];
@@ -348,11 +346,11 @@ class RazorpayCheckoutLivewireTest extends TestCase
             grade: 10,
         ));
 
-        // The intruder can never load the owner's booking into selectedBooking
-        // in the first place — viewBooking() authorizes 'view' before setting it.
-        Livewire::actingAs($intruder)
-            ->test(BookingHistory::class)
-            ->call('viewBooking', $booking->id)
+        // The intruder can never open the owner's booking in the first
+        // place — the detail page authorizes 'view' before it renders,
+        // so there is no state for any payment call to act on.
+        $this->actingAs($intruder)
+            ->get(route('dashboard.my-bookings.show', $booking))
             ->assertForbidden();
 
         $this->assertSame(BookingPaymentStatus::Pending, $booking->refresh()->payment_status);

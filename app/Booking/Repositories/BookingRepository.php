@@ -61,6 +61,11 @@ final class BookingRepository implements BookingRepositoryInterface
         return Booking::findOrFail($id);
     }
 
+    public function findWithTrashedOrFail(string $id): Booking
+    {
+        return Booking::withTrashed()->findOrFail($id);
+    }
+
     public function transitionStatus(Booking $booking, BookingStatus $status, array $attributes = []): Booking
     {
         $booking->fill(['status' => $status, ...$attributes]);
