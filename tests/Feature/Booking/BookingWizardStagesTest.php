@@ -164,21 +164,57 @@ class BookingWizardStagesTest extends TestCase
      * the page to bring the step card back into view on every move — forward
      * and back — and the blade listens for it.
      */
-    public function test_every_step_change_asks_the_page_to_bring_the_step_into_view(): void
+    public function test_changing_stage_brings_the_panel_into_view(): void
     {
         $component = $this->wizardFor($this->student())
             ->call('selectMode', 'paid_one_to_one')
             ->call('selectLevel', $this->academic['level']->id)
             ->call('selectAcademicSubject', $this->academic['subject']->id)
-            ->call('selectCurriculum', $this->academic['curriculum']->id)
-            ->assertDispatched('booking-step-changed');
+            ->call('selectCurriculum', $this->academic['curriculum']->id);
 
+        // A stage change replaces what is on screen, so the panel is
+        // brought into view.
         $component->call('continueStage')
             ->assertSet('step', 5)
             ->assertDispatched('booking-step-changed');
 
         $component->call('backStage')
             ->assertDispatched('booking-step-changed');
+    }
+
+    public function test_answering_within_a_stage_leaves_the_viewport_alone(): void
+    {
+        // The schedule step is one long panel. Scrolling it to the top
+        // every time the student picks a weekday or a time takes them
+        // away from the control they just used and the one they were
+        // reaching for next.
+        $slot = $this->slot();
+
+        $component = $this->wizardFor($this->student())
+            ->call('selectMode', 'paid_one_to_one')
+            ->call('selectLevel', $this->academic['level']->id)
+            ->call('selectAcademicSubject', $this->academic['subject']->id)
+            // Answering a question inside the learning stage reveals the
+            // next one directly below it — already in view.
+            ->assertNotDispatched('booking-step-changed')
+            ->call('selectCurriculum', $this->academic['curriculum']->id)
+            ->call('continueStage')
+            ->call('selectBillingMode', 'recurring')
+            ->assertNotDispatched('booking-step-changed')
+            ->call('toggleWeekday', (int) $slot->dayOfWeek)
+            ->assertNotDispatched('booking-step-changed');
+
+        for ($month = CarbonImmutable::now('UTC')->startOfMonth(); $month->lt($slot->startOfMonth()); $month = $month->addMonthNoOverflow()) {
+            $component->call('nextMonth');
+        }
+
+        $component
+            ->call('selectDate', $slot->toDateString())
+            ->assertNotDispatched('booking-step-changed')
+            ->call('selectSlot', $slot->toIso8601String())
+            ->assertNotDispatched('booking-step-changed')
+            ->call('setEndCondition', 'on_date')
+            ->assertNotDispatched('booking-step-changed');
     }
 
     public function test_free_demo_continues_straight_to_the_calendar(): void
@@ -360,6 +396,9 @@ class BookingWizardStagesTest extends TestCase
 
         $component->call('submit')
             ->assertSet('banner', 'That time is no longer available. Please choose another time.')
+            // The one case inside a stage that MUST scroll: the message
+            // explaining why their time vanished is at the top of the panel.
+            ->assertDispatched('booking-step-changed')
             ->assertSet('selectedSlotStartsAt', null)
             ->assertSet('curriculumId', $this->academic['curriculum']->id)
             ->assertSet('date', $slot->toDateString())
@@ -722,6 +761,78 @@ class BookingWizardStagesTest extends TestCase
             // 10:00 slot is still the chosen one.
             ->call('toggleWeekday', (int) $slot->addDays(2)->dayOfWeek)
             ->assertSet('selectedSlotStartsAt', $slot->toIso8601String());
+    }
+
+    public function test_choosing_until_a_date_before_entering_one_does_not_crash(): void
+    {
+        // A student who picks "Until a date" has not typed a date yet.
+        // The schedule is simply not describable until they do, and the
+        // form must say so rather than trying to build a rule that
+        // cannot exist.
+        $slot = $this->slot();
+
+        $component = $this->wizardFor($this->student())
+            ->call('selectMode', 'paid_one_to_one')
+            ->call('selectLevel', $this->academic['level']->id)
+            ->call('selectAcademicSubject', $this->academic['subject']->id)
+            ->call('selectCurriculum', $this->academic['curriculum']->id)
+            ->call('continueStage')
+            ->call('selectBillingMode', 'recurring')
+            ->call('toggleWeekday', (int) $slot->dayOfWeek);
+
+        for ($month = CarbonImmutable::now('UTC')->startOfMonth(); $month->lt($slot->startOfMonth()); $month = $month->addMonthNoOverflow()) {
+            $component->call('nextMonth');
+        }
+
+        $component
+            ->call('selectDate', $slot->toDateString())
+            ->call('selectSlot', $slot->toIso8601String())
+            // The order that broke: a time is already chosen, so the
+            // preview rebuilds the moment the end condition changes.
+            ->call('setEndCondition', 'on_date')
+            ->assertOk()
+            ->assertSet('schedulePreview', [])
+            ->assertSee('Choose the last date');
+
+        // And the step cannot be left in that state.
+        $step = $component->get('step');
+        $component->call('continueStage')->assertSet('step', $step);
+
+        // Entering a date resolves it, with nothing else lost.
+        $component
+            ->call('setEndDate', $slot->addWeeks(3)->toDateString())
+            ->assertOk()
+            ->assertSet('selectedSlotStartsAt', $slot->toIso8601String())
+            ->assertSet('previewMeta.total', 4);
+    }
+
+    public function test_clearing_the_end_date_again_does_not_crash(): void
+    {
+        $slot = $this->slot();
+
+        $component = $this->wizardFor($this->student())
+            ->call('selectMode', 'paid_one_to_one')
+            ->call('selectLevel', $this->academic['level']->id)
+            ->call('selectAcademicSubject', $this->academic['subject']->id)
+            ->call('selectCurriculum', $this->academic['curriculum']->id)
+            ->call('continueStage')
+            ->call('selectBillingMode', 'recurring')
+            ->call('toggleWeekday', (int) $slot->dayOfWeek);
+
+        for ($month = CarbonImmutable::now('UTC')->startOfMonth(); $month->lt($slot->startOfMonth()); $month = $month->addMonthNoOverflow()) {
+            $component->call('nextMonth');
+        }
+
+        $component
+            ->call('selectDate', $slot->toDateString())
+            ->call('selectSlot', $slot->toIso8601String())
+            ->call('setEndCondition', 'on_date')
+            ->call('setEndDate', $slot->addWeeks(3)->toDateString())
+            ->assertSet('previewMeta.total', 4)
+            // Emptying the field is an ordinary thing to do while editing.
+            ->call('setEndDate', '')
+            ->assertOk()
+            ->assertSet('schedulePreview', []);
     }
 
     public function test_package_funding_is_chosen_on_the_review_stage(): void

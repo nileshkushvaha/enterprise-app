@@ -35,6 +35,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
+use InvalidArgumentException;
 use Livewire\Attributes\Locked;
 use Livewire\Component;
 
@@ -916,6 +917,17 @@ final class BookingWizard extends Component
             return;
         }
 
+        // "Until a date" with no date yet is not an error — it is an
+        // unfinished choice, and there is no schedule to describe until
+        // it is finished. Asking for one anyway builds a rule that
+        // cannot exist (RecurrenceRuleData refuses it, rightly) and the
+        // student gets a crash for typing nothing.
+        if (! $this->endConditionIsComplete()) {
+            $this->previewMeta = ['awaiting' => $this->endConditionPrompt()];
+
+            return;
+        }
+
         try {
             $preview = $this->wizard->previewSeries(
                 $this->submissionPayload(),
@@ -930,6 +942,13 @@ final class BookingWizard extends Component
             $this->previewMeta = ['error' => $exception instanceof BookingException
                 ? $exception->getMessage()
                 : 'We could not check these dates just now. Please try again.'];
+
+            return;
+        } catch (InvalidArgumentException) {
+            // The guard above should have caught every incomplete
+            // combination. If a new one ever appears, the student sees a
+            // prompt rather than an error page.
+            $this->previewMeta = ['awaiting' => 'Finish setting how long this schedule runs for.'];
 
             return;
         }
@@ -1105,6 +1124,7 @@ final class BookingWizard extends Component
         if ($this->recurring && ($this->previewMeta['conflicts'] ?? 0) > 0) {
             $this->banner = 'Some dates in your schedule need attention before you can confirm. Move or remove them below, or change the repeat pattern.';
             $this->goToPhase('review');
+            $this->announcePanel();
 
             return;
         }
@@ -1133,6 +1153,7 @@ final class BookingWizard extends Component
             $this->returnToTimeSelection();
         } catch (BookingException $exception) {
             $this->banner = $exception->getMessage();
+            $this->announcePanel();
         }
     }
 
@@ -1237,6 +1258,10 @@ final class BookingWizard extends Component
         $this->loadSlots();
         $this->goToPhase('time');
         $this->banner = self::SLOT_TAKEN_MESSAGE;
+
+        // Stays inside the schedule stage, so nothing would have scrolled
+        // — but the student needs to see why their time vanished.
+        $this->announcePanel();
     }
 
     public function initiatePayment(): void
@@ -2032,11 +2057,40 @@ final class BookingWizard extends Component
      * with the new step above the fold. The blade listens and brings the
      * step card into view.
      */
+    /**
+     * Moves to a phase, and scrolls the panel into view ONLY when that
+     * changes the stage.
+     *
+     * A stage change replaces what is on screen, so bringing the panel
+     * into view is a courtesy. Moving between phases INSIDE a stage does
+     * not: the schedule step is one long panel — days, calendar, times,
+     * how long, then the schedule itself — and every pick within it used
+     * to yank the student back to the top of the card, away from the
+     * control they had just used and the one they were reaching for
+     * next. The same is true of the learning step, where answering a
+     * question reveals the next one directly below it, already in view.
+     *
+     * Where a message at the top of the panel genuinely needs reading,
+     * the caller asks for the scroll explicitly (announcePanel()).
+     */
     private function goToPhase(string $phase): void
     {
+        $previousStage = $this->stageOf($this->currentPhase());
+
         $index = array_search($phase, $this->phases(), true);
         $this->step = $index === false ? 1 : $index + 1;
 
+        if ($this->stageOf($phase) !== $previousStage) {
+            $this->announcePanel();
+        }
+    }
+
+    /**
+     * Brings the panel into view because something at the top of it —
+     * an error, a changed situation — has to be read.
+     */
+    private function announcePanel(): void
+    {
         $this->dispatch('booking-step-changed');
     }
 
@@ -2421,7 +2475,34 @@ final class BookingWizard extends Component
             return false;
         }
 
+        if (! $this->endConditionIsComplete()) {
+            return false;
+        }
+
         return $this->weekdays !== [] && (int) ($this->previewMeta['conflicts'] ?? 0) === 0;
+    }
+
+    /**
+     * Whether the chosen end condition has the value it needs.
+     *
+     * Kept separate from "is the schedule valid": an end condition
+     * mid-edit is normal, not a validation failure, and must not be
+     * reported as one.
+     */
+    private function endConditionIsComplete(): bool
+    {
+        return match ($this->endCondition) {
+            'on_date' => filled($this->endDate),
+            'after_count' => $this->occurrences >= 1,
+            default => true,
+        };
+    }
+
+    private function endConditionPrompt(): string
+    {
+        return $this->endCondition === 'on_date'
+            ? 'Choose the last date for your classes to see your schedule.'
+            : 'Choose how many classes to see your schedule.';
     }
 
     /** Why the schedule step is not finished yet, in the student's words. */
@@ -2433,6 +2514,12 @@ final class BookingWizard extends Component
 
         if ($this->selectedSlotStartsAt === null) {
             return $this->recurring ? 'Pick a start date and a class time' : 'Pick a date and time to continue';
+        }
+
+        if ($this->recurring && ! $this->endConditionIsComplete()) {
+            return $this->endCondition === 'on_date'
+                ? 'Choose the last date for your classes'
+                : 'Choose how many classes';
         }
 
         if ($this->recurring && ($this->previewMeta['blocked'] ?? false) === true) {

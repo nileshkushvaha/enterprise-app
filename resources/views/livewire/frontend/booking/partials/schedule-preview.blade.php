@@ -117,7 +117,13 @@
     </div>
 
     <div wire:loading.remove wire:target="loadSchedulePreview,skipOccurrence,restoreOccurrence,moveOccurrenceTo,startMovingOccurrence,previewNextPage,previewPreviousPage,setFrequency,toggleWeekday,setRepeatInterval,setEndCondition,setOccurrences,setEndDate">
-        @if($meta['blocked'] ?? false)
+        @if($meta['awaiting'] ?? false)
+            {{-- An unfinished choice, not an error: nothing is wrong yet,
+                 there is simply nothing to show until it is finished. --}}
+            <div class="mt-4 rounded-2xl border border-dashed border-edge-strong px-4 py-5 text-center" role="status">
+                <p class="text-sm font-semibold text-fg-strong">{{ $meta['awaiting'] }}</p>
+            </div>
+        @elseif($meta['blocked'] ?? false)
             {{--
                 The schedule is longer than this deployment can currently
                 promise. Said plainly, with the way out — never by
