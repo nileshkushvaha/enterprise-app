@@ -169,6 +169,43 @@ Required on every deploy, in order:
    time; hourly, idempotent) and the existing prune jobs.
 6. `npm run build` — the booking wizard ships compiled Tailwind.
 
+### Deployment verification checklist — before enabling ongoing/long schedules
+
+`recurring_future_generation_enabled` must stay **false** until every
+step below has been performed **on the target environment** and the
+evidence recorded. A passing test suite is not evidence: it proves the
+code is correct, not that this machine runs the cron, supervises the
+worker, or delivers mail.
+
+Local checks — necessary, and NOT sufficient:
+
+```bash
+php artisan schedule:list | grep booking:generate-series   # registered
+php artisan booking:generate-series --sync                 # command runs
+php artisan test --env=testing tests/Feature/Booking/RecurringScheduleReleaseSafeguardsTest.php
+```
+
+Deployment evidence — each needs an artefact, not an assumption:
+
+| # | Check | Evidence to keep |
+|---|---|---|
+| 1 | The system cron invokes the scheduler | `crontab -l` shows `* * * * * … schedule:run`; `storage/logs/booking-series-generation.log` gains entries on the hour **without anyone running the command** |
+| 2 | The task fires on schedule | Two consecutive hourly entries in that log, timestamps ~60 min apart |
+| 3 | Scheduler Monitor sees it | `booking:generate-series` listed with a recent successful run (`/admin` → Scheduler Monitor, `scheduler_histories`) |
+| 4 | Queue worker is running and supervised | `php artisan queue:monitor notifications`; kill the worker and confirm the supervisor restarts it |
+| 5 | **Future classes are actually generated** | Create a test schedule longer than the horizon; wait for at least one hourly run; confirm new `bookings` rows appear for it with no manual command. Query: `select count(*) from bookings where booking_series_id = ?` before and after |
+| 6 | Generation is failing loudly, not quietly | `select id, generation_failures, last_generated_at from booking_series where status = 'active'` — `last_generated_at` must be recent for every active series |
+| 7 | **Notification delivery works end to end** | Put the test instructor on leave for a future date of that schedule, wait for the sweep, and confirm the student receives the message on a real channel (inbox, not just `notifications` table). Then confirm `booking_series_exceptions.notified_at` is set and a second sweep sends nothing |
+| 8 | Recovery works | Lift the leave, use **Try again** on that date, and confirm a booking is created and the exception row is gone |
+
+Only after 1–8: set `recurring_future_generation_enabled = true` (Spatie
+settings, `booking` group). Do **not** enable it on the strength of
+local success, and do not enable it in one environment because another
+passed.
+
+To roll back, set it to `false`. Existing schedules keep generating —
+the flag gates CREATION of new ones, not the sweep.
+
 Settings checklist (Spatie `booking` group): `payment_provider`
 (**`fake` moves no money** — implement a real
 `PaymentProviderInterface` before enabling paid types publicly),
@@ -176,7 +213,9 @@ Settings checklist (Spatie `booking` group): `payment_provider`
 `turnstile_site_key`/`turnstile_secret_key`,
 `max_daily_bookings_per_teacher`, `minimum_booking_notice_minutes`,
 `maximum_advance_booking_days`, `recurring_confirmation_horizon_days`,
-`recurring_generation_batch_size`, notification channel toggles.
+`recurring_generation_batch_size`,
+`recurring_future_generation_enabled` (**starts false** — see the
+verification checklist above), notification channel toggles.
 
 ## Subject normalization
 
@@ -277,6 +316,77 @@ a series can never reserve further ahead than any other booking may.
 series; the job fills one bounded batch
 (`recurring_generation_batch_size`, default 25) and re-dispatches itself
 while the horizon still has room.
+
+### Release gate: `recurring_future_generation_enabled`
+
+A schedule that reaches past the confirmation horizon — an ongoing one,
+**or a long finite one** — is only a real promise if the background pass
+that fills it in is actually running on that deployment. Tested
+generation code does not establish that: the cron may not be installed,
+the worker may not be supervised.
+
+`BookingSettings::$recurring_future_generation_enabled` starts **false**
+and is enforced server-side in `BookingSeriesService::create()` — the
+one chokepoint the wizard, the JSON API and any future caller all funnel
+through, so it cannot be bypassed by using a different entry point.
+`BookingWizard::setEndCondition()` refuses "never" independently, so
+hiding the option is not the protection.
+
+It is **not a class-count cap**:
+
+- With it **on**, there is no limit of any kind.
+- With it **off**, a schedule needing future generation is REFUSED with
+  an explanation naming the last date currently bookable and pointing at
+  "extend later". It is never silently shortened — booking the part that
+  fits and dropping the rest is the exact failure the horizon exists to
+  prevent.
+- Schedules that fit inside the horizon are unaffected either way.
+
+`requiresFutureGeneration()` answers ongoing and long-finite together
+rather than special-casing "until I cancel", so a 40-week finite
+schedule is gated for the same reason and with the same message shape.
+
+Turn it on only after walking the deployment checklist below on the
+target environment.
+
+### Telling the student when a future class is lost
+
+Interactively, conflicts are resolved before confirmation. The case a
+student cannot see is a date that was fine when they booked and has
+since stopped being — the instructor took leave, the slot went.
+
+`BookingSeriesService` dispatches `BookingSeriesOccurrenceUnavailable`,
+and `SendBookingNotifications::handleSeriesOccurrenceUnavailable()`
+sends `BookingSeriesOccurrenceUnavailableNotification` — the ordinary
+participant pipeline, per the repository rule that notifications never
+originate from services directly. Student only: the instructor has
+nothing to act on, since it failed because their own calendar was busy.
+
+The message carries the date and time in the **recipient's** timezone
+(`FormatsRecipientLocalTime`, not the series' instructor-anchored
+clock), the reason, what it costs (a counted schedule reaches one date
+further; a date-bounded one loses a class), and a link to the
+repeating-schedule panel.
+
+Two independent guards stop duplicates:
+
+| Guard | Covers |
+|---|---|
+| `booking_series_exceptions.notified_at` | a later generation pass, a restarted worker, the next hour's sweep. The row is written with `updateOrCreate`, so its existence cannot mean "already reported" — the stamp is claimed **before** dispatch, so a crash between the two leaves a silent date rather than a repeated message |
+| `NotificationIdempotencyGuard`, keyed `series:date:recipient` | the queue's at-least-once delivery redelivering the same event |
+
+A failed **student-initiated** retry re-stamps `notified_at` instead of
+notifying: they triggered it and are reading the answer on screen.
+
+### Recovering a lost class
+
+A conflict exception is otherwise permanent, and the sweep will not
+revisit the date — it sits behind `generated_through_date`, which is
+what makes the watermark cheap. `BookingSeriesService::retryOccurrence()`
+addresses that one date directly (student action: **Try again** in the
+schedule panel). On failure the exception is recorded again with a fresh
+reason, so the date stays visible and can be tried later rather than
+being lost.
 
 ### Idempotence
 

@@ -48,6 +48,7 @@ class BookingSeriesException extends Model
         'local_time',
         'action',
         'reason',
+        'notified_at',
         'created_by',
     ];
 
@@ -55,6 +56,7 @@ class BookingSeriesException extends Model
     {
         return [
             'local_date' => 'immutable_date',
+            'notified_at' => 'immutable_datetime',
         ];
     }
 

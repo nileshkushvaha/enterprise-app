@@ -22,6 +22,7 @@ use App\Booking\Enums\BookingStatus;
 use App\Booking\Enums\RecurrenceEndCondition;
 use App\Booking\Enums\SeriesChangeScope;
 use App\Booking\Enums\SeriesOccurrenceStatus;
+use App\Booking\Events\BookingSeriesOccurrenceUnavailable;
 use App\Booking\Exceptions\BookingException;
 use App\Models\Booking;
 use App\Models\BookingSeries;
@@ -100,6 +101,78 @@ final class BookingSeriesService
      * platform's outer limit for every flow — a recurring schedule
      * must not become a back door past it.
      */
+    /**
+     * Whether this deployment may accept schedules that reach past the
+     * confirmation horizon.
+     *
+     * Server-side and checked at creation, not merely reflected in the
+     * UI: such a schedule is a promise, and the promise is only good if
+     * the background pass is actually running here. See
+     * BookingSettings::$recurring_future_generation_enabled.
+     */
+    public function futureGenerationEnabled(): bool
+    {
+        return $this->settings->recurring_future_generation_enabled;
+    }
+
+    /**
+     * Does this rule owe classes that cannot be reserved right now?
+     *
+     * True for an ongoing schedule (which by definition never finishes)
+     * and for any finite one whose last class falls beyond the horizon.
+     * The two are the same problem — classes promised but not held — so
+     * they are answered together rather than by special-casing "until I
+     * cancel".
+     *
+     * @param  list<string>  $skippedDates
+     * @param  array<string, string>  $timeOverrides
+     */
+    public function requiresFutureGeneration(RecurrenceRuleData $rule, array $skippedDates = [], array $timeOverrides = []): bool
+    {
+        if (! $rule->endCondition->isFinite()) {
+            return true;
+        }
+
+        $last = $this->scheduler->lastLocalDate($rule, $skippedDates);
+
+        // No knowable last date (a count so large it has no meaningful
+        // end) counts as needing future generation — the honest answer
+        // when we cannot say otherwise.
+        return $last === null || $last > $this->horizonDate($rule);
+    }
+
+    /**
+     * Refuses a schedule this deployment cannot yet honour.
+     *
+     * Deliberately a refusal, not a trim. Booking the part that fits and
+     * dropping the rest would hand the student a shorter schedule than
+     * the one they asked for with nothing to tell them so — exactly the
+     * silent truncation the horizon exists to prevent. It is also not a
+     * class cap: with the flag on there is no limit at all.
+     *
+     * @param  list<string>  $skippedDates
+     * @param  array<string, string>  $timeOverrides
+     *
+     * @throws BookingException
+     */
+    public function assertConfirmable(RecurrenceRuleData $rule, array $skippedDates = [], array $timeOverrides = []): void
+    {
+        if ($this->futureGenerationEnabled()) {
+            return;
+        }
+
+        if (! $this->requiresFutureGeneration($rule, $skippedDates, $timeOverrides)) {
+            return;
+        }
+
+        throw new BookingException(sprintf(
+            $rule->endCondition->isFinite()
+                ? 'This schedule runs further ahead than we can confirm at the moment — we can currently book classes up to %s. Please choose an end date on or before then, or fewer classes; you can extend the schedule later.'
+                : 'Open-ended schedules are not available just yet. Please choose a number of classes, or an end date on or before %s — you can extend the schedule later.',
+            CarbonImmutable::parse($this->horizonDate($rule))->format('j F Y'),
+        ));
+    }
+
     public function horizonDays(): int
     {
         return max(1, min(
@@ -220,6 +293,8 @@ final class BookingSeriesService
             hasMore: $hasMore,
             instructorId: $instructorId,
             timezone: $rule->timezone,
+            requiresFutureGeneration: $this->requiresFutureGeneration($rule, $skippedDates, $timeOverrides),
+            futureGenerationAvailable: $this->futureGenerationEnabled(),
         );
     }
 
@@ -420,6 +495,12 @@ final class BookingSeriesService
     {
         $type = $this->types->requireActiveByKey($data->typeKey);
 
+        // Before anything is persisted: refuse a schedule this
+        // deployment cannot keep. Checked here rather than in each
+        // caller so the wizard, the JSON API and any future caller are
+        // all covered by the same rule.
+        $this->assertConfirmable($data->rule, $data->skippedDates, $data->timeOverrides);
+
         $series = BookingSeries::create([
             'booking_type_id' => $type->id,
             'student_id' => $data->studentId,
@@ -616,6 +697,7 @@ final class BookingSeriesService
                 $occurrence->localDate,
                 BookingSeriesException::ACTION_CONFLICT,
                 $evaluated->reason,
+                $occurrence->startsAt,
             );
 
             return $evaluated->reason ?? $evaluated->status->label();
@@ -640,6 +722,7 @@ final class BookingSeriesService
                 $occurrence->localDate,
                 BookingSeriesException::ACTION_CONFLICT,
                 $exception->getMessage(),
+                $occurrence->startsAt,
             );
 
             return $exception->getMessage();
@@ -680,21 +763,41 @@ final class BookingSeriesService
             || (int) ($exception->errorInfo[1] ?? 0) === 1062;
     }
 
-    private function recordException(BookingSeries $series, string $localDate, string $action, ?string $reason): void
+    private function recordException(BookingSeries $series, string $localDate, string $action, ?string $reason, ?CarbonImmutable $startsAt = null): void
     {
-        BookingSeriesException::query()->updateOrCreate(
+        $exception = BookingSeriesException::query()->updateOrCreate(
             ['booking_series_id' => $series->id, 'local_date' => $localDate],
             ['action' => $action, 'reason' => $reason],
         );
 
-        if ($action === BookingSeriesException::ACTION_CONFLICT) {
-            // Ids and a date only — never the student's or instructor's
-            // identity, the notes, or anything about payment.
-            Log::info('Recurring class occurrence could not be scheduled.', [
-                'booking_series_id' => $series->id,
-                'local_date' => $localDate,
-            ]);
+        if ($action !== BookingSeriesException::ACTION_CONFLICT) {
+            return;
         }
+
+        // Ids and a date only — never the student's or instructor's
+        // identity, the notes, or anything about payment.
+        Log::info('Recurring class occurrence could not be scheduled.', [
+            'booking_series_id' => $series->id,
+            'local_date' => $localDate,
+        ]);
+
+        // Tell the student ONCE, ever, for this date.
+        //
+        // The row is written with updateOrCreate, so "it exists" cannot
+        // mean "already reported" — a repeated or retried pass touches it
+        // again quite legitimately. The stamp is the durable claim, and
+        // it is taken BEFORE dispatching so a crash between the two
+        // leaves a silent date rather than a repeated message. Silence is
+        // the safer failure: the date is still visible in the schedule,
+        // and the alternative wakes a student at 3am for the same lost
+        // class every hour.
+        if ($exception->notified_at !== null) {
+            return;
+        }
+
+        $exception->forceFill(['notified_at' => now()])->save();
+
+        BookingSeriesOccurrenceUnavailable::dispatch($series, $localDate, $startsAt, $reason);
     }
 
     // ── Management ──────────────────────────────────────────────────────
@@ -763,6 +866,83 @@ final class BookingSeriesService
                 reason: 'Moved within the repeating schedule.',
             ));
         }
+    }
+
+    /**
+     * Tries a date that previously could not be booked, now that
+     * whatever blocked it may be gone.
+     *
+     * A conflict exception is otherwise permanent, and permanently
+     * excluding a date the instructor has since freed up would be the
+     * schedule quietly losing a class for good. The ordinary sweep
+     * cannot do this on its own: the date sits behind
+     * `generated_through_date`, so it is never revisited — which is
+     * exactly what makes the watermark cheap. So this addresses the one
+     * date directly.
+     *
+     * Returns the booking when it worked. On failure the exception is
+     * left in place (with a fresh reason) and null comes back, so the
+     * student can try again later without the date vanishing.
+     *
+     * @throws BookingException
+     */
+    public function retryOccurrence(BookingSeries $series, string $localDate): ?Booking
+    {
+        $this->assertSeriesActive($series);
+
+        $exception = $series->exceptions()
+            ->where('local_date', $localDate)
+            ->where('action', BookingSeriesException::ACTION_CONFLICT)
+            ->first();
+
+        if ($exception === null) {
+            throw new BookingException('That date is not waiting to be rebooked.');
+        }
+
+        $type = $this->types->requireActiveByKey($series->type->key);
+
+        // Rebuild the occurrence from the rule WITHOUT the exception in
+        // the skip list, so the date exists again for this one attempt.
+        $skipped = array_values(array_diff($series->skippedDates(), [$localDate]));
+
+        $occurrence = collect($this->scheduler->occurrences(
+            $series->rule(),
+            1,
+            CarbonImmutable::parse($localDate, $series->timezone)->subDay()->toDateString(),
+            $skipped,
+            $series->timeOverrides(),
+        ))->first();
+
+        if ($occurrence === null || $occurrence->localDate !== $localDate) {
+            throw new BookingException('That date is no longer part of this schedule.');
+        }
+
+        // Clearing it first is what lets the ordinary path run unchanged;
+        // a failure below records it again, so the date is never lost.
+        $exception->delete();
+
+        $result = $this->generateOccurrence(
+            $series,
+            (int) $type->duration_minutes,
+            (int) $type->buffer_minutes,
+            $occurrence,
+            ! $type->is_paid,
+        );
+
+        if ($result instanceof Booking) {
+            return $result;
+        }
+
+        // The retry failed and recorded the conflict again. The student
+        // asked for this and is looking at the answer right now, so
+        // suppress the notification — being emailed about a failure you
+        // just triggered yourself is noise, not news.
+        $series->exceptions()
+            ->where('local_date', $localDate)
+            ->whereNull('notified_at')
+            ->update(['notified_at' => now()]);
+
+        return null;
     }
 
     /**
@@ -937,6 +1117,12 @@ final class BookingSeriesService
             $occurrences[] = $this->plannedOccurrence($occurrence, $duration);
         }
 
+        // Dates that are no longer part of the rule still have to be
+        // VISIBLE here: a removed date the student may want back, and —
+        // more importantly — a date the platform could not book, which
+        // they can ask us to try again.
+        $occurrences = $this->withDeviationsShown($series, $occurrences, $duration);
+
         $total = $this->scheduler->totalOccurrences($rule, $skipped);
 
         return new SeriesSchedulePreviewData(
@@ -951,6 +1137,59 @@ final class BookingSeriesService
             instructorId: (int) $series->instructor_id,
             timezone: $series->timezone,
         );
+    }
+
+    /**
+     * Merges the series' own exception rows back into a rendered
+     * schedule, bounded to the span the page already covers.
+     *
+     * @param  list<SeriesOccurrenceData>  $occurrences
+     * @return list<SeriesOccurrenceData>
+     */
+    private function withDeviationsShown(BookingSeries $series, array $occurrences, int $durationMinutes): array
+    {
+        if ($occurrences === []) {
+            return $occurrences;
+        }
+
+        $first = $occurrences[0]->localDate;
+        $last = $occurrences[count($occurrences) - 1]->localDate;
+
+        $rows = $series->exceptions()
+            ->whereIn('action', BookingSeriesException::REMOVING_ACTIONS)
+            ->get();
+
+        foreach ($rows as $row) {
+            $localDate = $row->local_date->toDateString();
+
+            if ($localDate < $first || $localDate > $last) {
+                continue;
+            }
+
+            $localDateTime = $localDate.' '.$series->rule()->timeOfDay;
+            $startsAt = LocalWallClock::classify($localDateTime, $series->timezone) === LocalWallClock::VALID
+                ? CarbonImmutable::parse($localDateTime, $series->timezone)->utc()
+                : null;
+
+            $occurrences[] = new SeriesOccurrenceData(
+                sequence: 0,
+                localDate: $localDate,
+                localDateTime: $localDateTime,
+                startsAt: $startsAt,
+                endsAt: $startsAt?->addMinutes($durationMinutes),
+                status: $row->action === BookingSeriesException::ACTION_CONFLICT
+                    ? SeriesOccurrenceStatus::InstructorUnavailable
+                    : SeriesOccurrenceStatus::Skipped,
+                reason: $row->reason,
+            );
+        }
+
+        usort(
+            $occurrences,
+            static fn (SeriesOccurrenceData $a, SeriesOccurrenceData $b): int => $a->localDate <=> $b->localDate,
+        );
+
+        return array_values($occurrences);
     }
 
     /** @throws BookingException */

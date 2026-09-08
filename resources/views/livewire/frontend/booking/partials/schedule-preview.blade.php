@@ -117,7 +117,19 @@
     </div>
 
     <div wire:loading.remove wire:target="loadSchedulePreview,skipOccurrence,restoreOccurrence,moveOccurrenceTo,startMovingOccurrence,previewNextPage,previewPreviousPage,setFrequency,toggleWeekday,setRepeatInterval,setEndCondition,setOccurrences,setEndDate">
-        @if($previewError)
+        @if($meta['blocked'] ?? false)
+            {{--
+                The schedule is longer than this deployment can currently
+                promise. Said plainly, with the way out — never by
+                booking the part that fits and dropping the rest.
+            --}}
+            <div class="mt-4 rounded-2xl border border-amber-400/50 bg-amber-500/10 px-4 py-3" role="alert">
+                <p class="text-sm font-black text-amber-900 dark:text-amber-200">This schedule runs further ahead than we can confirm right now</p>
+                <p class="mt-1 text-sm leading-6 text-amber-900/90 dark:text-amber-100/90">
+                    We can currently book classes up to about {{ $meta['horizon_days'] ?? 60 }} days ahead. Choose fewer classes or an earlier end date to continue — you can extend the schedule later from My Bookings, and nothing you have entered will be lost.
+                </p>
+            </div>
+        @elseif($previewError)
             <div class="mt-4 rounded-2xl border border-amber-400/50 bg-amber-500/10 px-4 py-3" role="alert">
                 <p class="text-sm font-semibold text-amber-900 dark:text-amber-200">{{ $previewError }}</p>
                 <button type="button" wire:click="loadSchedulePreview" class="mt-2 min-h-11 rounded-xl px-1 text-sm font-bold text-indigo-600 underline hover:text-indigo-700 focus:outline-none focus-visible:ring-4 focus-visible:ring-indigo-300/50 dark:text-indigo-300">

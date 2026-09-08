@@ -17,6 +17,7 @@ use App\Booking\Exceptions\InvalidPaymentWebhookException;
 use App\Booking\Exceptions\NoEligibleTeacherException;
 use App\Booking\Exceptions\SlotUnavailableException;
 use App\Booking\Payments\RazorpayPaymentProvider;
+use App\Booking\Services\BookingSeriesService;
 use App\Booking\Services\BookingWizardService;
 use App\Booking\Support\FakePaymentSimulator;
 use App\Curriculum\DTOs\AcademicContextData;
@@ -739,6 +740,14 @@ final class BookingWizard extends Component
             return;
         }
 
+        // Refused server-side as well as hidden: an option that is not
+        // offered must not be reachable by a crafted Livewire update.
+        if ($condition === 'never' && ! app(BookingSeriesService::class)->futureGenerationEnabled()) {
+            $this->banner = 'Open-ended schedules are not available just yet. Choose a number of classes or an end date instead.';
+
+            return;
+        }
+
         $this->endCondition = $condition;
 
         if ($condition !== 'on_date') {
@@ -935,6 +944,10 @@ final class BookingWizard extends Component
 
         $this->previewMeta = [
             'total' => $preview->totalScheduled,
+            // The release gate: this schedule owes classes we cannot
+            // reserve yet, and this deployment cannot yet promise them.
+            'blocked' => $preview->isBlockedByFutureGeneration(),
+            'requires_future_generation' => $preview->requiresFutureGeneration,
             'ongoing' => $preview->totalScheduled === null,
             'conflicts' => $preview->conflictCount,
             'bookable_now' => $preview->bookableNowCount,
@@ -1522,6 +1535,10 @@ final class BookingWizard extends Component
             'cadenceLabel' => $this->recurring && $this->weekdays !== [] ? $this->cadenceLabel() : null,
             'scheduleComplete' => $this->scheduleComplete(),
             'scheduleHint' => $this->scheduleHint(),
+            // Server-resolved, not a Blade guess: the same flag the
+            // service enforces at creation decides whether the option is
+            // offered at all.
+            'ongoingAvailable' => app(BookingSeriesService::class)->futureGenerationEnabled(),
             'billingModeChosen' => $this->recurring || $this->phaseIndex($currentPhase) > $this->phaseIndex('billing_mode'),
             'learningComplete' => $this->learningComplete(),
             'policy' => [
@@ -2400,6 +2417,10 @@ final class BookingWizard extends Component
             return true;
         }
 
+        if (($this->previewMeta['blocked'] ?? false) === true) {
+            return false;
+        }
+
         return $this->weekdays !== [] && (int) ($this->previewMeta['conflicts'] ?? 0) === 0;
     }
 
@@ -2412,6 +2433,10 @@ final class BookingWizard extends Component
 
         if ($this->selectedSlotStartsAt === null) {
             return $this->recurring ? 'Pick a start date and a class time' : 'Pick a date and time to continue';
+        }
+
+        if ($this->recurring && ($this->previewMeta['blocked'] ?? false) === true) {
+            return 'Shorten the schedule to continue';
         }
 
         if ($this->recurring && (int) ($this->previewMeta['conflicts'] ?? 0) > 0) {

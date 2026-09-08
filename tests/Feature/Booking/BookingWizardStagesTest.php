@@ -19,6 +19,7 @@ use App\Models\TeacherAvailability;
 use App\Models\TeacherSubject;
 use App\Models\User;
 use App\Models\UserProfile;
+use App\Settings\BookingSettings;
 use App\Settings\FeatureSettings;
 use App\Wallet\Enums\WalletLedgerEntryType;
 use App\Wallet\Services\WalletLedgerService;
@@ -451,8 +452,23 @@ class BookingWizardStagesTest extends TestCase
             ->assertSee('Per class');
     }
 
+    /**
+     * Schedules that reach past the confirmation horizon are gated by a
+     * server-side flag until the deployment is verified. These tests are
+     * about the schedule itself, so they turn it on explicitly — the
+     * flag's own behaviour is covered by
+     * RecurringScheduleReleaseSafeguardsTest.
+     */
+    private function allowFutureGeneration(): void
+    {
+        $settings = app(BookingSettings::class);
+        $settings->recurring_future_generation_enabled = true;
+        $settings->save();
+    }
+
     public function test_a_repeating_schedule_can_be_built_reviewed_and_confirmed(): void
     {
+        $this->allowFutureGeneration();
         $slot = $this->slot();
         $secondWeekday = (int) $slot->addDays(2)->dayOfWeek;
 
@@ -501,6 +517,7 @@ class BookingWizardStagesTest extends TestCase
 
     public function test_recurrence_choices_survive_going_back_and_forth_between_steps(): void
     {
+        $this->allowFutureGeneration();
         $slot = $this->slot();
 
         $component = $this->wizardFor($this->student())
@@ -649,6 +666,7 @@ class BookingWizardStagesTest extends TestCase
 
     public function test_a_schedule_of_more_than_twelve_classes_goes_through_the_form(): void
     {
+        $this->allowFutureGeneration();
         $slot = $this->slot();
 
         $component = $this->wizardFor($this->student())

@@ -54,6 +54,18 @@ class BookingSettings extends Settings
     /** Occurrences one generation pass may create per series. */
     public int $recurring_generation_batch_size;
 
+    /**
+     * Whether this deployment may accept repeating schedules that reach
+     * PAST the confirmation horizon — ongoing ones, and long finite
+     * ones. Off until the scheduler, the queue worker and notification
+     * delivery have been verified on the target environment; see the
+     * deployment checklist in docs/booking.md.
+     *
+     * Not a cap: on means no limit, off means such a schedule is
+     * refused with an explanation rather than quietly shortened.
+     */
+    public bool $recurring_future_generation_enabled;
+
     /** Key of the AssignmentStrategyInterface used to auto-assign teachers. */
     public string $assignment_strategy;
 

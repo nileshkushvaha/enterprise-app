@@ -20,6 +20,7 @@ use App\Models\TeacherSubject;
 use App\Models\TeacherUnavailability;
 use App\Models\User;
 use App\Models\UserProfile;
+use App\Settings\BookingSettings;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Route;
 use Spatie\Permission\Models\Role;
@@ -204,6 +205,12 @@ class StudentBookingTest extends TestCase
 
     public function test_recurring_booking_accepts_more_than_twelve_occurrences(): void
     {
+        // Long schedules depend on background generation, which is gated
+        // by a server-side flag until the deployment is verified.
+        $settings = app(BookingSettings::class);
+        $settings->recurring_future_generation_enabled = true;
+        $settings->save();
+
         // The twelve-occurrence cap is gone. The request is accepted in
         // full and stored as a schedule; how many classes come back in
         // `data` is bounded by the confirmation horizon, not by a limit

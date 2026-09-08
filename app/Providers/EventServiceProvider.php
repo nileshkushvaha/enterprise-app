@@ -11,6 +11,7 @@ use App\Booking\Events\BookingConfirmed;
 use App\Booking\Events\BookingPaymentSucceeded;
 use App\Booking\Events\BookingRequested;
 use App\Booking\Events\BookingRescheduled;
+use App\Booking\Events\BookingSeriesOccurrenceUnavailable;
 use App\Booking\Events\MeetingCreated;
 use App\Booking\Events\MeetingUpdated;
 use App\Compliance\Events\SuspiciousActivityFlagRecorded;
@@ -255,6 +256,12 @@ class EventServiceProvider extends ServiceProvider
             [SendBookingNotifications::class, 'handleCompleted'],
             [RecordBookingLifecycleAudit::class, 'handleCompleted'],
             SyncLessonOnBookingCompleted::class,
+        ],
+        // A class the repeating schedule owed could not be booked when
+        // its turn came. Raised only by the background pass — everything
+        // interactive is resolved before the student confirms.
+        BookingSeriesOccurrenceUnavailable::class => [
+            [SendBookingNotifications::class, 'handleSeriesOccurrenceUnavailable'],
         ],
         BookingPaymentSucceeded::class => [
             [SendBookingNotifications::class, 'handlePaymentSucceeded'],

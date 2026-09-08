@@ -333,6 +333,36 @@ final class BookingDetail extends Component
         $this->extendPanelOpen = false;
     }
 
+    /**
+     * Asks the platform to try a class it could not book earlier.
+     *
+     * The background sweep will not do this by itself — the date sits
+     * behind the series' generation watermark and is never revisited,
+     * which is what makes the watermark cheap. So a date that failed
+     * while the instructor was away stays lost until someone asks, and
+     * this is that ask.
+     */
+    public function retrySeriesOccurrence(string $localDate): void
+    {
+        $series = $this->ownedSeries();
+
+        if ($series === null) {
+            return;
+        }
+
+        $this->banner = '';
+
+        try {
+            $booking = app(BookingSeriesService::class)->retryOccurrence($series, $localDate);
+
+            $this->banner = $booking !== null
+                ? 'That class has been booked.'
+                : 'That time is still unavailable. You can try again later, or cancel this class from the schedule.';
+        } catch (BookingException $exception) {
+            $this->banner = $exception->getMessage();
+        }
+    }
+
     public function seriesNextPage(): void
     {
         $this->seriesPage++;

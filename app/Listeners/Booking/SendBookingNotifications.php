@@ -12,6 +12,7 @@ use App\Booking\Events\BookingConfirmed;
 use App\Booking\Events\BookingPaymentSucceeded;
 use App\Booking\Events\BookingRequested;
 use App\Booking\Events\BookingRescheduled;
+use App\Booking\Events\BookingSeriesOccurrenceUnavailable;
 use App\Booking\Support\SettledBookingPaymentResolver;
 use App\Notifications\Booking\BookingCancelledNotification;
 use App\Notifications\Booking\BookingCompletedNotification;
@@ -22,6 +23,7 @@ use App\Notifications\Booking\BookingPaymentSucceededNotification;
 use App\Notifications\Booking\BookingPendingPaymentNotification;
 use App\Notifications\Booking\BookingRequestedNotification;
 use App\Notifications\Booking\BookingRescheduledNotification;
+use App\Notifications\Booking\BookingSeriesOccurrenceUnavailableNotification;
 use App\Services\Notifications\NotificationIdempotencyGuard;
 use App\Services\Payment\InvoiceService;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -154,6 +156,41 @@ final class SendBookingNotifications implements ShouldQueue
 
         $this->send('booking-completed', $event->booking->id, $event->booking->student, $notification);
         $this->send('booking-completed', $event->booking->id, $event->booking->instructor, $notification);
+    }
+
+    /**
+     * A class the schedule owed could not be booked when its turn came.
+     *
+     * Student only: this is a fact about THEIR schedule and there is
+     * nothing for the instructor to act on — the slot was already
+     * unavailable in their calendar, which is why it failed.
+     *
+     * The date discriminates one lost class from another, so a schedule
+     * that loses two different dates sends two messages while a
+     * redelivered event for the same date sends none. The durable
+     * `notified_at` stamp on the exception row stops a LATER generation
+     * pass raising the event again at all; this guard covers the queue's
+     * own at-least-once delivery.
+     */
+    public function handleSeriesOccurrenceUnavailable(BookingSeriesOccurrenceUnavailable $event): void
+    {
+        $student = $event->series->student;
+
+        if ($student === null) {
+            return;
+        }
+
+        $this->send(
+            'booking-series-occurrence-unavailable',
+            $event->series->id.':'.$event->localDate,
+            $student,
+            new BookingSeriesOccurrenceUnavailableNotification(
+                $event->series,
+                $event->localDate,
+                $event->startsAt,
+                $event->reason,
+            ),
+        );
     }
 
     private function send(string $type, string $discriminator, object $recipient, object $notification): void

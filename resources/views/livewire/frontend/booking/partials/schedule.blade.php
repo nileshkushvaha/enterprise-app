@@ -210,12 +210,23 @@
             <section aria-labelledby="booking-how-long" class="rounded-2xl border border-edge bg-surface p-4">
                 <h3 id="booking-how-long" class="text-base font-black text-fg-strong">How long?</h3>
 
-                <div class="mt-3 grid gap-2 sm:grid-cols-3" role="group" aria-labelledby="booking-how-long">
-                    @foreach([
+                @php
+                    // "Until I cancel" is only a real option where the
+                    // background pass that keeps such a schedule alive is
+                    // known to be running. Hidden AND refused server-side
+                    // rather than offered and then quietly not honoured.
+                    $endOptions = [
                         'after_count' => ['Number of classes', 'Stop after a set number.'],
                         'on_date' => ['Until a date', 'Stop on a date you choose.'],
-                        'never' => ['Until I cancel', 'Keeps going until you stop it.'],
-                    ] as $value => [$label, $hint])
+                    ];
+
+                    if ($ongoingAvailable) {
+                        $endOptions['never'] = ['Until I cancel', 'Keeps going until you stop it.'];
+                    }
+                @endphp
+
+                <div class="mt-3 grid gap-2 sm:grid-cols-{{ count($endOptions) }}" role="group" aria-labelledby="booking-how-long">
+                    @foreach($endOptions as $value => [$label, $hint])
                         <button
                             type="button"
                             wire:click="setEndCondition('{{ $value }}')"

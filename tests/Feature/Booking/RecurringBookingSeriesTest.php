@@ -75,9 +75,13 @@ class RecurringBookingSeriesTest extends TestCase
 
         // A long horizon and no per-day cap, so these tests exercise the
         // recurrence rules themselves rather than the platform's window.
+        // Future generation is switched ON here because that is what
+        // these tests are about; the flag's own behaviour is covered by
+        // RecurringScheduleReleaseSafeguardsTest.
         $settings = app(BookingSettings::class);
         $settings->maximum_advance_booking_days = 3650;
         $settings->max_daily_bookings_per_teacher = null;
+        $settings->recurring_future_generation_enabled = true;
         $settings->save();
     }
 

@@ -40,7 +40,20 @@ final readonly class SeriesSchedulePreviewData
         public ?int $instructorId = null,
         /** The schedule's own calendar; per-date deviations are keyed in it. */
         public ?string $timezone = null,
+        /** Whether this schedule owes classes that cannot be reserved yet. */
+        public bool $requiresFutureGeneration = false,
+        /** Whether this deployment may accept such a schedule at all. */
+        public bool $futureGenerationAvailable = true,
     ) {}
+
+    /**
+     * The schedule reaches past what can be reserved, and this
+     * deployment cannot yet honour that — so it must not be confirmed.
+     */
+    public function isBlockedByFutureGeneration(): bool
+    {
+        return $this->requiresFutureGeneration && ! $this->futureGenerationAvailable;
+    }
 
     public function hasConflicts(): bool
     {

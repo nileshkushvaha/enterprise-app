@@ -362,7 +362,10 @@
                                 <span class="tabular-nums text-fg-muted">{{ $row['sequence'] }}.</span>
                                 {{ $row['date_label'] }}@if($row['time_label']) · {{ $row['time_label'] }}@endif
                             </p>
-                            <p class="mt-0.5 text-xs font-semibold text-fg-muted">{{ $row['status_label'] }}@if($row['booking_reference']) · {{ $row['booking_reference'] }}@endif</p>
+                            <p class="mt-0.5 text-xs font-semibold {{ $row['is_conflict'] ? 'text-amber-700 dark:text-amber-300' : 'text-fg-muted' }}">
+                                {{ $row['status_label'] }}@if($row['booking_reference']) · {{ $row['booking_reference'] }}@endif
+                                @if($row['reason']) — {{ $row['reason'] }} @endif
+                            </p>
                         </div>
                         @if($row['booking_id'] && $row['booking_id'] !== $booking->id)
                             <a href="{{ route('dashboard.my-bookings.show', $row['booking_id']) }}"
@@ -371,6 +374,17 @@
                             </a>
                         @elseif($row['booking_id'] === $booking->id)
                             <span class="rounded-full bg-indigo-500/10 px-3 py-1 text-xs font-black uppercase tracking-wide text-indigo-700 dark:text-indigo-200">This class</span>
+                        @elseif($row['is_conflict'])
+                            {{-- A class we could not book. The sweep will not
+                                 revisit it on its own, so the student can ask. --}}
+                            <button
+                                type="button"
+                                wire:click="retrySeriesOccurrence('{{ $row['local_date'] }}')"
+                                wire:loading.attr="disabled"
+                                class="inline-flex min-h-11 items-center rounded-xl px-3 text-sm font-bold text-indigo-600 hover:bg-surface-hover focus:outline-none focus-visible:ring-4 focus-visible:ring-indigo-300/50 disabled:opacity-50 dark:text-indigo-300"
+                            >
+                                Try again<span class="sr-only"> for the class on {{ $row['date_label'] }}</span>
+                            </button>
                         @endif
                     </li>
                 @endforeach
