@@ -111,8 +111,8 @@ return [
     */
 
     'from' => [
-        'address' => env('MAIL_FROM_ADDRESS', 'hello@sirieducation.com'),
-        'name' => env('MAIL_FROM_NAME', env('APP_NAME', 'SIRI Education')),
+        'address' => env('MAIL_FROM_ADDRESS', 'notifications@sirieducation.com'),
+        'name' => env('MAIL_FROM_NAME', env('APP_NAME', 'Siri Education')),
     ],
 
 ];

@@ -8,10 +8,12 @@ use App\Filament\Pages\Settings\MailSettingsPage;
 use App\Models\Activity;
 use App\Models\User;
 use App\Notifications\Auth\EmailVerificationCodeNotification;
+use App\Providers\AppServiceProvider;
 use App\Services\Mail\TransactionalMailSender;
 use App\Settings\MailSettings;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
+use ReflectionMethod;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
@@ -49,8 +51,101 @@ class MailSettingsLoadUpdateTest extends TestCase
         // override MAIL_MAILER on every fresh install before an administrator
         // has chosen one.
         $this->assertSame('', $settings->driver);
-        $this->assertSame('smtp.mailtrap.io', $settings->host);
+
+        // Blank, not 'smtp.mailtrap.io': the seeded placeholder was merged over
+        // config('mail.mailers.smtp') on every boot, so a fresh install sent
+        // through Mailtrap no matter what MAIL_HOST said. Blank means "inherit
+        // the SMTP connection from .env".
+        $this->assertSame('', $settings->host);
         $this->assertSame(30, $settings->connection_timeout);
+    }
+
+    public function test_a_blank_host_hands_the_smtp_connection_back_to_the_environment(): void
+    {
+        $settings = app(MailSettings::class);
+        $settings->host = '';
+        $settings->port = 2525;
+        $settings->save();
+
+        config(['mail.mailers.smtp.host' => 'smtp-relay.gmail.com', 'mail.mailers.smtp.port' => 587]);
+
+        $this->applyMailTransportOverride();
+
+        // All-or-nothing: a blank host must not leave the stored port merged
+        // over .env, which is the half-configured state nobody can debug.
+        $this->assertSame('smtp-relay.gmail.com', config('mail.mailers.smtp.host'));
+        $this->assertSame(587, config('mail.mailers.smtp.port'));
+    }
+
+    public function test_a_stored_host_still_overrides_the_environment(): void
+    {
+        $settings = app(MailSettings::class);
+        $settings->host = 'smtp.sendgrid.net';
+        $settings->port = 2525;
+        $settings->save();
+
+        config(['mail.mailers.smtp.host' => 'smtp-relay.gmail.com', 'mail.mailers.smtp.port' => 587]);
+
+        $this->applyMailTransportOverride();
+
+        $this->assertSame('smtp.sendgrid.net', config('mail.mailers.smtp.host'));
+        $this->assertSame(2525, config('mail.mailers.smtp.port'));
+    }
+
+    public function test_the_smtp_section_stays_editable_when_the_driver_inherits_an_smtp_environment(): void
+    {
+        $this->actingAs($this->admin());
+
+        // The blank driver means "inherit MAIL_MAILER", so on a MAIL_MAILER=smtp
+        // install this IS the SMTP transport. The section used to render only
+        // for a literal 'smtp' driver, which hid the host from precisely the
+        // administrators whose stored host was overriding their .env.
+        config(['mail.default' => 'smtp']);
+
+        Livewire::test(MailSettingsPage::class)
+            ->set('data.driver', '')
+            ->set('data.host', 'smtp-relay.gmail.com')
+            ->call('save')
+            ->assertHasNoFormErrors()
+            ->assertNotified('Mail settings saved');
+
+        $fresh = app()->make(MailSettings::class)->refresh();
+
+        $this->assertSame('', $fresh->driver);
+        $this->assertSame('smtp-relay.gmail.com', $fresh->host);
+    }
+
+    public function test_an_administrator_can_clear_a_stored_host_to_return_to_the_environment(): void
+    {
+        $this->actingAs($this->admin());
+
+        $settings = app(MailSettings::class);
+        $settings->host = 'smtp.sendgrid.net';
+        $settings->save();
+
+        Livewire::test(MailSettingsPage::class)
+            ->set('data.driver', 'smtp')
+            ->set('data.host', null)
+            ->call('save')
+            ->assertHasNoFormErrors()
+            ->assertNotified('Mail settings saved');
+
+        // Blank is a real choice, not "field omitted" — null-coalescing onto the
+        // stored value here made the host permanently unclearable.
+        $this->assertSame('', app()->make(MailSettings::class)->refresh()->host);
+    }
+
+    /**
+     * Invokes the boot-time override in isolation. It runs once per application
+     * boot, so a test that changes settings afterwards has to re-apply it.
+     */
+    private function applyMailTransportOverride(): void
+    {
+        $provider = new AppServiceProvider($this->app);
+
+        $method = new ReflectionMethod($provider, 'applySettingsDrivenMailTransport');
+        $method->setAccessible(true);
+        $method->invoke($provider);
     }
 
     public function test_settings_nothing_reads_are_not_offered_to_administrators(): void
@@ -153,7 +248,7 @@ class MailSettingsLoadUpdateTest extends TestCase
         $fresh = app()->make(MailSettings::class)->refresh();
 
         $this->assertSame('resend', $fresh->driver);
-        $this->assertSame('smtp.mailtrap.io', $fresh->host);
+        $this->assertSame('', $fresh->host);
         $this->assertSame(587, $fresh->port);
         $this->assertSame(30, $fresh->connection_timeout);
     }
@@ -176,7 +271,7 @@ class MailSettingsLoadUpdateTest extends TestCase
             ->first();
 
         $this->assertNotNull($activity);
-        $this->assertSame('smtp.mailtrap.io', $activity->properties['changed']['host']['from']);
+        $this->assertSame('', $activity->properties['changed']['host']['from']);
         $this->assertSame('smtp.sendgrid.net', $activity->properties['changed']['host']['to']);
     }
 

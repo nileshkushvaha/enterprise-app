@@ -185,10 +185,14 @@ class MailSettingsPage extends Page
                 // `smtp` mailer and nothing else, so displaying them alongside
                 // Resend invited the reasonable-but-wrong conclusion that Resend
                 // was somehow being sent through smtp.mailtrap.io.
+                //
+                // "Inherit MAIL_MAILER" counts as SMTP when the environment
+                // resolves to it: hiding the section there left the stored host
+                // silently overriding .env with no way to see or edit it.
                 Section::make('SMTP Configuration')
-                    ->description('Connection settings for your mail server.')
+                    ->description('Connection settings for your mail server. Leave the host blank to take all of these from the server environment.')
                     ->columnSpanFull()
-                    ->visible(fn (Get $get): bool => $get('driver') === 'smtp')
+                    ->visible(fn (Get $get): bool => $this->smtpIsEffectiveMailer($get))
                     ->schema([
                         Grid::make(4)->schema([
                             Select::make('encryption')
@@ -199,19 +203,23 @@ class MailSettingsPage extends Page
                                     'none' => 'None',
                                 ])
                                 ->native(false)
-                                ->required(fn (Get $get): bool => $get('driver') === 'smtp'),
+                                ->required(fn (Get $get): bool => $this->smtpIsEffectiveMailer($get)),
 
+                            // Deliberately not required(): blank means "inherit
+                            // MAIL_HOST and the rest of the SMTP connection from
+                            // .env", the only way to hand control back to the
+                            // environment once a host has been stored.
                             TextInput::make('host')
                                 ->label('SMTP Host')
-                                ->required(fn (Get $get): bool => $get('driver') === 'smtp')
                                 ->maxLength(255)
-                                ->placeholder('smtp.mailtrap.io')
+                                ->placeholder(fn (): string => (string) config('mail.mailers.smtp.host'))
+                                ->helperText('Leave blank to use MAIL_HOST from the server environment.')
                                 ->columnSpan(1),
 
                             TextInput::make('port')
                                 ->label('SMTP Port')
                                 ->numeric()
-                                ->required(fn (Get $get): bool => $get('driver') === 'smtp')
+                                ->required(fn (Get $get): bool => $this->smtpIsEffectiveMailer($get))
                                 ->minValue(1)
                                 ->maxValue(65535)
                                 ->placeholder('587'),
@@ -219,7 +227,7 @@ class MailSettingsPage extends Page
                             TextInput::make('connection_timeout')
                                 ->label('Connection Timeout (seconds)')
                                 ->numeric()
-                                ->required(fn (Get $get): bool => $get('driver') === 'smtp')
+                                ->required(fn (Get $get): bool => $this->smtpIsEffectiveMailer($get))
                                 ->minValue(5)
                                 ->maxValue(300)
                                 ->default(30),
@@ -283,7 +291,9 @@ class MailSettingsPage extends Page
             // simply absent on any other driver. Fall back to the stored value
             // rather than the form's: switching to Resend must not silently wipe
             // a working SMTP configuration an admin may switch back to.
-            $settings->host = (string) ($data['host'] ?? $settings->host);
+            // array_key_exists, not ??: a blank host dehydrates to null and is a
+            // real choice ("inherit .env"), which ?? would silently discard.
+            $settings->host = array_key_exists('host', $data) ? (string) ($data['host'] ?? '') : $settings->host;
             $settings->port = (int) ($data['port'] ?? $settings->port);
             $settings->username = array_key_exists('username', $data) ? $data['username'] : $settings->username;
             $settings->encryption = (string) ($data['encryption'] ?? $settings->encryption);
@@ -308,22 +318,16 @@ class MailSettingsPage extends Page
     public function sendTestEmail(string $to): void
     {
         try {
-            $settings = app(MailSettings::class);
-
-            // Temporarily override mail config with saved settings
-            config([
-                'mail.default' => $settings->driver,
-                'mail.mailers.smtp.host' => $settings->host,
-                'mail.mailers.smtp.port' => $settings->port,
-                'mail.mailers.smtp.username' => $settings->username,
-                'mail.mailers.smtp.password' => $settings->password
-                    ? Crypt::decryptString($settings->password)
-                    : null,
-                'mail.mailers.smtp.encryption' => $settings->encryption === 'none' ? null : $settings->encryption,
-                'mail.from.address' => $settings->from_email,
-                'mail.from.name' => $settings->from_name,
-            ]);
-
+            // No config() override here on purpose. AppServiceProvider has
+            // already merged the stored SMTP settings over .env at boot, and
+            // TransactionalMailSender resolves the mailer and sender, so a test
+            // send exercises exactly the configuration real mail uses. The
+            // previous override re-derived that by hand and got it wrong three
+            // ways: it wrote the blank "inherit MAIL_MAILER" driver straight
+            // over mail.default, it set an `encryption` key that config/mail.php
+            // does not read (the transport reads `scheme`), and it handed
+            // Symfony the still-encrypted password whenever decryption was
+            // skipped. A green test email proved nothing about production.
             app(TransactionalNotificationService::class)
                 ->routeMail($to, new TestMailConfigurationNotification(app(GeneralSettings::class)->app_name));
 
@@ -339,6 +343,24 @@ class MailSettingsPage extends Page
                 ->danger()
                 ->send();
         }
+    }
+
+    /**
+     * Whether outgoing mail actually goes through the `smtp` transport, which
+     * is what decides if the SMTP Configuration section is meaningful.
+     *
+     * The stored driver alone is not enough: blank means "inherit MAIL_MAILER"
+     * (TransactionalMailSender::mailer()), and on a MAIL_MAILER=smtp install
+     * that is still SMTP. Testing `=== 'smtp'` hid the section for exactly the
+     * administrators who most needed it — the stored host kept overriding
+     * MAIL_HOST at boot with no field on screen to explain or change it.
+     */
+    private function smtpIsEffectiveMailer(Get $get): bool
+    {
+        $driver = (string) ($get('driver') ?? '');
+
+        return $driver === 'smtp'
+            || ($driver === '' && (string) config('mail.default') === 'smtp');
     }
 
     /**

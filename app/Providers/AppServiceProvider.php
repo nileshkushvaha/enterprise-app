@@ -197,6 +197,12 @@ class AppServiceProvider extends ServiceProvider
      * credentials are deployment secrets and are deliberately not editable
      * from the admin panel.
      *
+     * A blank host is the "inherit the environment" choice and disables this
+     * override entirely — MAIL_HOST/PORT/USERNAME/PASSWORD/SCHEME are then the
+     * only source of SMTP connection details. It is all-or-nothing on purpose:
+     * a half-overridden connection (this host, that port) is the kind of state
+     * nobody can debug from either the .env or the admin panel alone.
+     *
      * Same defensive shape as applySettingsDrivenAppName(): boot() also runs
      * before the settings table exists and when the DB is unreachable, and
      * either case must leave the env-derived config untouched rather than
@@ -210,6 +216,10 @@ class AppServiceProvider extends ServiceProvider
             }
 
             $settings = app(MailSettings::class);
+
+            if (blank($settings->host)) {
+                return;
+            }
 
             $overrides = array_filter([
                 'host' => filled($settings->host) ? $settings->host : null,
