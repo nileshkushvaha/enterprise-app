@@ -22,6 +22,7 @@ use App\Booking\Exceptions\BookingException;
 use App\Booking\Exceptions\InvalidPaymentWebhookException;
 use App\Booking\Exceptions\LessonAlreadyStartedException;
 use App\Booking\Payments\RazorpayPaymentProvider;
+use App\Booking\Services\BookingSeriesPrepaymentService;
 use App\Booking\Services\BookingSeriesService;
 use App\Booking\Services\CancellationRefundPolicy;
 use App\Booking\Services\RecordingPlaybackAccessResolver;
@@ -342,6 +343,36 @@ final class BookingDetail extends Component
      * while the instructor was away stays lost until someone asks, and
      * this is that ask.
      */
+    /**
+     * Withdraws — or grants — the standing permission for this schedule's
+     * future classes to be confirmed from the student's balance.
+     *
+     * Turning it OFF is deliberately never refused. A control that stops
+     * money moving must work even when the platform capability has since
+     * been disabled or the schedule has ended; anything else strands a
+     * student inside a permission they want out of.
+     */
+    public function toggleSeriesAutoSettle(): void
+    {
+        $series = $this->ownedSeries();
+
+        if ($series === null) {
+            return;
+        }
+
+        $this->banner = '';
+
+        try {
+            app(BookingSeriesPrepaymentService::class)->setAutoSettle(
+                $series,
+                auth()->user(),
+                ! $series->auto_settle_from_wallet,
+            );
+        } catch (BookingException $exception) {
+            $this->banner = $exception->getMessage();
+        }
+    }
+
     public function retrySeriesOccurrence(string $localDate): void
     {
         $series = $this->ownedSeries();
@@ -720,6 +751,7 @@ final class BookingDetail extends Component
             // The whole schedule, paginated — a long series must never
             // try to render every class at once.
             'series' => $this->ownedSeries(),
+            'autoSettleAvailable' => app(BookingSeriesPrepaymentService::class)->autoSettleAvailable(),
             'seriesSchedule' => ($series = $this->ownedSeries()) !== null
                 ? app(BookingSeriesService::class)->scheduleFor($series, $this->seriesPage)
                 : null,

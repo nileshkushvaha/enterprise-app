@@ -66,6 +66,29 @@
                         Pay one at a time instead
                     </a>
                 </div>
+
+                {{--
+                    Standing permission for money to move while the student
+                    is not here. Opt-in, off by default, never pre-ticked,
+                    and worded as what it actually does rather than as a
+                    convenience.
+                --}}
+                @if($autoSettleAvailable && ($seriesPrepayment['planned_count'] ?? 0) > 0)
+                    <label class="mt-4 flex cursor-pointer items-start gap-3 border-t border-edge pt-3.5">
+                        <input
+                            type="checkbox"
+                            wire:click="toggleAutoSettle"
+                            @checked($autoSettleEnabled)
+                            class="mt-0.5 h-5 w-5 shrink-0 rounded border-2 border-edge-strong text-indigo-600 focus:outline-none focus-visible:ring-4 focus-visible:ring-indigo-300/50"
+                        >
+                        <span class="text-sm leading-6 text-fg">
+                            <span class="font-bold text-fg-strong">Use my balance to confirm future classes automatically</span>
+                            <span class="mt-0.5 block text-xs leading-5 text-fg-muted">
+                                As the {{ $seriesPrepayment['planned_count'] }} planned {{ \Illuminate\Support\Str::plural('class', $seriesPrepayment['planned_count']) }} {{ $seriesPrepayment['planned_count'] === 1 ? 'is' : 'are' }} booked, we will confirm {{ $seriesPrepayment['planned_count'] === 1 ? 'it' : 'them' }} from your balance if it covers the cost. We never charge your card for this, and you can turn it off any time from My Bookings.
+                            </span>
+                        </span>
+                    </label>
+                @endif
             </div>
         @elseif($result['requires_payment'] && ($seriesPrepayment['blocked'] ?? null))
             <p class="mt-4 rounded-2xl border border-amber-300/40 bg-amber-500/10 px-4 py-3 text-left text-sm text-amber-900 dark:text-amber-200" role="status">

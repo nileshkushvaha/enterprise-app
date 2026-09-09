@@ -203,6 +203,65 @@ settings, `booking` group). Do **not** enable it on the strength of
 local success, and do not enable it in one environment because another
 passed.
 
+### Paying for a whole schedule at once
+
+`BookingSeriesPrepaymentService` collects for every RESERVED class of a
+schedule in one checkout, routed through the student's own wallet.
+
+That routing is the design, not a shortcut. `BookingPayment` is the
+obligation to pay for ONE booking; one obligation spanning many would
+mean apportioning a partial refund across a single captured provider
+payment whenever a class is later cancelled. Refunds already credit the
+wallet, so paying through it makes cancelling one class of a batch
+*exactly* the refund path that already exists. Every per-class semantic
+survives: own price, own `BookingPayment`, own reservation, own invoice,
+own refund decision.
+
+Rules worth knowing:
+
+- Only reserved classes are billed — never ones beyond the horizon that
+  nobody is holding.
+- The top-up is exactly the shortfall, never rounded up.
+- A mixed-currency batch is refused rather than half-settled (wallet
+  payment never converts).
+- Classes settle earliest-first, so a short balance secures the soonest.
+- Completion runs off the verified recharge
+  (`SettleSeriesPrepaymentOnWalletRechargeSucceeded`), not the browser's
+  return, so closing the tab at the gateway cannot leave classes unpaid.
+
+### Confirming future classes unattended
+
+Two switches, both required, because money moves with nobody present:
+
+| Switch | Meaning |
+|---|---|
+| `BookingSettings::$recurring_wallet_auto_settle_enabled` | the platform CAPABILITY — stops it for everyone at once |
+| `booking_series.auto_settle_from_wallet` | the student's PERMISSION, per schedule, default false |
+
+Consent is recorded only by an explicit opt-in and is never inferred
+from having paid a batch once. It spends **only money already in the
+wallet**: it never opens a checkout, never tops up, and never touches a
+card — a short balance simply leaves the class payment-due. Partial
+settlement is deliberately refused, since draining the balance to zero
+*and* leaving classes unpaid is the worst of both outcomes.
+
+Withdrawal is never refused, even when the capability has since been
+switched off or the schedule has ended — a control that stops spending
+must not disappear on someone inside it.
+
+Each settled class dispatches `BookingPaymentSucceeded`, so the student
+is told through the existing notification path; it is never silent.
+
+Add to the verification checklist before enabling
+`recurring_wallet_auto_settle_enabled`:
+
+| # | Check | Evidence |
+|---|---|---|
+| 9 | A generated class is confirmed from balance | Opt a test schedule in, fund the wallet, wait for the hourly pass, confirm the new class is `paid` with a `BookingPayment` row and a wallet ledger debit |
+| 10 | A short balance charges nothing | Same, with a balance below the class price: the class stays payment-due and the balance is untouched |
+| 11 | The student is notified | Confirm the payment-succeeded message arrives on a real channel |
+| 12 | Opting out stops it | Untick in My Bookings, wait for the next pass, confirm nothing is settled |
+
 To roll back, set it to `false`. Existing schedules keep generating —
 the flag gates CREATION of new ones, not the sweep.
 

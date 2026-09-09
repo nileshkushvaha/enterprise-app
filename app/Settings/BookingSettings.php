@@ -66,6 +66,17 @@ class BookingSettings extends Settings
      */
     public bool $recurring_future_generation_enabled;
 
+    /**
+     * Whether this deployment may confirm a repeating schedule's future
+     * classes from the student's own balance while they are away.
+     *
+     * The platform CAPABILITY. The student's PERMISSION is recorded
+     * separately, per schedule, on booking_series.auto_settle_from_wallet
+     * — money moving unattended needs both, and this one can stop it for
+     * everyone at once without editing anybody's record.
+     */
+    public bool $recurring_wallet_auto_settle_enabled;
+
     /** Key of the AssignmentStrategyInterface used to auto-assign teachers. */
     public string $assignment_strategy;
 

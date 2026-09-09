@@ -1277,6 +1277,12 @@ final class BookingWizard extends Component
      */
     public array $seriesPrepayment = [];
 
+    /** The student's standing permission for THIS schedule; never inferred. */
+    public bool $autoSettleEnabled = false;
+
+    /** Whether this deployment offers unattended settlement at all. */
+    public bool $autoSettleAvailable = false;
+
     /**
      * Pays for EVERY reserved class of this schedule in one go.
      *
@@ -1325,6 +1331,37 @@ final class BookingWizard extends Component
             }
 
             $this->openCheckout($prepayments->initiateTopUp($series, auth()->user()));
+        } catch (BookingException $exception) {
+            $this->paymentBanner = $exception->getMessage();
+        }
+    }
+
+    /**
+     * Records the student's consent to have this schedule's future
+     * classes confirmed from their balance.
+     *
+     * Consent is recorded here and nowhere else — paying for a batch
+     * once must never be read as agreeing to it happening again while
+     * they are away.
+     */
+    public function toggleAutoSettle(): void
+    {
+        $series = $this->currentSeries();
+
+        if ($series === null) {
+            return;
+        }
+
+        $this->paymentBanner = '';
+
+        try {
+            $updated = app(BookingSeriesPrepaymentService::class)->setAutoSettle(
+                $series,
+                auth()->user(),
+                ! $series->auto_settle_from_wallet,
+            );
+
+            $this->autoSettleEnabled = (bool) $updated->auto_settle_from_wallet;
         } catch (BookingException $exception) {
             $this->paymentBanner = $exception->getMessage();
         }
@@ -1381,7 +1418,11 @@ final class BookingWizard extends Component
             return;
         }
 
-        $quote = app(BookingSeriesPrepaymentService::class)->quote($series, auth()->user());
+        $prepayments = app(BookingSeriesPrepaymentService::class);
+        $this->autoSettleAvailable = $prepayments->autoSettleAvailable();
+        $this->autoSettleEnabled = (bool) $series->auto_settle_from_wallet;
+
+        $quote = $prepayments->quote($series, auth()->user());
 
         if (! $quote->isPayable()) {
             $this->seriesPrepayment = $quote->blockedReason === null
@@ -1684,6 +1725,8 @@ final class BookingWizard extends Component
             'paymentBanner',
             'walletOption',
             'seriesPrepayment',
+            'autoSettleEnabled',
+            'autoSettleAvailable',
             'fundingOptions',
             'packageEntitlementId',
             'pricePreview',

@@ -15,6 +15,7 @@ use App\Models\BookingSeries;
 use App\Models\User;
 use App\Models\Wallet;
 use App\Payments\DTOs\PaymentCheckoutData;
+use App\Settings\BookingSettings;
 use App\Support\MoneyFormatter;
 use App\Wallet\Exceptions\WalletException;
 use App\Wallet\Services\WalletRechargeService;
@@ -202,6 +203,84 @@ final class BookingSeriesPrepaymentService
 
     /** Marks a recharge as raised to pay for a schedule's classes. */
     public const string PURPOSE = 'booking_series_prepayment';
+
+    /**
+     * Records — or withdraws — the student's consent to have this
+     * schedule's future classes confirmed from their balance.
+     *
+     * Withdrawal is deliberately unconditional: turning OFF something
+     * that spends your money must never be refusable, even when the
+     * platform capability is currently disabled or the schedule has
+     * ended.
+     *
+     * @throws BookingException
+     */
+    public function setAutoSettle(BookingSeries $series, User $student, bool $enabled): BookingSeries
+    {
+        $this->assertOwnership($series, $student);
+
+        if ($enabled && ! $this->autoSettleAvailable()) {
+            throw new BookingException('Confirming future classes from your balance is not available just yet.');
+        }
+
+        $series->forceFill(['auto_settle_from_wallet' => $enabled])->save();
+
+        return $series->refresh();
+    }
+
+    /** Whether this deployment offers unattended settlement at all. */
+    public function autoSettleAvailable(): bool
+    {
+        return app(BookingSettings::class)->recurring_wallet_auto_settle_enabled;
+    }
+
+    /**
+     * Confirms newly generated classes from the balance the student
+     * already put there for exactly this.
+     *
+     * Runs with nobody present, so the guards are the feature:
+     *
+     *  - The platform capability AND the student's own per-schedule
+     *    consent must both be on. Either one off means nothing happens.
+     *  - It spends ONLY money already in the wallet. It never opens a
+     *    checkout, never tops up, and never touches a card. A short
+     *    balance simply leaves the class payment-due, exactly as it is
+     *    today — that is the line between spending what a student
+     *    deposited for this and charging them.
+     *  - Only this schedule's own classes, through the ordinary
+     *    single-booking wallet path, so every lock, re-validation and
+     *    receipt behaves identically to the student pressing the button.
+     *
+     * The student is told each time: settlement dispatches
+     * BookingPaymentSucceeded, which already notifies them.
+     */
+    public function autoSettle(BookingSeries $series): SeriesPrepaymentResult
+    {
+        $student = $series->student;
+
+        if (! $series->auto_settle_from_wallet
+            || ! $this->autoSettleAvailable()
+            || $student === null) {
+            return new SeriesPrepaymentResult(new Collection, []);
+        }
+
+        $quote = $this->quote($series, $student);
+
+        // Nothing owed, or not payable as a batch (mixed currency, wallet
+        // in another currency) — never guess, just leave it alone.
+        if (! $quote->isPayable()) {
+            return new SeriesPrepaymentResult(new Collection, []);
+        }
+
+        // The balance must already cover the whole bill. Settling part of
+        // it would drain the wallet to zero and still leave classes
+        // unpaid, which is the worst of both outcomes.
+        if (! $quote->coveredByWallet()) {
+            return new SeriesPrepaymentResult(new Collection, []);
+        }
+
+        return $this->settleFromWallet($series, $student);
+    }
 
     /**
      * The classes money can actually be collected for: reserved, not

@@ -334,6 +334,30 @@
                 @endif
             </div>
 
+            {{--
+                Standing permission for money to move while the student is
+                away. Shown whenever it is ON — even if the platform
+                capability has since been switched off — because a control
+                that STOPS spending must never disappear on someone who is
+                inside it.
+            --}}
+            @if($autoSettleAvailable || $series->auto_settle_from_wallet)
+                <label class="mt-3 flex cursor-pointer items-start gap-3 rounded-xl border border-edge bg-surface px-3.5 py-3">
+                    <input
+                        type="checkbox"
+                        wire:click="toggleSeriesAutoSettle"
+                        @checked($series->auto_settle_from_wallet)
+                        class="mt-0.5 h-5 w-5 shrink-0 rounded border-2 border-edge-strong text-indigo-600 focus:outline-none focus-visible:ring-4 focus-visible:ring-indigo-300/50"
+                    >
+                    <span class="text-sm leading-6 text-fg">
+                        <span class="font-bold text-fg-strong">Confirm future classes from my balance</span>
+                        <span class="mt-0.5 block text-xs leading-5 text-fg-muted">
+                            When a new class in this schedule is booked, we confirm it from your balance if it covers the cost. Your card is never charged for this, and you can turn this off at any time.
+                        </span>
+                    </span>
+                </label>
+            @endif
+
             @if($extendPanelOpen)
                 <section class="mt-4 rounded-2xl border border-edge bg-surface-raised p-4" aria-label="Extend this schedule">
                     @if($series->end_condition === \App\Booking\Enums\RecurrenceEndCondition::AfterCount)

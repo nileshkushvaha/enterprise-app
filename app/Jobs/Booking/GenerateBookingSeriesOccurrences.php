@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Jobs\Booking;
 
+use App\Booking\Services\BookingSeriesPrepaymentService;
 use App\Booking\Services\BookingSeriesService;
 use App\Models\BookingSeries;
 use Illuminate\Bus\Queueable;
@@ -62,7 +63,7 @@ class GenerateBookingSeriesOccurrences implements ShouldBeUnique, ShouldQueue
         return $this->bookingSeriesId;
     }
 
-    public function handle(BookingSeriesService $series): void
+    public function handle(BookingSeriesService $series, BookingSeriesPrepaymentService $prepayments): void
     {
         $model = BookingSeries::query()->with('type')->find($this->bookingSeriesId);
 
@@ -79,6 +80,16 @@ class GenerateBookingSeriesOccurrences implements ShouldBeUnique, ShouldQueue
                 'booking_series_id' => $this->bookingSeriesId,
                 'dates' => array_keys($outcome['failures']),
             ]);
+        }
+
+        // Classes only just created are payment-due. If the student asked
+        // for it — and this deployment allows it — confirm them from the
+        // balance they already deposited for exactly this. Runs AFTER
+        // generation, and only ever spends money already in the wallet;
+        // it never opens a checkout. See
+        // BookingSeriesPrepaymentService::autoSettle().
+        if ($outcome['booked']->isNotEmpty()) {
+            $prepayments->autoSettle($model->refresh());
         }
 
         // "exhausted" means the horizon stopped us, not the schedule. Keep

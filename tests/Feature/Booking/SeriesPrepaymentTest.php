@@ -10,8 +10,12 @@ use App\Booking\Enums\BookingSeriesStatus;
 use App\Booking\Enums\BookingStatus;
 use App\Booking\Enums\RecurrenceEndCondition;
 use App\Booking\Enums\RecurrenceFrequency;
+use App\Booking\Enums\Weekday;
+use App\Booking\Events\BookingPaymentSucceeded;
 use App\Booking\Exceptions\BookingException;
 use App\Booking\Services\BookingSeriesPrepaymentService;
+use App\Booking\Services\BookingSeriesService;
+use App\Jobs\Booking\GenerateBookingSeriesOccurrences;
 use App\Listeners\Booking\SettleSeriesPrepaymentOnWalletRechargeSucceeded;
 use App\Models\Booking;
 use App\Models\BookingPayment;
@@ -19,10 +23,13 @@ use App\Models\BookingSeries;
 use App\Models\BookingType;
 use App\Models\Country;
 use App\Models\Currency;
+use App\Models\TeacherAvailability;
+use App\Models\TeacherSubject;
 use App\Models\User;
 use App\Models\UserProfile;
 use App\Models\Wallet;
 use App\Models\WalletRecharge;
+use App\Settings\BookingSettings;
 use App\Settings\FeatureSettings;
 use App\Wallet\Enums\WalletLedgerEntryType;
 use App\Wallet\Enums\WalletRechargeStatus;
@@ -31,7 +38,9 @@ use App\Wallet\Services\WalletLedgerService;
 use App\Wallet\Services\WalletService;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Event;
 use Spatie\Permission\Models\Role;
+use Tests\Support\CreatesStudentLessonPrices;
 use Tests\TestCase;
 
 /**
@@ -47,11 +56,14 @@ use Tests\TestCase;
  */
 class SeriesPrepaymentTest extends TestCase
 {
+    use CreatesStudentLessonPrices;
     use RefreshDatabase;
 
     private BookingType $paidType;
 
     private User $instructor;
+
+    private Country $country;
 
     protected function setUp(): void
     {
@@ -70,17 +82,51 @@ class SeriesPrepaymentTest extends TestCase
 
         app(FeatureSettings::class)->wallet_enabled = true;
 
-        $this->paidType = BookingType::factory()->create(['key' => 'paid_one_to_one', 'is_paid' => true]);
+        // A real priced type: generation runs the ordinary engine, and a
+        // paid type with no configured price is a configuration error
+        // there, not a free class.
+        $priced = $this->createPaidBookingTypeWithPrice('paid_one_to_one', 499.00, 'INR', durationMinutes: 60);
+        $this->paidType = $priced['type'];
+        $this->country = $priced['country'];
+        $this->seedStudentLessonPrice($priced['type'], $priced['country'], $priced['currency'], 499.00, 'maths', 60);
+
+        // Genuinely bookable, so the generation pass in
+        // test_the_generation_job_confirms_newly_created_classes creates a
+        // real class through the ordinary engine rather than a fixture.
         $this->instructor = User::factory()->create(['status' => User::STATUS_ACTIVE]);
+        UserProfile::updateOrCreate(['user_id' => $this->instructor->id], [
+            'instructor_status' => 'approved',
+            'profile_visibility' => 'public',
+            'timezone' => 'UTC',
+        ]);
+        TeacherSubject::factory()->state(['teacher_id' => $this->instructor->id])->subject('maths', 1, 12)->create();
+
+        foreach (Weekday::cases() as $day) {
+            TeacherAvailability::factory()
+                ->state(['teacher_id' => $this->instructor->id])
+                ->forDay($day)
+                ->between('00:00:00', '23:59:00')
+                ->create();
+        }
+
+        $settings = app(BookingSettings::class);
+        $settings->maximum_advance_booking_days = 3650;
+        $settings->max_daily_bookings_per_teacher = null;
+        $settings->save();
     }
 
     private function student(): User
     {
         $student = User::factory()->activeStudent()->create(['status' => User::STATUS_ACTIVE]);
-        $country = Country::factory()->create(['status' => 'active']);
-        UserProfile::updateOrCreate(['user_id' => $student->id], ['country_id' => $country->id]);
+        $this->assignBillingCountry($student, $this->country);
+        UserProfile::where('user_id', $student->id)->update([
+            // The engine's own eligibility rules apply to a generated
+            // class exactly as they do to a booked one.
+            'phone_e164' => '+9199'.str_pad((string) $student->id, 8, '0', STR_PAD_LEFT),
+            'phone_verified_at' => now(),
+        ]);
 
-        return $student;
+        return $student->refresh();
     }
 
     /** A schedule with $classes reserved, unpaid classes. */
@@ -103,6 +149,7 @@ class SeriesPrepaymentTest extends TestCase
             'student_timezone' => 'UTC',
             'end_condition' => RecurrenceEndCondition::AfterCount,
             'occurrence_count' => $classes,
+            'meta' => ['subject' => 'maths', 'grade' => 5],
         ]);
 
         for ($i = 0; $i < $classes; $i++) {
@@ -406,6 +453,219 @@ class SeriesPrepaymentTest extends TestCase
 
         $this->assertSame($balance, (int) Wallet::query()->where('user_id', $student->id)->value('available_balance_minor'));
         $this->assertSame(3, $series->bookings()->where('payment_status', BookingPaymentStatus::Paid)->count());
+    }
+
+    // ── Phase 2: confirming future classes unattended ──────────────────────
+
+    private function allowAutoSettle(bool $enabled = true): void
+    {
+        $settings = app(BookingSettings::class);
+        $settings->recurring_wallet_auto_settle_enabled = $enabled;
+        $settings->save();
+    }
+
+    public function test_consent_is_off_by_default_and_never_inferred_from_paying(): void
+    {
+        // Paying for a batch once says nothing about agreeing to it
+        // happening again while the student is away.
+        $this->allowAutoSettle();
+        $student = $this->student();
+        $series = $this->series($student, 2);
+        $this->fundWallet($student, 200000);
+
+        $this->prepayments()->settleFromWallet($series, $student);
+
+        $this->assertFalse((bool) $series->refresh()->auto_settle_from_wallet);
+    }
+
+    public function test_nothing_is_settled_without_the_students_consent(): void
+    {
+        $this->allowAutoSettle();
+        $student = $this->student();
+        $series = $this->series($student, 3);
+        $this->fundWallet($student, 300000);
+
+        $result = $this->prepayments()->autoSettle($series);
+
+        $this->assertSame(0, $result->paidCount());
+        $this->assertSame(3, $series->bookings()->where('payment_status', BookingPaymentStatus::Pending)->count());
+        $this->assertSame(300000, (int) Wallet::query()->where('user_id', $student->id)->value('available_balance_minor'));
+    }
+
+    public function test_nothing_is_settled_while_the_platform_capability_is_off(): void
+    {
+        // Two switches, because money moving unattended needs both the
+        // capability and the permission.
+        $this->allowAutoSettle(false);
+        $student = $this->student();
+        $series = $this->series($student, 3);
+        $series->forceFill(['auto_settle_from_wallet' => true])->save();
+        $this->fundWallet($student, 300000);
+
+        $result = $this->prepayments()->autoSettle($series->refresh());
+
+        $this->assertSame(0, $result->paidCount());
+        $this->assertSame(300000, (int) Wallet::query()->where('user_id', $student->id)->value('available_balance_minor'));
+    }
+
+    public function test_with_both_switches_on_future_classes_are_confirmed_from_the_balance(): void
+    {
+        $this->allowAutoSettle();
+        $student = $this->student();
+        $series = $this->series($student, 3);
+        $this->prepayments()->setAutoSettle($series, $student, true);
+        $this->fundWallet($student, 200000);
+
+        $result = $this->prepayments()->autoSettle($series->refresh());
+
+        $this->assertSame(3, $result->paidCount());
+        $this->assertSame(3, $series->bookings()->where('payment_status', BookingPaymentStatus::Paid)->count());
+    }
+
+    public function test_a_short_balance_charges_nothing_at_all(): void
+    {
+        // The line between spending what a student deposited for this and
+        // charging them: a partial settle would drain the wallet to zero
+        // AND leave classes unpaid — the worst of both.
+        $this->allowAutoSettle();
+        $student = $this->student();
+        $series = $this->series($student, 3);
+        $this->prepayments()->setAutoSettle($series, $student, true);
+        $this->fundWallet($student, 100000);
+
+        $result = $this->prepayments()->autoSettle($series->refresh());
+
+        $this->assertSame(0, $result->paidCount());
+        $this->assertSame(100000, (int) Wallet::query()->where('user_id', $student->id)->value('available_balance_minor'));
+        $this->assertSame(3, $series->bookings()->where('payment_status', BookingPaymentStatus::Pending)->count());
+    }
+
+    public function test_auto_settle_never_opens_a_checkout_or_touches_a_card(): void
+    {
+        // An empty wallet must produce silence, not a payment attempt.
+        $this->allowAutoSettle();
+        $student = $this->student();
+        $series = $this->series($student, 2);
+        $this->prepayments()->setAutoSettle($series, $student, true);
+
+        $result = $this->prepayments()->autoSettle($series->refresh());
+
+        $this->assertSame(0, $result->paidCount());
+        $this->assertSame(0, WalletRecharge::query()->count(), 'no top-up may ever be raised unattended');
+        $this->assertSame(0, BookingPayment::query()->count());
+    }
+
+    public function test_consent_can_always_be_withdrawn_even_when_the_capability_is_off(): void
+    {
+        // A control that STOPS money moving must never be refusable.
+        $this->allowAutoSettle();
+        $student = $this->student();
+        $series = $this->series($student, 2);
+        $this->prepayments()->setAutoSettle($series, $student, true);
+
+        $this->allowAutoSettle(false);
+
+        $updated = $this->prepayments()->setAutoSettle($series->refresh(), $student, false);
+
+        $this->assertFalse((bool) $updated->auto_settle_from_wallet);
+    }
+
+    public function test_consent_cannot_be_granted_while_the_capability_is_off(): void
+    {
+        $this->allowAutoSettle(false);
+        $student = $this->student();
+        $series = $this->series($student, 2);
+
+        $this->expectException(BookingException::class);
+        $this->prepayments()->setAutoSettle($series, $student, true);
+    }
+
+    public function test_consent_cannot_be_set_on_someone_elses_schedule(): void
+    {
+        $this->allowAutoSettle();
+        $series = $this->series($this->student(), 2);
+
+        $this->expectException(BookingException::class);
+        $this->prepayments()->setAutoSettle($series, $this->student(), true);
+    }
+
+    public function test_auto_settle_leaves_a_mixed_currency_schedule_alone(): void
+    {
+        $this->allowAutoSettle();
+        $student = $this->student();
+        $series = $this->series($student, 2);
+        $this->prepayments()->setAutoSettle($series, $student, true);
+        $this->fundWallet($student, 300000);
+
+        $series->bookings()->orderBy('starts_at')->first()->forceFill(['currency' => 'USD'])->save();
+
+        $result = $this->prepayments()->autoSettle($series->refresh());
+
+        $this->assertSame(0, $result->paidCount());
+        $this->assertSame(300000, (int) Wallet::query()->where('user_id', $student->id)->value('available_balance_minor'));
+    }
+
+    public function test_running_auto_settle_twice_does_not_charge_twice(): void
+    {
+        $this->allowAutoSettle();
+        $student = $this->student();
+        $series = $this->series($student, 3);
+        $this->prepayments()->setAutoSettle($series, $student, true);
+        $this->fundWallet($student, 200000);
+
+        $this->prepayments()->autoSettle($series->refresh());
+        $balance = (int) Wallet::query()->where('user_id', $student->id)->value('available_balance_minor');
+
+        $this->prepayments()->autoSettle($series->refresh());
+
+        $this->assertSame($balance, (int) Wallet::query()->where('user_id', $student->id)->value('available_balance_minor'));
+    }
+
+    public function test_the_student_is_notified_of_each_class_confirmed_from_their_balance(): void
+    {
+        // Money moving unattended must never be silent. Settlement
+        // dispatches BookingPaymentSucceeded, which is the existing
+        // participant notification path.
+        Event::fake([BookingPaymentSucceeded::class]);
+
+        $this->allowAutoSettle();
+        $student = $this->student();
+        $series = $this->series($student, 2);
+        $this->prepayments()->setAutoSettle($series, $student, true);
+        $this->fundWallet($student, 200000);
+
+        $this->prepayments()->autoSettle($series->refresh());
+
+        Event::assertDispatchedTimes(BookingPaymentSucceeded::class, 2);
+    }
+
+    public function test_the_generation_job_confirms_newly_created_classes(): void
+    {
+        // End to end: the pass that fills the schedule forward is what
+        // makes this useful — new classes arrive already confirmed.
+        $this->allowAutoSettle();
+        $student = $this->student();
+
+        // Two classes already reserved, a third still to be generated —
+        // the state the hourly pass actually runs in.
+        $series = $this->series($student, 2);
+        $series->forceFill([
+            'occurrence_count' => 3,
+            'generated_through_date' => $series->bookings()->orderByDesc('starts_at')->first()->series_occurrence_date,
+        ])->save();
+
+        $this->prepayments()->setAutoSettle($series->refresh(), $student, true);
+        $this->fundWallet($student, 300000);
+
+        app(GenerateBookingSeriesOccurrences::class, ['bookingSeriesId' => (string) $series->id])
+            ->handle(app(BookingSeriesService::class), $this->prepayments());
+
+        $this->assertSame(3, $series->bookings()->count(), 'the pass should have created the third class');
+        $this->assertSame(
+            0,
+            $series->bookings()->where('payment_status', BookingPaymentStatus::Pending)->count(),
+            'classes the pass created should already be confirmed from the balance',
+        );
     }
 
     // ── What is deliberately NOT collected ─────────────────────────────────
