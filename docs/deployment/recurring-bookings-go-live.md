@@ -43,29 +43,56 @@ Record: environment name, hostname, app version/commit, operator, date.
 
 Gates `recurring_future_generation_enabled`.
 
-### Item 1 — the system cron invokes the Laravel scheduler
+### Item 1 — the Laravel scheduler is actually being invoked
+
+**Find the mechanism before checking it.** This deployment supervises
+its long-running processes with Supervisor (see
+`deployment/pulse-check.conf.example` for the house style and
+`deployment/recording-cutover.md`, which stops `siri-recordings`), so
+**`crontab -l` may legitimately be empty and that is not evidence of a
+problem.** Establish which of these is in use:
 
 ```bash
-crontab -l | grep 'schedule:run'
+# A. Supervisor — the mechanism this deployment uses for long-running work
+sudo supervisorctl status
+sudo grep -rn "schedule:work\|schedule:run" /etc/supervisor/conf.d/
+
+# B. systemd timer / service
+systemctl list-timers --all | grep -i schedule
+systemctl status <unit>
+
+# C. cron (user or system)
+crontab -l; sudo crontab -l; cat /etc/crontab; ls -la /etc/cron.d/
 ```
 
-Expected: a line like
-`* * * * * cd /path/to/app && php artisan schedule:run >> /dev/null 2>&1`
+Exactly **one** of these should own scheduling. Two mechanisms running
+together double every scheduled command; `withoutOverlapping()` prevents
+concurrent execution of the same command but not two schedulers taking
+turns.
 
-Then prove it actually fires, **without running anything yourself**:
+Record for the one you find: program/unit name, exact command, user,
+`autostart`/`autorestart`, log paths, uptime and restart count.
+
+For the Supervisor case:
 
 ```bash
-# Note the time, wait at least 2 minutes, then:
-php artisan tinker --execute='echo \App\Models\SchedulerHistory::query()
- ->orderByDesc("ran_at")->limit(5)
- ->get(["command","status","ran_at"])->toJson(JSON_PRETTY_PRINT);'
+sudo supervisorctl status <scheduler-program>
+sudo cat /etc/supervisor/conf.d/<scheduler-program>.conf
 ```
 
-**Evidence:** `ran_at` timestamps inside the last two minutes for
-commands nobody triggered by hand.
-**Fails if:** the newest row predates your wait — cron is not running.
+**Evidence:** `RUNNING` with an uptime of hours or days, a low restart
+count, the correct application `directory=` and `user=`, and no fatal
+output in its `stderr_logfile`.
+**Fails if:** the process is `FATAL`/`BACKOFF`, or restarting every few
+seconds — a crash loop looks like "configured" from a distance.
 
-### Item 2 — `booking:generate-series` runs unattended, hourly
+> `php artisan schedule:work` is a foreground loop that internally ticks
+> every minute; it is the correct Supervisor-managed equivalent of the
+> one-minute cron entry. Do **not** add a cron entry as well.
+
+### Item 2 — `booking:generate-series` is invoked BY the scheduler
+
+Registration first:
 
 ```bash
 php artisan schedule:list | grep booking:generate-series
@@ -73,29 +100,56 @@ php artisan schedule:list | grep booking:generate-series
 
 Expected: `0 * * * *` with a "Next Due" in the future.
 
-Wait for **two** scheduled hours to pass, then:
+Registration is not execution. Prove the scheduler actually fires it —
+**a manual `php artisan booking:generate-series` proves the command
+works and proves nothing about the schedule.**
 
 ```bash
-tail -n 40 storage/logs/booking-series-generation.log
-
+# Global heartbeat: is ANY scheduled task running right now?
 php artisan tinker --execute='echo \App\Models\SchedulerHistory::query()
- ->where("command","like","%generate-series%")
+ ->where("triggered_by","!=","manual")->orderByDesc("ran_at")->limit(5)
+ ->get(["command","status","ran_at"])->toJson(JSON_PRETTY_PRINT);'
+
+# This command specifically.
+php artisan tinker --execute='echo \App\Models\SchedulerHistory::query()
+ ->where("command","like","%generate-series%")->where("triggered_by","!=","manual")
  ->orderByDesc("ran_at")->limit(5)
  ->get(["status","duration_ms","ran_at"])->toJson(JSON_PRETTY_PRINT);'
+
+tail -n 40 storage/logs/booking-series-generation.log
 ```
 
-**Evidence:** two entries roughly 60 minutes apart, `status` successful,
-with no manual invocation in your shell history between them.
-**Why two:** one entry only proves it ran once; two prove a *schedule*.
+**Evidence:** a heartbeat row within the last few minutes, and **two**
+`booking:generate-series` rows roughly 60 minutes apart with
+`triggered_by` other than `manual`. One row proves it ran once; two
+prove a *schedule*.
+**Fails if:** the heartbeat is stale (the scheduler is down) or the
+generate-series rows are absent while other commands are present (the
+command is not reaching the schedule).
+
+Or ask the platform directly — this is the same question, answered in
+one command:
+
+```bash
+php artisan platform:health-check
+```
 
 ### Item 3 — queue workers are supervised and survive restarts
 
-Generation dispatches `GenerateBookingSeriesOccurrences` onto the
-**`notifications`** queue. Both series generation and every booking
-notification depend on that worker.
+`booking:generate-series` does **not** generate anything itself: it
+dispatches one `GenerateBookingSeriesOccurrences` job per active
+schedule onto the **`notifications`** queue, and that job re-dispatches
+itself while the horizon still has room. So a healthy scheduler with no
+worker on that queue produces a growing backlog and **zero** new
+classes.
+
+The queue name matters. A worker consuming only `default` — which is
+what `php artisan queue:listen` gives you with no arguments — will never
+touch these jobs.
 
 ```bash
-sudo supervisorctl status                 # or: systemctl status <unit>
+sudo supervisorctl status                 # find the worker program
+sudo grep -rn "queue:work" /etc/supervisor/conf.d/   # confirm --queue includes notifications
 php artisan queue:monitor notifications
 ```
 
@@ -367,13 +421,52 @@ Neither requires a deploy, a migration, or a queue drain.
 
 ---
 
-## Recommended monitoring before go-live
+## Monitoring: what to watch, and how
 
-Not built — these are the alerts worth adding, and their absence is a
-known operational risk rather than an oversight:
+The dangerous failure is not a crash — those are recorded and visible.
+It is the scheduler quietly **stopping**, which produces no failed row,
+no exception and no log line. Silence looked exactly like health.
 
-1. **Stalled generation** — active series with
-   `last_generated_at < now() - 3 hours`.
-2. **Repeated generation failure** — `generation_failures > 3`.
-3. **Refund owed** — any open `refund_not_completed` reconciliation issue.
-4. **Queue depth / age** on the `notifications` queue.
+`platform:health-check` is the signal for that. It is read-only, adds no
+table and no daemon, and computes its verdict from records the platform
+already keeps (`scheduler_histories`, `jobs`, `failed_jobs`,
+`booking_series`, reconciliation issues).
+
+```bash
+php artisan platform:health-check          # human-readable table
+php artisan platform:health-check --json   # for a monitor to parse
+```
+
+Exit codes are the contract:
+
+| Code | Meaning | Suggested action |
+|---|---|---|
+| `0` | ok | none |
+| `1` | warning — failures recorded, or money owed | look within the working day |
+| `2` | critical — something has stopped, or never ran | page |
+
+Checks performed:
+
+| Check | Critical when |
+|---|---|
+| `scheduler_heartbeat` | no non-manual scheduled task for >15 min, or none ever |
+| `recurring_generation_scheduled` | `booking:generate-series` not scheduled-run for >150 min, or never |
+| `queue_backlog` | oldest waiting job older than 30 min (nothing is draining) |
+| `recurring_schedules` | a series with `generation_failures > 3` (warning if merely stalled 6h) |
+| `scheduler_failures_24h` / `failed_jobs_24h` / `reconciliation_issues` | warning only |
+
+A **manual** run never counts as a heartbeat. Counting it would let a
+dead scheduler look alive for as long as an operator kept poking it.
+
+**What must still be wired up externally** — this command reports, it
+does not page. Point whatever the deployment already uses at it:
+
+```bash
+# Example: cron entry on the app server, alerting on non-zero exit.
+*/10 * * * * cd <APP_PATH> && php artisan platform:health-check --json > /tmp/siri-health.json 2>&1 || <your-alert-command>
+```
+
+Also confirm **Supervisor itself is externally monitored** — if the
+scheduler program dies and nothing watches Supervisor, the health check
+dies with it. A process-level monitor and this application-level check
+answer different questions and you want both.

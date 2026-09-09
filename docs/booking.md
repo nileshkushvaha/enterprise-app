@@ -194,12 +194,12 @@ Deployment evidence — each needs an artefact, not an assumption:
 
 | # | Check | Evidence to keep |
 |---|---|---|
-| 1 | The system cron invokes the scheduler | `crontab -l` shows `* * * * * … schedule:run`; `storage/logs/booking-series-generation.log` gains entries on the hour **without anyone running the command** |
-| 2 | The task fires on schedule | Two consecutive hourly entries in that log, timestamps ~60 min apart |
+| 1 | The Laravel scheduler is actually invoked | **This deployment supervises long-running processes with Supervisor, so an empty `crontab -l` is not evidence of a problem.** Identify the one mechanism in use (`supervisorctl status`, systemd timer, or cron), then show it `RUNNING` with real uptime and no crash loop |
+| 2 | The task fires on schedule | Two `scheduler_histories` rows for `booking:generate-series` ~60 min apart with `triggered_by != 'manual'`. A manual run proves the command, never the schedule |
 | 3 | Scheduler Monitor sees it | `booking:generate-series` listed with a recent successful run (`/admin` → Scheduler Monitor, `scheduler_histories`) |
-| 4 | Queue worker is running and supervised | `php artisan queue:monitor notifications`; kill the worker and confirm the supervisor restarts it |
+| 4 | Queue worker is running and supervised | The command only DISPATCHES; the work happens on the **`notifications`** queue. A worker consuming only `default` never touches it. `php artisan queue:monitor notifications`; kill it and confirm Supervisor restarts it |
 | 5 | **Future classes are actually generated** | Create a test schedule longer than the horizon; wait for at least one hourly run; confirm new `bookings` rows appear for it with no manual command. Query: `select count(*) from bookings where booking_series_id = ?` before and after |
-| 6 | Generation is failing loudly, not quietly | `select id, generation_failures, last_generated_at from booking_series where status = 'active'` — `last_generated_at` must be recent for every active series |
+| 6 | Generation is failing loudly, not quietly | `php artisan platform:health-check` — exit 0/1/2 covers scheduler staleness, the sweep's own staleness, queue backlog and stalled series |
 | 7 | **Notification delivery works end to end** | Put the test instructor on leave for a future date of that schedule, wait for the sweep, and confirm the student receives the message on a real channel (inbox, not just `notifications` table). Then confirm `booking_series_exceptions.notified_at` is set and a second sweep sends nothing |
 | 8 | Recovery works | Lift the leave, use **Try again** on that date, and confirm a booking is created and the exception row is gone |
 
