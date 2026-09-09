@@ -213,8 +213,22 @@ event is attached to that space (`conferenceData` with the space's
 meeting code and URI). The meeting code is the space's own, so
 discovery is unchanged.
 
-Nobody presses Record. Recording starts when the conference starts and
-Google generates the file when it ends.
+Nobody presses Record — but **Meet records only while the host (or a
+co-host from the host's organisation) is in the call**. Verified live
+on 2026-09-05: a space with auto-recording ON recorded when
+meetings@sirieducation.com joined, and did not when only outside
+accounts (instructor, student) were present. Automatic recording
+therefore starts the moment the platform host joins, and Google
+generates the file when the conference ends.
+
+**Current operating procedure (decision 2026-09-10, "option 3"):** a
+platform staff member signed in as the platform Workspace account joins
+every class that must be recorded, muted and camera-off, as SRS §12.17
+already describes for observer access. Anything said before the host
+joins is not recorded. The alternatives — a Workspace account per
+instructor so the instructor is the host, or Zoom's join-before-host
+cloud recording — are documented in `docs/meetings.md` §3 for when
+staffing does not scale.
 
 **Fallback, always.** The space is an optimisation of how recording
 starts, never a condition for the meeting to exist. If the space cannot

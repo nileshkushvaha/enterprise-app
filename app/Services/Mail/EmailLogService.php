@@ -33,7 +33,7 @@ final class EmailLogService
                 'id' => $event->notification->id,
                 'notification_type' => $event->notification::class,
                 'category' => $this->category($event->notification),
-                'provider' => app()->environment('production') ? 'resend' : (string) config('mail.default'),
+                'provider' => $this->provider(),
                 'mailer' => (string) config('mail.default'),
                 'status' => 'pending',
                 'queued' => in_array(ShouldQueue::class, class_implements($event->notification), true),
@@ -162,7 +162,7 @@ final class EmailLogService
         return array_merge([
             'notification_type' => $data['__laravel_notification'] ?? null,
             'category' => $this->categoryFromClass((string) ($data['__laravel_notification'] ?? '')),
-            'provider' => app()->environment('production') ? 'resend' : (string) config('mail.default'),
+            'provider' => $this->provider(),
             'mailer' => (string) config('mail.default'),
             'subject' => $message->getSubject(),
             'from_address' => $from instanceof Address ? $from->getAddress() : null,
@@ -173,6 +173,28 @@ final class EmailLogService
             'queued' => (bool) ($data['__laravel_notification_queued'] ?? false),
             'metadata' => ['laravel_mail_data_keys' => array_keys($data)],
         ], $overrides);
+    }
+
+    /**
+     * The transport that actually carried this message.
+     *
+     * Previously hardcoded to 'resend' whenever the app was in
+     * production, on the assumption that production always sent through
+     * Resend. The moment the deployment switched to an SMTP relay that
+     * assumption became a lie told by the audit log itself — every
+     * message was still recorded as Resend, while the adjacent `mailer`
+     * column quietly said otherwise.
+     *
+     * Read from configuration instead, so it stays true whatever the
+     * deployment is pointed at: `smtp` for a relay (Google, SES SMTP,
+     * anything else), `resend` for the Resend API, and so on. Falls back
+     * to the mailer's own name when a mailer declares no transport.
+     */
+    private function provider(): string
+    {
+        $mailer = (string) config('mail.default');
+
+        return (string) config("mail.mailers.{$mailer}.transport", $mailer) ?: $mailer;
     }
 
     /**

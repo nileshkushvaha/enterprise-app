@@ -255,10 +255,12 @@ activation, not a deploy step.
 
 ## 10. One controlled production lesson
 
-- [ ] Instructor joins; recording starts **automatically** (the space was
-  created through the Meet API with auto-recording ON). If the red
-  Recording indicator does not appear, the meeting fell back to a
-  Calendar-created conference — check the application log for the
+- [ ] **A platform staff member joins as the platform account (host).**
+  Meet records only while the host is present; recording starts
+  automatically the moment the host joins (the space was created
+  through the Meet API with auto-recording ON). If the red Recording
+  indicator does not appear after the host joins, the meeting fell back
+  to a Calendar-created conference — check the application log for the
   auto-record warning and press Record manually for this run.
 
 - [ ] Record a short session, stop, end the conference

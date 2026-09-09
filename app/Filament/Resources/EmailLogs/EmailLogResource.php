@@ -76,9 +76,14 @@ class EmailLogResource extends Resource
             TextEntry::make('subject')->columnSpanFull(),
             TextEntry::make('from_address')->label('From'),
             TextEntry::make('from_name'),
-            KeyValueEntry::make('to')->columnSpanFull(),
-            KeyValueEntry::make('cc')->columnSpanFull(),
-            KeyValueEntry::make('bcc')->columnSpanFull(),
+            // Recipients are stored as a LIST of {address, name} objects
+            // (EmailLogService::addresses()), not a flat map. Rendering
+            // them with KeyValueEntry handed Filament an array where it
+            // expected a string and took the whole page down with
+            // "htmlspecialchars(): must be of type string, array given".
+            self::recipientEntry('to', 'To'),
+            self::recipientEntry('cc', 'CC'),
+            self::recipientEntry('bcc', 'BCC'),
             TextEntry::make('notification_type')
                 ->label('Notification Type')
                 ->formatStateUsing(fn (?string $state): ?string => $state !== null ? class_basename($state) : null)
@@ -90,8 +95,71 @@ class EmailLogResource extends Resource
             TextEntry::make('sent_at')->dateTime(),
             TextEntry::make('delivered_at')->dateTime(),
             TextEntry::make('failed_at')->dateTime(),
-            KeyValueEntry::make('metadata')->columnSpanFull(),
+            // Metadata is nested (laravel_mail_data_keys => [...]), which
+            // KeyValueEntry cannot render either — same crash, different
+            // column, and this one fires for EVERY real message.
+            KeyValueEntry::make('metadata')
+                ->state(fn (EmailLog $record): array => self::flattenForDisplay($record->metadata ?? []))
+                ->columnSpanFull(),
         ]);
+    }
+
+    /**
+     * Key/value display needs scalar values; anything nested is shown as
+     * compact JSON rather than crashing the page.
+     *
+     * @param  array<string, mixed>  $values
+     * @return array<string, string>
+     */
+    private static function flattenForDisplay(array $values): array
+    {
+        $flat = [];
+
+        foreach ($values as $key => $value) {
+            $flat[(string) $key] = match (true) {
+                is_bool($value) => $value ? 'true' : 'false',
+                $value === null => '—',
+                is_scalar($value) => (string) $value,
+                default => (string) json_encode($value, JSON_UNESCAPED_SLASHES),
+            };
+        }
+
+        return $flat;
+    }
+
+    /**
+     * One recipient per line, as "Name <address>" — or just the address
+     * when the sender supplied no name.
+     */
+    private static function recipientEntry(string $name, string $label): TextEntry
+    {
+        return TextEntry::make($name)
+            ->label($label)
+            ->state(fn (EmailLog $record): array => collect($record->{$name} ?? [])
+                ->map(function (mixed $recipient): ?string {
+                    if (is_string($recipient)) {
+                        return $recipient;
+                    }
+
+                    if (! is_array($recipient)) {
+                        return null;
+                    }
+
+                    $address = (string) ($recipient['address'] ?? '');
+                    $person = trim((string) ($recipient['name'] ?? ''));
+
+                    return match (true) {
+                        $address === '' => null,
+                        $person === '' => $address,
+                        default => sprintf('%s <%s>', $person, $address),
+                    };
+                })
+                ->filter()
+                ->values()
+                ->all())
+            ->listWithLineBreaks()
+            ->placeholder('—')
+            ->columnSpanFull();
     }
 
     public static function table(Table $table): Table

@@ -111,6 +111,29 @@ recording allowed in the Workspace admin console; without them the
 lesson falls back to a Calendar-created conference recorded manually.
 Detail: `docs/recordings.md` §3.
 
+### Recording needs a host present (decision 2026-09-10)
+
+Google Meet records only while the host or an in-organisation co-host
+is in the call, whatever the space's auto-recording setting. Chosen for
+now: **a platform staff member joins each recorded class as the
+platform account** (host), muted and camera-off. Spaces stay `OPEN` so
+participants can gather before the host arrives; recording begins when
+the host joins.
+
+Alternatives, in order of preference if staffing does not scale:
+
+1. **Instructor Workspace accounts.** Create `name@sirieducation.com`
+   for each active instructor (Meet-recording-capable edition) and let
+   SIRI create the lesson's space impersonating that account, making
+   the instructor the host. Moderate code change (delegated subject per
+   lesson; Meet original in the instructor's org Drive, SIRI copy as
+   now). Licence cost per instructor.
+2. **Zoom** (`ZoomMeetingProvider`, already implemented, never run
+   against a real account): join-before-host with cloud auto-recording
+   starts without the host; licences per concurrent host.
+3. **Embedded classroom** (100ms / Daily / LiveKit): server-side
+   recording, no host concept; the SRS's future provider strategy.
+
 ### Teacher co-host — deferred (decision 2026-09-05)
 
 Giving the instructor host controls (admit, mute, remove, end) needs the
