@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Support;
 
 use App\Booking\Contracts\GoogleMeetClient;
+use App\Booking\Enums\GoogleMeetSpaceAccess;
 use App\Booking\Exceptions\GatewayRequestException;
 
 /**
@@ -58,9 +59,13 @@ final class FakeGoogleMeetClient implements GoogleMeetClient
         return ['https://www.googleapis.com/auth/meetings.space.readonly', 'https://www.googleapis.com/auth/meetings.space.created', 'https://www.googleapis.com/auth/meetings.space.settings'];
     }
 
-    public function createSpace(string $credentialsJson, string $delegatedSubject, bool $autoRecording): array
+    /** @var list<string> access types requested, in order */
+    public array $spaceAccessTypes = [];
+
+    public function createSpace(string $credentialsJson, string $delegatedSubject, bool $autoRecording, GoogleMeetSpaceAccess $access): array
     {
         $this->calls[] = 'createSpace';
+        $this->spaceAccessTypes[] = $access->value;
 
         if ($this->throwOnCreateSpace !== null) {
             throw $this->throwOnCreateSpace;

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Pages\Settings;
 
+use App\Booking\Enums\GoogleMeetSpaceAccess;
 use App\Booking\Services\GoogleCalendarConfigurationService;
 use App\Booking\Services\RecordingAvailabilityResolver;
 use App\Booking\Services\ZoomConfigurationService;
@@ -97,6 +98,7 @@ class MeetingSettingsPage extends Page
             'instructor_join_url_visible' => $meeting->instructor_join_url_visible,
             'google_meet_enabled' => $meeting->google_meet_enabled,
             'google_meet_recording_enabled' => $meeting->google_meet_recording_enabled,
+            'google_meet_space_access' => GoogleMeetSpaceAccess::fromSetting($meeting->google_meet_space_access)->value,
             'recording_drive_root_folder_id' => $meeting->recording_drive_root_folder_id,
             'recording_drive_shared_drive_id' => $meeting->recording_drive_shared_drive_id,
             'google_calendar_id' => $meeting->google_calendar_id,
@@ -225,6 +227,12 @@ class MeetingSettingsPage extends Page
                         Toggle::make('google_meet_recording_enabled')
                             ->label('Google Meet Recording')
                             ->helperText('Fetch Meet recordings from Drive after each lesson. The service account needs the Meet and Drive read scopes.'),
+                        Select::make('google_meet_space_access')
+                            ->label('Meet Space Access')
+                            ->options(GoogleMeetSpaceAccess::options())
+                            ->helperText('Who may join a lesson\'s Meet and whether it can start without the platform host. Google records only while the host is present, so "Host admits participants" keeps the whole lesson on the recording; "Anyone with the link" lets a class run without staff but records only from the moment the host joins. Applies to new lessons.')
+                            ->required()
+                            ->native(false),
                         TextInput::make('recording_drive_root_folder_id')
                             ->label('Recording Drive Root Folder ID')
                             ->helperText('The Google Drive folder (owned by the platform account, ideally in a Shared Drive) under which SIRI keeps its recording copies as YYYY/MM. Copy the id from the folder URL. Empty means Drive recording storage is not configured and ingestion fails closed.')
@@ -412,6 +420,7 @@ class MeetingSettingsPage extends Page
 
             $settings->google_meet_enabled = (bool) ($data['google_meet_enabled'] ?? false);
             $settings->google_meet_recording_enabled = (bool) ($data['google_meet_recording_enabled'] ?? false);
+            $settings->google_meet_space_access = GoogleMeetSpaceAccess::fromSetting($data['google_meet_space_access'] ?? null)->value;
             $settings->recording_drive_root_folder_id = filled($data['recording_drive_root_folder_id'] ?? null) ? trim((string) $data['recording_drive_root_folder_id']) : null;
             $settings->recording_drive_shared_drive_id = filled($data['recording_drive_shared_drive_id'] ?? null) ? trim((string) $data['recording_drive_shared_drive_id']) : null;
             $settings->google_auth_type = $data['google_auth_type'];

@@ -116,9 +116,14 @@ Detail: `docs/recordings.md` §3.
 Google Meet records only while the host or an in-organisation co-host
 is in the call, whatever the space's auto-recording setting. Chosen for
 now: **a platform staff member joins each recorded class as the
-platform account** (host), muted and camera-off. Spaces stay `OPEN` so
-participants can gather before the host arrives; recording begins when
-the host joins.
+platform account** (host), muted and camera-off. Space access is an
+admin setting (Settings → Meetings → **Meet Space Access**,
+`meeting.google_meet_space_access`, `GoogleMeetSpaceAccess`):
+*Host admits participants* (default) — participants wait until the host
+has started the class and admits them, so only the host starts a class
+and the whole lesson is recorded; *Anyone with the link* — the class
+can run without staff, recording from the moment the host joins;
+*Invited members only*. Applies to new lessons.
 
 Alternatives, in order of preference if staffing does not scale:
 
@@ -142,7 +147,8 @@ Meet REST API v2 (verified live: `/v2/spaces/{space}/members` is a plain
 404); it exists only in `v2beta` under the Workspace Developer Preview
 Program, which is not for production. Decision: wait for general
 availability rather than run a preview API in production. Classes do not
-depend on it — spaces are OPEN and auto-record without a host.
+depend on it — the platform host starts each class and auto-recording
+begins when the host joins.
 
 Design when it ships: a nullable "Google account for Meet" on the
 instructor profile (defaulting to the registered email), one

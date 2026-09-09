@@ -163,6 +163,14 @@ class MeetingSettings extends Settings
     public bool $google_meet_recording_enabled;
 
     /**
+     * Who may join a lesson's Meet space and whether it can start
+     * without the platform host: 'trusted' (host admits — default),
+     * 'open' (anyone with the link, no host needed), 'restricted'.
+     * See App\Booking\Enums\GoogleMeetSpaceAccess.
+     */
+    public string $google_meet_space_access;
+
+    /**
      * The Zoom counterpart of google_meet_recording_enabled. Ships OFF:
      * needs a licensed Zoom account with cloud recording, a webhook
      * subscription, and the account privacy settings that keep hosts

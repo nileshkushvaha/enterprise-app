@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Booking\Gateways;
 
 use App\Booking\Contracts\GoogleMeetClient;
+use App\Booking\Enums\GoogleMeetSpaceAccess;
 use App\Booking\Exceptions\GatewayRequestException;
 use Google\Client;
 use Google\Service\Exception as GoogleServiceException;
@@ -95,18 +96,12 @@ final class GoogleMeetSdkClient implements GoogleMeetClient
         }
     }
 
-    public function createSpace(string $credentialsJson, string $delegatedSubject, bool $autoRecording): array
+    public function createSpace(string $credentialsJson, string $delegatedSubject, bool $autoRecording, GoogleMeetSpaceAccess $access): array
     {
         try {
             $space = new Space;
             $config = new SpaceConfig;
-
-            // Lessons must start without the platform account present:
-            // participants are outside the Workspace and never hold its
-            // login. See config/recordings.php "meet.space_access_type".
-            $access = (string) config('recordings.meet.space_access_type', 'OPEN');
-            $config->setAccessType(in_array($access, ['OPEN', 'TRUSTED', 'RESTRICTED'], true) ? $access : 'OPEN');
-            $config->setEntryPointAccess('ALL');
+            $config->setAccessType($access->apiValue());
 
             if ($autoRecording) {
                 $recording = new RecordingConfig;

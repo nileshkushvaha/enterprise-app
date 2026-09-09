@@ -17,6 +17,7 @@ use App\Booking\DTOs\MeetingCreationResult;
 use App\Booking\DTOs\MeetingUpdateContext;
 use App\Booking\DTOs\ProviderRecordingResult;
 use App\Booking\DTOs\StagedRecordingFile;
+use App\Booking\Enums\GoogleMeetSpaceAccess;
 use App\Booking\Enums\MeetingStatus;
 use App\Booking\Exceptions\BookingException;
 use App\Booking\Meetings\Concerns\BuildsSafeMeetingContent;
@@ -193,7 +194,12 @@ final class GoogleCalendarMeetProvider implements DiscoversRecordingArtifacts, E
         }
 
         try {
-            return $this->meet->createSpace($credentials, $subject, autoRecording: true);
+            return $this->meet->createSpace(
+                $credentials,
+                $subject,
+                autoRecording: true,
+                access: GoogleMeetSpaceAccess::fromSetting($this->settings->google_meet_space_access),
+            );
         } catch (Throwable $e) {
             Log::warning('Google Meet auto-recording space could not be created; falling back to a Calendar-created conference (manual Record).', [
                 'booking_id' => $booking->id,

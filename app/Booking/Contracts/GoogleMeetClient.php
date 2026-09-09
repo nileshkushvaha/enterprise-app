@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Booking\Contracts;
 
+use App\Booking\Enums\GoogleMeetSpaceAccess;
 use App\Booking\Exceptions\GatewayRequestException;
 
 /**
@@ -99,7 +100,7 @@ interface GoogleMeetClient
      *
      * @throws GatewayRequestException
      */
-    public function createSpace(string $credentialsJson, string $delegatedSubject, bool $autoRecording): array;
+    public function createSpace(string $credentialsJson, string $delegatedSubject, bool $autoRecording, GoogleMeetSpaceAccess $access): array;
 
     /**
      * Ends whatever conference is running in the space right now, which

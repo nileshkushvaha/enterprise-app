@@ -243,17 +243,12 @@ on their own token and space creation uses `meetings.space.settings` on
 its own, so a delegation grant that lacks the settings scope degrades to
 manual recording instead of breaking discovery for every lesson.
 
-**Starting without the platform account.** Instructors and students
-are outside the Workspace and never hold the platform login, so the
-space is created with `accessType: OPEN` and `entryPointAccess: ALL`
-(`recordings.meet.space_access_type`, env `RECORDING_MEET_SPACE_ACCESS`):
-anyone with the link joins without knocking and the meeting — and its
-auto-recording — starts with the first participant, no host required.
-SIRI shows the link only to the lesson's confirmed participants, which
-is the access control; a leaked link would let a stranger into a class
-(visibly, and on the recording), which is the trade-off for a hostless
-start. Meet's default `TRUSTED` (outsiders knock) is available by
-configuration but requires a Workspace member present.
+**Starting a class.** Who may join the space, and whether it can start
+without the platform host, is the admin setting **Meet Space Access**
+(`meeting.google_meet_space_access`, default *Host admits
+participants*). Meet records only while the host is present, so the
+default is what puts the whole lesson on the recording
+(docs/meetings.md §3).
 
 **Auto-recording is bounded by the lesson's window.** A space that
 records every conference automatically would keep recording anything
