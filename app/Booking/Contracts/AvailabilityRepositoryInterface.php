@@ -45,6 +45,23 @@ interface AvailabilityRepositoryInterface
     public function calendarTimezoneFor(int $teacherId): string;
 
     /**
+     * Turns on a read cache for ONE bounded, read-only pass over an
+     * instructor's calendar — a wizard preview, a schedule listing.
+     *
+     * Only the STATIC inputs are cached: weekly windows, org holidays
+     * and leave. Bookings are deliberately never cached, because the
+     * paths that create them must always see what the previous
+     * occurrence just booked.
+     *
+     * Scoped to this repository instance and to the range given, so a
+     * question asked outside [$from, $to] still hits the database. Must
+     * be paired with endCachedReads().
+     */
+    public function beginCachedReads(int $teacherId, CarbonImmutable $from, CarbonImmutable $to): void;
+
+    public function endCachedReads(): void;
+
+    /**
      * The given moment falls on an organisation-wide holiday, judged by
      * the LOCAL calendar date in $timezone — never the UTC date of the
      * instant (TZ-AUD-005).

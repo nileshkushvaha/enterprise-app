@@ -13,6 +13,7 @@ use App\Booking\Exceptions\SlotUnavailableException;
 use App\Booking\Validation\Rules\BookingWindowRule;
 use App\Support\Timezone\LocalWallClock;
 use Carbon\CarbonImmutable;
+use Closure;
 
 /**
  * Answers one question for one date: can this class actually happen,
@@ -47,6 +48,24 @@ final class SeriesOccurrenceConflictChecker
      *                               them against the advance-booking limit would report a conflict
      *                               that does not exist and will not exist by the time they are booked.
      */
+    /**
+     * Runs $work with the instructor's static availability loaded once
+     * for [$from, $to] instead of re-read for every date.
+     *
+     * Read-only by contract — see AvailabilityServiceInterface::
+     * withCachedReads(). Bookings are still read live, so a conflict
+     * created between two dates of the same pass is still seen.
+     *
+     * @template TReturn
+     *
+     * @param  Closure(): TReturn  $work
+     * @return TReturn
+     */
+    public function batched(int $instructorId, CarbonImmutable $from, CarbonImmutable $to, Closure $work): mixed
+    {
+        return $this->availability->withCachedReads($instructorId, $from, $to, $work);
+    }
+
     public function evaluate(
         RecurrenceOccurrenceData $occurrence,
         int $instructorId,

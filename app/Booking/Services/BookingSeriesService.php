@@ -30,6 +30,7 @@ use App\Models\BookingSeriesException;
 use App\Settings\BookingSettings;
 use App\Support\Timezone\LocalWallClock;
 use Carbon\CarbonImmutable;
+use Closure;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
@@ -244,20 +245,28 @@ final class BookingSeriesService
         $hasMore = count($window) > $offset + $perPage;
         $pageOccurrences = array_slice($window, $offset, $perPage);
 
-        $evaluated = [];
+        // The instructor's windows, holidays and leave cannot change
+        // between the first date of this page and the last, so they are
+        // read once for the whole page rather than per date. Bookings
+        // are still read live.
+        $evaluated = $this->batchedOver($pageOccurrences, $instructorId, $durationMinutes, function () use ($pageOccurrences, $horizonDate, $instructorId, $studentId, $durationMinutes, $bufferMinutes, $isDemo): array {
+            $rows = [];
 
-        foreach ($pageOccurrences as $occurrence) {
-            $evaluated[] = $occurrence->localDate > $horizonDate
-                ? $this->plannedOccurrence($occurrence, $durationMinutes)
-                : $this->conflicts->evaluate(
-                    $occurrence,
-                    $instructorId,
-                    $studentId,
-                    $durationMinutes,
-                    $bufferMinutes,
-                    isDemo: $isDemo,
-                );
-        }
+            foreach ($pageOccurrences as $occurrence) {
+                $rows[] = $occurrence->localDate > $horizonDate
+                    ? $this->plannedOccurrence($occurrence, $durationMinutes)
+                    : $this->conflicts->evaluate(
+                        $occurrence,
+                        $instructorId,
+                        $studentId,
+                        $durationMinutes,
+                        $bufferMinutes,
+                        isDemo: $isDemo,
+                    );
+            }
+
+            return $rows;
+        });
 
         // A date the student removed is no longer part of the schedule,
         // so the scheduler does not produce it — but it still has to be
@@ -334,25 +343,32 @@ final class BookingSeriesService
         $bookable = 0;
         $plannedInsideHorizon = 0;
 
-        foreach ($withinHorizon as $occurrence) {
-            $evaluated = $this->conflicts->evaluate(
-                $occurrence,
-                $instructorId,
-                $studentId,
-                $durationMinutes,
-                $bufferMinutes,
-                isDemo: $isDemo,
-            );
+        // The dominant cost of a preview: every date inside the horizon
+        // is checked so the badge does not change as the student pages.
+        // The instructor's windows, holidays and leave are the same for
+        // all of them, so they are loaded once here.
+        $this->batchedOver($withinHorizon, $instructorId, $durationMinutes, function () use ($withinHorizon, $instructorId, $studentId, $durationMinutes, $bufferMinutes, $isDemo, &$conflicts, &$bookable, &$plannedInsideHorizon): void {
+            foreach ($withinHorizon as $occurrence) {
+                $evaluated = $this->conflicts->evaluate(
+                    $occurrence,
+                    $instructorId,
+                    $studentId,
+                    $durationMinutes,
+                    $bufferMinutes,
+                    isDemo: $isDemo,
+                );
 
-            match (true) {
-                $evaluated->isConflict() => $conflicts++,
-                $evaluated->isBookable() => $bookable++,
-                // Inside the horizon by date, but still not reservable —
-                // a date at the very edge of the platform's advance
-                // window. Planned, not bookable and not a problem.
-                default => $plannedInsideHorizon++,
-            };
-        }
+                match (true) {
+                    $evaluated->isConflict() => $conflicts++,
+                    $evaluated->isBookable() => $bookable++,
+                    // Inside the horizon by date, but still not
+                    // reservable — a date at the very edge of the
+                    // platform's advance window. Planned, not bookable
+                    // and not a problem.
+                    default => $plannedInsideHorizon++,
+                };
+            }
+        });
 
         $total = $this->scheduler->totalOccurrences($rule, $skippedDates);
         $planned = $plannedInsideHorizon + ($total === null ? 0 : max(0, $total - count($withinHorizon)));
@@ -1190,6 +1206,39 @@ final class BookingSeriesService
         );
 
         return array_values($occurrences);
+    }
+
+    /**
+     * Runs $work with the instructor's static availability loaded once
+     * for the span these occurrences cover.
+     *
+     * A no-op when nothing is representable — there is no span to load,
+     * and asking for one would mean inventing bounds.
+     *
+     * @param  list<RecurrenceOccurrenceData>  $occurrences
+     *
+     * @template TReturn
+     *
+     * @param  Closure(): TReturn  $work
+     * @return TReturn
+     */
+    private function batchedOver(array $occurrences, int $instructorId, int $durationMinutes, Closure $work): mixed
+    {
+        $instants = array_values(array_filter(array_map(
+            static fn (RecurrenceOccurrenceData $occurrence): ?CarbonImmutable => $occurrence->startsAt,
+            $occurrences,
+        )));
+
+        if ($instants === []) {
+            return $work();
+        }
+
+        return $this->conflicts->batched(
+            $instructorId,
+            min($instants)->subDay(),
+            max($instants)->addMinutes($durationMinutes)->addDay(),
+            $work,
+        );
     }
 
     /** @throws BookingException */

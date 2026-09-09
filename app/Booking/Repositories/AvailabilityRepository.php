@@ -18,6 +18,75 @@ use Illuminate\Support\Collection;
 
 final class AvailabilityRepository implements AvailabilityRepositoryInterface
 {
+    /**
+     * Read cache for one bounded, read-only availability pass.
+     *
+     * A wizard preview asks the same questions of the same instructor
+     * for twenty-odd dates in a row, and the STATIC answers — which
+     * weekly windows exist, which days are holidays, when the instructor
+     * is on leave — cannot change between the first date and the last.
+     * Re-querying them per date cost a 20-row preview several hundred
+     * queries.
+     *
+     * Deliberately opt-in and instance-scoped rather than a global
+     * cache. The same repository methods are used by the booking path
+     * under the instructor lock, where a stale read would be a
+     * correctness bug; that path simply never opens this bracket, and
+     * holds its own instance anyway.
+     *
+     * Bookings are never cached here for the same reason: creating one
+     * occurrence has to be visible to the next.
+     */
+    private bool $cachingReads = false;
+
+    private ?int $cachedTeacherId = null;
+
+    private ?CarbonImmutable $cachedFrom = null;
+
+    private ?CarbonImmutable $cachedTo = null;
+
+    /** @var Collection<int, TeacherAvailability>|null */
+    private ?Collection $cachedWindowRows = null;
+
+    /** @var Collection<int, string>|null `Y-m-d` holiday dates in range */
+    private ?Collection $cachedHolidayDates = null;
+
+    /** @var Collection<int, TeacherUnavailability>|null */
+    private ?Collection $cachedBlackouts = null;
+
+    public function beginCachedReads(int $teacherId, CarbonImmutable $from, CarbonImmutable $to): void
+    {
+        $this->cachingReads = true;
+        $this->cachedTeacherId = $teacherId;
+        $this->cachedFrom = $from;
+        $this->cachedTo = $to;
+        $this->cachedWindowRows = null;
+        $this->cachedHolidayDates = null;
+        $this->cachedBlackouts = null;
+    }
+
+    public function endCachedReads(): void
+    {
+        $this->cachingReads = false;
+        $this->cachedTeacherId = null;
+        $this->cachedFrom = null;
+        $this->cachedTo = null;
+        $this->cachedWindowRows = null;
+        $this->cachedHolidayDates = null;
+        $this->cachedBlackouts = null;
+    }
+
+    /** Whether a question about $teacherId over [$startsAt, $endsAt] may be answered from cache. */
+    private function servesFromCache(int $teacherId, CarbonImmutable $startsAt, CarbonImmutable $endsAt): bool
+    {
+        return $this->cachingReads
+            && $this->cachedTeacherId === $teacherId
+            && $this->cachedFrom !== null
+            && $this->cachedTo !== null
+            && ! $startsAt->lessThan($this->cachedFrom)
+            && ! $endsAt->greaterThan($this->cachedTo);
+    }
+
     public function windowsFor(int $teacherId, CarbonImmutable $from, CarbonImmutable $to): Collection
     {
         $rows = TeacherAvailability::query()
@@ -84,13 +153,35 @@ final class AvailabilityRepository implements AvailabilityRepositoryInterface
 
     public function windowCovers(int $teacherId, CarbonImmutable $startsAt, CarbonImmutable $endsAt): bool
     {
+        return $this->rowsCover($this->windowRowsFor($teacherId), $startsAt, $endsAt);
+    }
+
+    /**
+     * The instructor's published weekly windows.
+     *
+     * Loaded once per cached pass — this single query (plus its
+     * teacher/profile eager loads) was previously repeated for every
+     * date a preview checked.
+     *
+     * @return Collection<int, TeacherAvailability>
+     */
+    private function windowRowsFor(int $teacherId): Collection
+    {
+        if ($this->cachingReads && $this->cachedTeacherId === $teacherId && $this->cachedWindowRows !== null) {
+            return $this->cachedWindowRows;
+        }
+
         $rows = TeacherAvailability::query()
             ->active()
             ->forTeacher($teacherId)
             ->with('teacher.profile')
             ->get();
 
-        return $this->rowsCover($rows, $startsAt, $endsAt);
+        if ($this->cachingReads && $this->cachedTeacherId === $teacherId) {
+            $this->cachedWindowRows = $rows;
+        }
+
+        return $rows;
     }
 
     /**
@@ -191,6 +282,16 @@ final class AvailabilityRepository implements AvailabilityRepositoryInterface
 
     public function hasBlackout(int $teacherId, CarbonImmutable $startsAt, CarbonImmutable $endsAt): bool
     {
+        if ($this->servesFromCache($teacherId, $startsAt, $endsAt)) {
+            $this->cachedBlackouts ??= $this->blackoutsFor($teacherId, $this->cachedFrom, $this->cachedTo);
+
+            // Half-open, matching TeacherUnavailability::overlapping().
+            return $this->cachedBlackouts->contains(
+                static fn (TeacherUnavailability $blackout): bool => $blackout->starts_at->lessThan($endsAt)
+                    && $blackout->ends_at->greaterThan($startsAt),
+            );
+        }
+
         return TeacherUnavailability::query()
             ->forTeacher($teacherId)
             ->overlapping($startsAt, $endsAt)
@@ -276,8 +377,17 @@ final class AvailabilityRepository implements AvailabilityRepositoryInterface
         // instant; its UTC date is an artifact of storage and is a
         // different day from the instructor's for a large part of every
         // day in most of the world.
+        $localDate = LocalDay::containing($date, $timezone)->date;
+
+        if ($this->cachingReads && $this->cachedFrom !== null && $this->cachedTo !== null
+            && ! $date->lessThan($this->cachedFrom) && ! $date->greaterThan($this->cachedTo)) {
+            $this->cachedHolidayDates ??= $this->holidayDatesBetween($this->cachedFrom, $this->cachedTo);
+
+            return $this->cachedHolidayDates->contains($localDate);
+        }
+
         return Holiday::query()
-            ->onDate(LocalDay::containing($date, $timezone)->date)
+            ->onDate($localDate)
             ->exists();
     }
 

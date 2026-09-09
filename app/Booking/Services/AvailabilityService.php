@@ -18,6 +18,7 @@ use App\Models\TeacherUnavailability;
 use App\Settings\BookingSettings;
 use App\Support\Timezone\LocalDay;
 use Carbon\CarbonImmutable;
+use Closure;
 use Illuminate\Support\Collection;
 
 /**
@@ -135,6 +136,45 @@ final class AvailabilityService implements AvailabilityServiceInterface
         return $slots->values();
     }
 
+    /**
+     * Memo for the instructor-approval gate, alive only inside
+     * withCachedReads(). Never cached outside it: this is a safety
+     * check, and the booking path re-runs it under the lock on its own
+     * instance precisely so an instructor deactivated a moment ago
+     * cannot still be booked.
+     *
+     * @var array<int, bool>
+     */
+    private array $cachedApproval = [];
+
+    private bool $cachingReads = false;
+
+    public function withCachedReads(int $instructorId, CarbonImmutable $from, CarbonImmutable $to, Closure $work): mixed
+    {
+        $this->cachingReads = true;
+        $this->cachedApproval = [];
+        $this->availability->beginCachedReads($instructorId, $from, $to);
+
+        try {
+            return $work();
+        } finally {
+            // Cleared even when $work throws, so a failed preview can
+            // never leave a later call reading stale availability.
+            $this->cachingReads = false;
+            $this->cachedApproval = [];
+            $this->availability->endCachedReads();
+        }
+    }
+
+    private function isApprovedTeacher(int $instructorId): bool
+    {
+        if (! $this->cachingReads) {
+            return $this->teachers->isApprovedTeacher($instructorId);
+        }
+
+        return $this->cachedApproval[$instructorId] ??= $this->teachers->isApprovedTeacher($instructorId);
+    }
+
     public function ensureAvailable(
         int $instructorId,
         CarbonImmutable $startsAt,
@@ -155,7 +195,7 @@ final class AvailabilityService implements AvailabilityServiceInterface
         // teacher deactivated/rejected between the caller's eligibility check
         // and lock acquisition can never still be booked — this is the final
         // truth check, run both fast-fail and inside the race-safe lock.
-        if (! $this->teachers->isApprovedTeacher($instructorId)) {
+        if (! $this->isApprovedTeacher($instructorId)) {
             throw SlotUnavailableException::for($instructorId, $startsAt);
         }
 
