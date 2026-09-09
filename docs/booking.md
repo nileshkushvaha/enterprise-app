@@ -169,6 +169,11 @@ Required on every deploy, in order:
    time; hourly, idempotent) and the existing prune jobs.
 6. `npm run build` — the booking wizard ships compiled Tailwind.
 
+> **The runnable version of this checklist lives in
+> `docs/deployment/recurring-bookings-go-live.md`** — exact commands,
+> expected output and the evidence to record for each item. The summary
+> below states what is being proved and why; that document states how.
+
 ### Deployment verification checklist — before enabling ongoing/long schedules
 
 `recurring_future_generation_enabled` must stay **false** until every

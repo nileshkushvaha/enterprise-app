@@ -51,6 +51,7 @@ Root `README.md` is the short project entry point; this file is the detailed cat
 | Meeting creation internals (Manual, Google Meet, Zoom) | `architecture/meetings.md` |
 | Class recording storage (ingestion, Google Drive now / S3 later, access, retention) | `recordings.md` |
 | Recording staging validation & production cutover runbook (Google scopes, rollback) | `deployment/recording-cutover.md` |
+| Recurring-booking go-live verification (scheduler, queue, generation, auto-settlement) | `deployment/recurring-bookings-go-live.md` |
 | Zoom activation & staging validation runbook (account, scopes, webhook, privacy) | `deployment/zoom-activation.md` |
 | Role-scoped user lists + required introduction video deploy runbook | `deployment/user-lists-and-required-intro-video.md` |
 | Google account activation / student Google sign-up / profile-before-booking deploy runbook | `deployment/google-account-activation.md` |
