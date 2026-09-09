@@ -42,6 +42,11 @@ class ReconciliationIssueTruthfulnessTest extends TestCase
         'provider_success_local_incomplete',
         'late_success_resolution_failed',
         'wallet_credit_failed',
+        // Raised when a provider refund is claimed and then fails: the
+        // claim is released so a retry is possible, but a concurrent
+        // wallet refund refused while it stood is gone, so a human has
+        // to close the loop.
+        'refund_status_mismatch',
     ];
 
     /** Retained for hydration; never offered as something to search for. */
@@ -49,7 +54,6 @@ class ReconciliationIssueTruthfulnessTest extends TestCase
         'unknown_payment_reference',
         'duplicate_provider_reference',
         'local_success_provider_mismatch',
-        'refund_status_mismatch',
     ];
 
     // ── Truthfulness ────────────────────────────────────────────────────

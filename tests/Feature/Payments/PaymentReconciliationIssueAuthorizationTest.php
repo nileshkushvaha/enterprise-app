@@ -401,8 +401,12 @@ class PaymentReconciliationIssueAuthorizationTest extends TestCase
         // A dormant historical row must not inflate today's work: the
         // queue's own filters cannot reproduce it, so counting it would
         // produce a badge number the operator can never account for.
+        //
+        // Uses a type nothing raises today. RefundStatusMismatch used to
+        // serve here and no longer can — a failed provider refund now
+        // raises it, so it is live and SHOULD reach the badge.
         $issue = $this->bookingIssue();
-        $issue->forceFill(['type' => BookingPaymentReconciliationIssueType::RefundStatusMismatch])->save();
+        $issue->forceFill(['type' => BookingPaymentReconciliationIssueType::LocalSuccessProviderMismatch])->save();
 
         $this->actingAs($this->operatorWith('ViewAny:BookingPaymentReconciliationIssue'));
 

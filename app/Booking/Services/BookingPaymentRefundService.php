@@ -33,11 +33,45 @@ use App\Settings\PaymentGatewaySettings;
  */
 final class BookingPaymentRefundService
 {
+    /**
+     * Providers whose charges this service can actually reverse.
+     *
+     * A booking settled any other way (the `fake` simulator, a legacy
+     * or manual capture) has no provider charge to send a refund to, so
+     * an automatic provider refund is impossible rather than merely
+     * unlikely — and callers must be able to learn that BEFORE they
+     * claim the payment.
+     */
+    private const array AUTOMATICALLY_REFUNDABLE = ['razorpay', 'stripe'];
+
     public function __construct(
         private readonly RazorpayGatewayClient $razorpay,
         private readonly StripeGatewayClient $stripe,
         private readonly PaymentGatewaySettings $settings,
     ) {}
+
+    /**
+     * Can this booking be refunded through its provider at all?
+     *
+     * Answers every question that does not require touching the
+     * gateway: is there exactly one settled attempt, and is its provider
+     * one we can reverse. Deliberately separate from refund() so a
+     * caller can find out BEFORE taking an exclusive claim on the
+     * payment.
+     *
+     * That ordering matters for real money. refundViaProvider() used to
+     * claim first and discover second, so a provider refund that could
+     * never have worked still locked out the wallet refund racing it —
+     * the claim was released afterwards, but the concurrent wallet
+     * attempt had already been refused and nothing retried it. The
+     * student ended up with no refund at all.
+     *
+     * @throws BookingException when no provider refund is possible
+     */
+    public function assertRefundable(Booking $booking): void
+    {
+        $this->refundableAttemptFor($booking);
+    }
 
     /**
      * Reverses the settled attempt for this booking.
@@ -46,11 +80,13 @@ final class BookingPaymentRefundService
      */
     public function refund(Booking $booking): void
     {
-        $attempt = $this->settledAttemptFor($booking);
+        $attempt = $this->refundableAttemptFor($booking);
 
         match ($attempt->provider) {
             'razorpay' => $this->refundRazorpay($attempt),
             'stripe' => $this->refundStripe($attempt),
+            // Unreachable: refundableAttemptFor() has already rejected
+            // every provider this service cannot reverse.
             default => throw new BookingException(sprintf(
                 'Booking %s was paid through "%s", which cannot be refunded automatically.',
                 $booking->reference,
@@ -61,6 +97,27 @@ final class BookingPaymentRefundService
         BookingPayment::query()
             ->where('booking_id', $booking->id)
             ->update(['status' => BookingPaymentRecordStatus::Refunded->value]);
+    }
+
+    /**
+     * The settled attempt this booking's refund would reverse, once it
+     * is known to be reversible.
+     *
+     * @throws BookingException
+     */
+    private function refundableAttemptFor(Booking $booking): Payment
+    {
+        $attempt = $this->settledAttemptFor($booking);
+
+        if (! in_array((string) $attempt->provider, self::AUTOMATICALLY_REFUNDABLE, true)) {
+            throw new BookingException(sprintf(
+                'Booking %s was paid through "%s", which cannot be refunded automatically.',
+                $booking->reference,
+                (string) $attempt->provider,
+            ));
+        }
+
+        return $attempt;
     }
 
     /**

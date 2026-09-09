@@ -45,7 +45,13 @@ enum BookingPaymentReconciliationIssueType: string
             // Money is ours, the customer has nothing.
             self::ProviderSuccessLocalIncomplete,
             self::LateSuccessResolutionFailed,
-            self::WalletCreditFailed => true,
+            self::WalletCreditFailed,
+            // A provider refund was claimed and then failed. Releasing
+            // the claim makes a retry possible, but it cannot bring back
+            // a concurrent wallet refund that was refused while the
+            // claim stood — so a refund is owed with nothing in flight,
+            // and only a human closes that loop.
+            self::RefundStatusMismatch => true,
 
             // Structurally unsupported: the issue table requires a
             // booking_payment_id (NOT NULL + FK), so a provider
@@ -65,13 +71,7 @@ enum BookingPaymentReconciliationIssueType: string
             // acting on a single contrary provider response — a
             // financial reversal that needs far stronger evidence and an
             // approved policy.
-            self::LocalSuccessProviderMismatch,
-
-            // Provider refunds are synchronous (refundViaProvider):
-            // success writes the resolution, failure clears the claim and
-            // throws. Nothing polls a refund afterwards, so local and
-            // provider refund state never drift apart to be compared.
-            self::RefundStatusMismatch => false,
+            self::LocalSuccessProviderMismatch => false,
         };
     }
 
@@ -92,7 +92,8 @@ enum BookingPaymentReconciliationIssueType: string
             self::ProviderSuccessLocalIncomplete,
             self::LateSuccessResolutionFailed => 'Confirmed',
             // A refund obligation exists, so the money is ours and owed back.
-            self::WalletCreditFailed => 'Owed to student',
+            self::WalletCreditFailed,
+            self::RefundStatusMismatch => 'Owed to student',
             self::AmountMismatch, self::CurrencyMismatch => 'Disputed',
             self::ProviderUnavailable => 'Not yet confirmed',
             self::UnknownPaymentOutcome, self::StaleProcessing => 'Unresolved',
@@ -107,6 +108,7 @@ enum BookingPaymentReconciliationIssueType: string
             self::ProviderSuccessLocalIncomplete => 'Booking settlement NOT completed',
             self::LateSuccessResolutionFailed => 'Student recovery NOT completed',
             self::WalletCreditFailed => 'Wallet credit FAILED',
+            self::RefundStatusMismatch => 'Refund NOT completed',
             self::AmountMismatch, self::CurrencyMismatch => 'Settlement refused',
             default => 'Booking not settled',
         };
@@ -117,7 +119,8 @@ enum BookingPaymentReconciliationIssueType: string
         return match ($this) {
             self::ProviderSuccessLocalIncomplete,
             self::LateSuccessResolutionFailed,
-            self::WalletCreditFailed => 'danger',
+            self::WalletCreditFailed,
+            self::RefundStatusMismatch => 'danger',
             self::AmountMismatch, self::CurrencyMismatch => 'warning',
             default => 'gray',
         };
@@ -138,7 +141,7 @@ enum BookingPaymentReconciliationIssueType: string
             self::UnknownPaymentReference => 'Historical record: a provider reference that matched no known booking payment.',
             self::DuplicateProviderReference => 'Historical record: a provider reference seen more than once.',
             self::LocalSuccessProviderMismatch => 'Historical record: a locally captured payment the provider later described differently.',
-            self::RefundStatusMismatch => 'Historical record: local and provider refund state disagreed.',
+            self::RefundStatusMismatch => 'A refund was started with the payment provider and failed. Nothing is in flight and the student is still owed their money.',
         };
     }
 
@@ -156,7 +159,7 @@ enum BookingPaymentReconciliationIssueType: string
             self::ProviderUnavailable => 'Provider unavailable',
             self::LateSuccessResolutionFailed => 'Late success resolution failed',
             self::WalletCreditFailed => 'Wallet credit failed',
-            self::RefundStatusMismatch => 'Refund status mismatch',
+            self::RefundStatusMismatch => 'Refund not completed',
         };
     }
 }

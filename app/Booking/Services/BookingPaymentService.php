@@ -768,6 +768,18 @@ final class BookingPaymentService implements BookingPaymentServiceInterface
             throw new BookingException('A reason is required for a direct provider refund.');
         }
 
+        // Established BEFORE the claim below, and this ordering is the
+        // whole point.
+        //
+        // Claiming first meant a provider refund that could never have
+        // worked — no settled attempt, or a provider whose charges we
+        // cannot reverse — still wrote `provider_refund_pending` and
+        // locked out a wallet refund racing it. The claim was released
+        // afterwards, but the wallet attempt had already been refused
+        // and nothing retried it, so the student got NO refund at all.
+        // Two paths competing must leave exactly one winner, never zero.
+        $this->refunds->assertRefundable($booking);
+
         $payment = DB::transaction(function () use ($booking): BookingPayment {
             $booking = $this->lockedPaidBooking($booking);
             $payment = $this->lockedUnresolvedCapturedPayment($booking);
@@ -785,12 +797,26 @@ final class BookingPaymentService implements BookingPaymentServiceInterface
             // The claim already committed — clear it so a retry (or the
             // wallet-credit path) is not permanently locked out by a
             // provider call that never actually moved money.
-            DB::transaction(function () use ($payment): void {
+            $released = DB::transaction(function () use ($payment): BookingPayment {
                 $payment = BookingPayment::query()->whereKey($payment->id)->lockForUpdate()->firstOrFail();
                 $metadata = $payment->metadata ?? [];
                 unset($metadata['refund_resolution']);
                 $payment->forceFill(['metadata' => $metadata])->save();
+
+                return $payment;
             });
+
+            // Releasing the claim makes a RETRY possible; it does not
+            // bring back a concurrent wallet refund that was refused
+            // while the claim stood. A refund is still owed and nothing
+            // is now in flight, so this is surfaced for a human rather
+            // than left to the next person who happens to try again.
+            $this->raiseCollectionIssue(
+                $released,
+                BookingPaymentReconciliationIssueType::RefundStatusMismatch,
+                BookingPaymentReconciliationSeverity::Critical,
+                'A provider refund was claimed and then failed; the claim was released and the refund is still owed.',
+            );
 
             throw $e;
         }
