@@ -298,12 +298,15 @@ only via `recordings:expire`.
 These are business decisions, not implementation gaps:
 
 1. **Zoom-side source deletion.** SIRI copies each recording into its
-   own storage and applies its own retention, but does not delete the
-   Zoom cloud copy. Left alone, Zoom storage accumulates. Deleting the
-   source after SIRI verification is technically straightforward but was
-   not implemented, because it destroys the only other copy of a class
-   recording and no current policy authorises that. Decide explicitly,
-   then implement deliberately.
+   own storage and applies its own retention (30 days from the
+   recording time, `docs/recordings.md` §11a) to **that copy only**; it
+   does not delete the Zoom cloud copy. Left alone, Zoom storage
+   accumulates. Deleting the source after SIRI verification is
+   technically straightforward but was not implemented, because it
+   destroys the only other copy of a class recording and no current
+   policy authorises that. Until that decision is taken, set Zoom's own
+   auto-delete (Account Settings → Recording → "Delete cloud recordings
+   after N days") deliberately — SIRI's retention does not govern it.
 2. **Multi-segment lessons.** A lesson recorded in several
    start/stop sessions produces several artifacts; SIRI stores the
    preferred one and raises a `recording_multiple_artifacts` alert. If

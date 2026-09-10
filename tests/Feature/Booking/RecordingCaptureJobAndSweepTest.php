@@ -22,6 +22,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Tests\Support\InMemoryRecordingStorage;
@@ -257,7 +258,7 @@ final class RecordingCaptureJobAndSweepTest extends TestCase
         $recording = $this->pendingRecording();
         $recording->booking->update(['status' => BookingStatus::Cancelled]);
 
-        $this->artisan('recordings:capture')->expectsOutputToContain('processed 0 pending recording(s)');
+        $this->artisan('recordings:capture')->expectsOutputToContain('queued 0 pending recording(s)');
 
         $this->assertSame(RecordingStatus::Pending, $recording->fresh()->status);
         $this->assertSame(0, $recording->fresh()->capture_attempts);
@@ -279,6 +280,69 @@ final class RecordingCaptureJobAndSweepTest extends TestCase
         foreach ([$cancelled, $tooOld, $notEnded, $providerCannot] as $meeting) {
             $this->assertSame(0, Recording::query()->where('booking_meeting_id', $meeting->id)->count());
         }
+    }
+
+    // ── The sweep queues, it does not transfer ────────────────────────
+
+    /**
+     * A sweep that transferred inline would run a multi-gigabyte
+     * download inside the scheduler process, without the recordings
+     * worker's timeout and retry_after protections. The sweep's job is
+     * to decide WHAT is due and hand it to the same job every other
+     * path uses, on the dedicated queue.
+     */
+    public function test_the_sweep_queues_the_capture_job_on_the_recordings_queue_instead_of_transferring_inline(): void
+    {
+        Queue::fake();
+        $recording = $this->pendingRecording();
+        FakeMeetingProvider::$nextRecordingContents = $this->fakeMp4Bytes();
+
+        $this->artisan('recordings:capture')
+            ->expectsOutputToContain('queued 1 pending recording(s)')
+            ->assertSuccessful();
+
+        Queue::assertPushedOn(
+            'recordings',
+            CaptureLessonRecordingJob::class,
+            fn (CaptureLessonRecordingJob $job): bool => $job->recordingId === $recording->getKey()
+                && $job->connection === 'recordings',
+        );
+        $this->assertSame(RecordingStatus::Pending, $recording->fresh()->status, 'nothing is transferred in the scheduler process');
+        $this->assertCount(0, $this->storage->objects);
+        $this->assertSame(0, $recording->fresh()->capture_attempts, 'queueing is not an attempt');
+    }
+
+    /**
+     * While the recordings worker is down, the sweep keeps running
+     * every fifteen minutes. Without a unique lock each run would add
+     * another identical job for the same recording to the backlog.
+     */
+    public function test_repeated_sweeps_do_not_stack_duplicate_capture_jobs_for_one_recording(): void
+    {
+        Queue::fake();
+        $recording = $this->pendingRecording();
+
+        $this->artisan('recordings:capture')->assertSuccessful();
+        $this->artisan('recordings:capture')->assertSuccessful();
+        $this->artisan('recordings:capture')->assertSuccessful();
+
+        Queue::assertPushed(CaptureLessonRecordingJob::class, 1);
+        Queue::assertPushed(
+            CaptureLessonRecordingJob::class,
+            fn (CaptureLessonRecordingJob $job): bool => $job->recordingId === $recording->getKey(),
+        );
+    }
+
+    /** Distinct recordings are distinct jobs — the lock is per recording, not global. */
+    public function test_the_unique_lock_is_per_recording(): void
+    {
+        Queue::fake();
+        $this->pendingRecording();
+        $this->pendingRecording();
+
+        $this->artisan('recordings:capture')->assertSuccessful();
+
+        Queue::assertPushed(CaptureLessonRecordingJob::class, 2);
     }
 
     public function test_expire_sweep_command_delegates_to_the_configured_batch_size(): void

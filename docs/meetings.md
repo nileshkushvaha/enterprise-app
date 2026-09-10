@@ -253,10 +253,48 @@ An unrecognised future layout sorts last rather than being discarded.
 
 Download URLs and Zoom's short-lived download token are **never
 persisted, serialized or logged**. The webhook is treated purely as a
-signal; the artifact is re-fetched server-side at ingestion time. The
-gateway refuses any download host that is not Zoom, so a URL that
-somehow reached the database could not become an arbitrary outbound
-request.
+signal; the artifact is re-fetched server-side at ingestion time.
+
+The download itself (`ZoomApiClient::openRecordingStream()`, hardened
+2026-09-11) is the SSRF and credential boundary for ingestion:
+
+- **Every destination is validated, not just the first.** Zoom answers
+  a download with one or more redirects to a signed CDN URL. The
+  client follows redirects *by hand*, one hop at a time, and each hop
+  — the API-issued URL and every `Location` it is sent to — must be
+  **HTTPS** on a host matching `config('recordings.zoom.download_hosts')`
+  (`zoom.us`, `*.zoom.us`, `*.zoom.com`). Anything else, including a
+  lookalike such as `zoom.us.attacker.example` or a downgrade to plain
+  `http://`, is refused *before a connection is opened*. Approving a new
+  CDN host is a reviewed configuration change, never runtime data.
+- **The bearer token never reaches an unapproved destination.** Because
+  a hop is validated before it is requested, the Authorization header
+  is only ever sent to hosts that passed the check; a redirect to
+  anywhere else ends the transfer with no request made there.
+- **Bounded.** At most `RECORDING_ZOOM_MAX_REDIRECTS` hops (default 5),
+  a connect timeout (`RECORDING_ZOOM_CONNECT_TIMEOUT`, default 15 s)
+  and a read timeout (`RECORDING_ZOOM_DOWNLOAD_TIMEOUT`, default 900 s).
+- **Refused early when oversized.** A declared `Content-Length` above
+  `RECORDING_MAX_SOURCE_BYTES` is rejected before the first body byte;
+  the staging pump re-applies the same ceiling to the bytes that
+  actually arrive, checks every write, and treats a stream that ends
+  short of its declared length as an incomplete download to retry —
+  see `docs/recordings.md` §10 "Streaming safety".
+- **Diagnostics name the host, never the URL** (a signed download URL
+  is a credential), and never the token.
+
+`ZoomApiClientTest` drives each of these against a faked Zoom.
+
+### Zoom-side originals and retention
+
+SIRI's 30-day retention (`docs/recordings.md` §11a) applies to **SIRI's
+copy only**. The original cloud recording stays in the Zoom account
+until Zoom's own retention removes it — SIRI never deletes it. Zoom's
+auto-delete (Account Settings → Recording → "Delete cloud recordings
+after N days") must be configured **deliberately**; left at the default
+the originals accumulate indefinitely, and the admin-only access rule
+SIRI enforces is only as good as the Zoom account's own sharing
+settings (§5 below).
 
 ---
 
@@ -400,7 +438,7 @@ configuration change for both providers at once.
 | `default_provider` | provider for new meetings |
 | `google_meet_enabled` / `zoom_enabled` / `manual_provider_enabled` | may create meetings |
 | `google_meet_recording_enabled` / `zoom_recording_enabled` | may record |
-| `recording_enabled`, `recording_retention_days` | platform recording policy |
+| `recording_enabled`, `recording_retention_days` | platform recording policy; retention counts from `recorded_at`, ships 30 days (`docs/recordings.md` §11a) |
 | `zoom_account_id`, `zoom_client_id`, `zoom_client_secret` | Server-to-Server OAuth (secret encrypted) |
 | `zoom_host_user_id` / `zoom_host_email` | platform host the meetings run under |
 | `zoom_webhook_secret` | webhook signature verification (encrypted) |

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Booking\Contracts;
 
+use App\Booking\DTOs\ProviderDownloadStream;
 use App\Booking\Exceptions\GatewayRequestException;
 
 /**
@@ -70,18 +71,25 @@ interface ZoomMeetingClient
      *
      * $downloadUrl MUST be a Zoom-issued URL — implementations reject
      * any other host, so a value that ever reached the database could
-     * not turn this into an arbitrary server-side fetcher.
+     * not turn this into an arbitrary server-side fetcher. The same
+     * rule applies to EVERY redirect hop: implementations follow
+     * redirects themselves, refuse any destination that is not HTTPS
+     * on an approved provider/CDN host, and never send the bearer
+     * token anywhere that failed that check. Redirect count and
+     * connect/read timeouts are bounded by configuration.
      *
      * $downloadToken is the short-lived token Zoom includes with a
      * recording webhook (valid ~24h). When absent the implementation
      * falls back to the Server-to-Server access token. Neither is ever
      * persisted or logged.
      *
-     * @return resource
+     * The returned stream carries the response's declared length (when
+     * sent) so the staging pump can tell a completed download from a
+     * connection that closed early. The caller owns closing it.
      *
      * @throws GatewayRequestException
      */
-    public function openRecordingStream(string $downloadUrl, ?string $downloadToken = null);
+    public function openRecordingStream(string $downloadUrl, ?string $downloadToken = null): ProviderDownloadStream;
 
     /**
      * Prove the stored Server-to-Server OAuth credentials can actually

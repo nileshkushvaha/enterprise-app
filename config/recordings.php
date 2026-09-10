@@ -143,7 +143,28 @@ return [
     */
 
     'zoom' => [
+        // Read timeout for the streamed download, and a separate, short
+        // connect timeout so a black-holed host fails fast instead of
+        // holding a recordings worker for the full read window.
         'download_timeout' => (int) env('RECORDING_ZOOM_DOWNLOAD_TIMEOUT', 900),
+        'download_connect_timeout' => (int) env('RECORDING_ZOOM_CONNECT_TIMEOUT', 15),
+
+        /*
+         * Zoom answers a recording download with one or more redirects to
+         * a signed CDN URL. Redirects are followed BY HAND, one hop at a
+         * time, and every hop — not just the URL Zoom's API handed out —
+         * must be HTTPS and match one of these host patterns, or the
+         * transfer is refused before a connection is opened and the
+         * bearer token is never sent there. A leading "*." matches any
+         * subdomain (not the bare domain). Adding a CDN host here is a
+         * deliberate, reviewed configuration change, not runtime data.
+         */
+        'download_hosts' => [
+            'zoom.us',
+            '*.zoom.us',
+            '*.zoom.com',
+        ],
+        'download_max_redirects' => (int) env('RECORDING_ZOOM_MAX_REDIRECTS', 5),
         'preferred_layouts' => [
             'shared_screen_with_speaker_view',
             'shared_screen_with_gallery_view',

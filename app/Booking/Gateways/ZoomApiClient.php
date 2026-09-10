@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Booking\Gateways;
 
 use App\Booking\Contracts\ZoomMeetingClient;
+use App\Booking\DTOs\ProviderDownloadStream;
 use App\Booking\Exceptions\GatewayRequestException;
 use App\Settings\MeetingSettings;
 use Illuminate\Http\Client\PendingRequest;
@@ -108,46 +109,108 @@ final class ZoomApiClient implements ZoomMeetingClient
         return $this->sanitizeRecordings($response->json() ?? []);
     }
 
-    public function openRecordingStream(string $downloadUrl, ?string $downloadToken = null)
+    /**
+     * Opens the download as a streamed HTTP response and hands back its
+     * body as a resource — the recording never passes through PHP
+     * memory as a string.
+     *
+     * Redirects are NOT delegated to the HTTP client. Zoom answers a
+     * download with one or more redirects to a signed CDN URL, and an
+     * automatic follower would re-send the Authorization header to
+     * whatever host the previous hop named. So each hop is requested
+     * separately, its destination is validated (HTTPS + approved host)
+     * BEFORE any connection is opened, and the bearer token therefore
+     * only ever reaches a destination that passed that check. Hops,
+     * connect time and read time are all bounded by configuration.
+     */
+    public function openRecordingStream(string $downloadUrl, ?string $downloadToken = null): ProviderDownloadStream
     {
-        $this->assertZoomDownloadUrl($downloadUrl);
-
         // Zoom's own short-lived download token when we have one (it is
         // scoped to that recording), otherwise the account token.
         $token = $downloadToken !== null && $downloadToken !== ''
             ? $downloadToken
             : $this->accessToken();
 
-        $context = stream_context_create([
-            'http' => [
-                'method' => 'GET',
-                // Bearer header, never a query parameter — a token in a
-                // URL ends up in proxy and access logs.
-                'header' => 'Authorization: Bearer '.$token."\r\n",
-                'follow_location' => 1,
-                // Zoom redirects downloads to its CDN; the cap stops a
-                // redirect loop from hanging a worker.
-                'max_redirects' => 5,
-                'timeout' => (int) config('recordings.zoom.download_timeout', 900),
-                'ignore_errors' => true,
-            ],
-        ]);
+        $maxRedirects = max(0, (int) config('recordings.zoom.download_max_redirects', 5));
+        $ceiling = max(1, (int) config('recordings.max_source_bytes'));
+        $url = $downloadUrl;
 
-        $stream = @fopen($downloadUrl, 'rb', false, $context);
+        for ($hop = 0; ; $hop++) {
+            // Every destination, including each redirect target, is
+            // checked against the allowlist before a request is built.
+            $this->assertZoomDownloadUrl($url);
 
-        if ($stream === false) {
-            throw new GatewayRequestException('Zoom API failed to open the recording download stream.');
+            try {
+                $response = Http::withToken($token)
+                    ->withoutRedirecting()
+                    ->connectTimeout(max(1, (int) config('recordings.zoom.download_connect_timeout', 15)))
+                    ->timeout(max(1, (int) config('recordings.zoom.download_timeout', 900)))
+                    ->withOptions([
+                        // Bearer header, never a query parameter — a token
+                        // in a URL ends up in proxy and access logs.
+                        'stream' => true,
+                        'read_timeout' => max(1, (int) config('recordings.zoom.download_timeout', 900)),
+                    ])
+                    ->get($url);
+            } catch (Throwable $e) {
+                // Transport failure. The URL is not echoed — a signed
+                // download URL is a credential.
+                throw new GatewayRequestException('Zoom API failed to open the recording download stream (connection error).', 0, $e);
+            }
+
+            $status = $response->status();
+
+            if ($status >= 300 && $status < 400) {
+                $location = trim((string) $response->header('Location'));
+                $response->close();
+
+                if ($hop >= $maxRedirects) {
+                    throw new GatewayRequestException(sprintf(
+                        'Zoom API failed to download the recording: more than %d redirects.',
+                        $maxRedirects,
+                    ));
+                }
+
+                if ($location === '') {
+                    throw new GatewayRequestException('Zoom API failed to download the recording: redirect without a destination.');
+                }
+
+                $url = $this->resolveRedirect($url, $location);
+
+                continue;
+            }
+
+            if ($status < 200 || $status >= 300) {
+                $response->close();
+
+                throw new GatewayRequestException(sprintf('Zoom API failed to download the recording (HTTP %d).', $status));
+            }
+
+            $declared = $this->declaredLength($response->header('Content-Length'));
+
+            // Refuse before a single body byte is read — a hostile or
+            // corrupt Content-Length must not be allowed to fill the
+            // staging disk first and be rejected afterwards. The pump
+            // enforces the same ceiling on the bytes that actually
+            // arrive, for responses that declare nothing.
+            if ($declared !== null && $declared > $ceiling) {
+                $response->close();
+
+                throw new GatewayRequestException(sprintf(
+                    'Zoom recording of %d bytes exceeds the configured size ceiling of %d bytes.',
+                    $declared,
+                    $ceiling,
+                ));
+            }
+
+            $stream = $response->toPsrResponse()->getBody()->detach();
+
+            if (! is_resource($stream)) {
+                throw new GatewayRequestException('Zoom API returned a recording response without a readable body.');
+            }
+
+            return new ProviderDownloadStream($stream, $declared);
         }
-
-        $status = $this->statusFromStreamHeaders($http_response_header ?? []);
-
-        if ($status >= 400) {
-            fclose($stream);
-
-            throw new GatewayRequestException(sprintf('Zoom API failed to download the recording (HTTP %d).', $status));
-        }
-
-        return $stream;
     }
 
     public function validateCredentials(): bool
@@ -207,13 +270,17 @@ final class ZoomApiClient implements ZoomMeetingClient
     }
 
     /**
-     * The ONLY hosts this client will fetch a recording from.
+     * The ONLY hosts this client will fetch a recording from — the
+     * initial URL AND every redirect destination.
      *
-     * Zoom serves recording downloads from its own domains, so anything
-     * else means the URL did not come from Zoom — and a URL that
-     * reached us through a webhook payload or a database column must
-     * never become an arbitrary outbound request. This is the SSRF
-     * boundary for recording ingestion.
+     * Zoom serves recording downloads from its own domains and CDN, so
+     * anything else means the URL did not come from Zoom — and a URL
+     * that reached us through a webhook payload, a database column or
+     * a redirect header must never become an arbitrary outbound
+     * request carrying our bearer token. This is the SSRF boundary for
+     * recording ingestion. The allowlist is configuration
+     * (recordings.zoom.download_hosts), so approving a new CDN host is
+     * a reviewed deploy-time change.
      */
     private function assertZoomDownloadUrl(string $url): void
     {
@@ -221,11 +288,7 @@ final class ZoomApiClient implements ZoomMeetingClient
         $host = strtolower((string) ($parts['host'] ?? ''));
         $scheme = strtolower((string) ($parts['scheme'] ?? ''));
 
-        $allowed = $host === 'zoom.us'
-            || str_ends_with($host, '.zoom.us')
-            || str_ends_with($host, '.zoom.com');
-
-        if ($scheme !== 'https' || ! $allowed) {
+        if ($parts === false || $scheme !== 'https' || $host === '' || ! $this->isApprovedDownloadHost($host)) {
             // The host is echoed (it is not a secret and is the whole
             // point of the diagnostic); the URL itself is not, since it
             // may carry a token in its query string.
@@ -236,17 +299,68 @@ final class ZoomApiClient implements ZoomMeetingClient
         }
     }
 
-    /** @param  list<string>  $headers */
-    private function statusFromStreamHeaders(array $headers): int
+    private function isApprovedDownloadHost(string $host): bool
     {
-        foreach ($headers as $header) {
-            if (preg_match('#^HTTP/\S+\s+(\d{3})#', $header, $matches) === 1) {
-                // Last status wins — redirects mean several are present.
-                $status = (int) $matches[1];
+        foreach ((array) config('recordings.zoom.download_hosts', []) as $pattern) {
+            $pattern = strtolower(trim((string) $pattern));
+
+            if ($pattern === '') {
+                continue;
+            }
+
+            if (str_starts_with($pattern, '*.')) {
+                $suffix = substr($pattern, 1); // ".zoom.us"
+
+                if (strlen($host) > strlen($suffix) && str_ends_with($host, $suffix)) {
+                    return true;
+                }
+
+                continue;
+            }
+
+            if ($host === $pattern) {
+                return true;
             }
         }
 
-        return $status ?? 0;
+        return false;
+    }
+
+    /** A Location header may be relative; resolve it against the hop that issued it. */
+    private function resolveRedirect(string $from, string $location): string
+    {
+        if (preg_match('#^[a-z][a-z0-9+.-]*://#i', $location) === 1) {
+            return $location;
+        }
+
+        $base = parse_url($from);
+        $origin = sprintf('%s://%s', $base['scheme'] ?? 'https', $base['host'] ?? '');
+
+        if (isset($base['port'])) {
+            $origin .= ':'.$base['port'];
+        }
+
+        if (str_starts_with($location, '//')) {
+            return ($base['scheme'] ?? 'https').':'.$location;
+        }
+
+        if (str_starts_with($location, '/')) {
+            return $origin.$location;
+        }
+
+        $path = $base['path'] ?? '/';
+        $directory = substr($path, 0, (int) strrpos($path, '/') + 1);
+
+        return $origin.$directory.$location;
+    }
+
+    /** Content-Length as a non-negative integer, or null when absent or malformed. */
+    private function declaredLength(mixed $header): ?int
+    {
+        $value = is_array($header) ? ($header[0] ?? null) : $header;
+        $value = trim((string) $value);
+
+        return $value !== '' && ctype_digit($value) ? (int) $value : null;
     }
 
     /**

@@ -6,6 +6,7 @@ namespace App\Models;
 
 use App\Booking\Enums\RecordingFailureCode;
 use App\Booking\Enums\RecordingStatus;
+use Carbon\CarbonImmutable;
 use Database\Factories\RecordingFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
@@ -163,6 +164,30 @@ class Recording extends Model
     {
         return $query->where('status', RecordingStatus::Transferring)
             ->where('transfer_started_at', '<=', now()->subMinutes(max(1, $staleMinutes)));
+    }
+
+    /**
+     * The instant retention is counted from (SRS §12.21). Retention is
+     * a promise about the LESSON — "recordings are kept for N days" —
+     * so it runs from when the class was recorded, not from when SIRI
+     * happened to finish transferring the file. A recording captured
+     * late (a webhook that never arrived, a provider that took a day to
+     * generate the file) still expires N days after the lesson.
+     *
+     * Fallback, in order, when the provider supplied no recording time:
+     * the instant the recording was published, else now. Both are
+     * later than the true recording time, so the fallback can only ever
+     * keep a recording LONGER than the rule — never delete one early.
+     */
+    public function retentionAnchor(): CarbonImmutable
+    {
+        return $this->recorded_at ?? $this->available_at ?? CarbonImmutable::now();
+    }
+
+    /** When this recording's stored copy becomes due for deletion under a retention of $days. */
+    public function retentionExpiryFor(int $days): CarbonImmutable
+    {
+        return $this->retentionAnchor()->addDays(max(1, $days));
     }
 
     public function scopeDueForExpiry(Builder $query): Builder

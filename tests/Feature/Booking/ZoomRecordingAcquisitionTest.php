@@ -299,6 +299,44 @@ final class ZoomRecordingAcquisitionTest extends TestCase
         $this->assertCount(0, File::files(app(RecordingStagingArea::class)->path()));
     }
 
+    /**
+     * Zoom declared more bytes than arrived — the connection dropped
+     * mid-body. That is an incomplete download, retried on the next
+     * sweep, never a stored (truncated) recording.
+     */
+    public function test_a_download_that_ends_short_of_its_declared_length_is_retried_and_never_stored(): void
+    {
+        $recording = $this->lesson();
+        $this->zoom->downloadBytes = $this->mp4Bytes();
+        $this->zoom->declaredDownloadBytes = strlen($this->mp4Bytes()) + 4096;
+        $this->zoom->withRecordingFile(self::MEETING_ID, 'video-1', 'MP4', 'shared_screen_with_speaker_view');
+
+        $this->capture($recording);
+        $recording->refresh();
+
+        $this->assertSame(RecordingStatus::Pending, $recording->status, 'transient — the sweep retries');
+        $this->assertNull($recording->failure_code);
+        $this->assertCount(0, $this->storage->objects, 'a truncated download must never reach storage');
+        $this->assertCount(0, File::files(app(RecordingStagingArea::class)->path()), 'and leaves nothing staged');
+    }
+
+    /** An oversized Zoom recording is cut off during streaming and fails permanently. */
+    public function test_an_oversized_download_is_rejected_during_streaming_and_leaves_nothing_behind(): void
+    {
+        config(['recordings.max_source_bytes' => 64]);
+        $recording = $this->lesson();
+        $this->zoom->downloadBytes = $this->mp4Bytes();
+        $this->zoom->withRecordingFile(self::MEETING_ID, 'video-1', 'MP4', 'shared_screen_with_speaker_view');
+
+        $this->capture($recording);
+        $recording->refresh();
+
+        $this->assertSame(RecordingStatus::Failed, $recording->status);
+        $this->assertSame(RecordingFailureCode::SourceRejected, $recording->failure_code);
+        $this->assertCount(0, $this->storage->objects);
+        $this->assertCount(0, File::files(app(RecordingStagingArea::class)->path()));
+    }
+
     // ── Failure classification ────────────────────────────────────────
 
     public function test_a_zoom_rate_limit_is_transient(): void

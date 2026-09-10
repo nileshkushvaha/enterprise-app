@@ -38,7 +38,8 @@ RecordingService::registerIfEligible()      ← eligibility gates (consent is pl
 Recording row created                        status: pending
         ↓
 CaptureLessonRecordingJob dispatched afterCommit, delayed
-(and, independently, the recordings:capture sweep)
+(and, independently, the recordings:capture sweep queues the SAME job
+ for anything still due — it never transfers inline)
         ↓
 RecordingIngestionService::ingest()
         ↓
@@ -52,7 +53,7 @@ RecordingIngestionService::ingest()
         ↓                                    status: available
   audit entry (nobody is notified — see §8)
         ↓
-  … retention window elapses …
+  … `recording_retention_days` after `recorded_at` elapse (§11a) …
         ↓
 recordings:expire → RecordingStorage::delete()
         ↓                                    status: expired  ← metadata retained
@@ -643,8 +644,19 @@ anywhere.
 
 **Self-healing.** `recordings:capture` (every 15 minutes) does three
 bounded things: reclaims rows abandoned mid-transfer by a crashed
-worker, retries every `pending`/`stored` recording inside the age and
-attempt window, and purges staged temp files a crashed run left behind.
+worker, **queues** a `CaptureLessonRecordingJob` for every
+`pending`/`stored` recording inside the age and attempt window, and
+purges staged temp files a crashed run left behind. The sweep never
+moves bytes itself (since 2026-09-11): a multi-gigabyte download must
+not run inside `schedule:run`, where it would hold every other
+scheduled command and enjoy none of the recordings worker's timeout or
+`retry_after` protection. Every transfer, whatever triggered it, is
+therefore the same job on the same `recordings` queue — which also
+means **the recordings worker is required for reconciliation, not only
+for low latency**. The job is `ShouldBeUnique` per recording (lock held
+at most one hour, released when the job ends) so a sweep running while
+the worker is down does not stack dozens of identical jobs; the
+row-locked claim remains what makes concurrent runs safe.
 
 **Manual recovery.** Admins holding `Retry:Recording` get a "Retry
 ingestion" action on failed recordings. It is authorized, audited with
@@ -663,6 +675,22 @@ public), are deleted in a `finally` block on every path — success and
 failure alike — and are backstopped by the sweep's stale purge.
 Deleting on failure is safe because a retry always re-downloads from
 the provider; staged bytes are never the only copy.
+
+**Streaming safety.** Every streamed download (Zoom always; Google Meet
+when the backend-side copy is unavailable) goes through one pump,
+`RecordingStagingArea::pump()`, which enforces the limits *while bytes
+arrive*: the `RECORDING_MAX_SOURCE_BYTES` ceiling is applied to bytes
+received, so an oversized or endless source is cut off at the ceiling
+instead of filling the staging disk and being rejected afterwards; a
+declared `Content-Length` above the ceiling is refused before the first
+byte; every write is checked, so a short or failed write (full disk)
+aborts rather than staging a truncated file; a read that fails or times
+out aborts; and a stream that ends short of its declared length is an
+**incomplete download** (`source_download_failed`, retried), never a
+finished recording. On every one of those paths the partial `.part`
+file is removed. `RecordingStagingAreaTest` exercises each. Zoom's
+download-side rules (redirects, allowlisted hosts, credential handling)
+are in `docs/meetings.md` §4 "Download security".
 
 ---
 
@@ -705,6 +733,74 @@ object. The domain would not need to know it happened.
 
 ---
 
+## 11a. Retention
+
+**The rule (SRS §12.21): a recording's stored copy is deleted
+`meeting.recording_retention_days` after the class was recorded; the
+metadata row is kept.** The shipped default is **30 days**; the value
+is an admin setting (Settings → Meetings → Retention Days) and appears
+as a literal nowhere in code.
+
+- **Anchor: `recorded_at`**, the recording time the provider reports
+  (`Recording::retentionAnchor()`), not the moment SIRI finished the
+  transfer. Retention is a promise about the lesson, so a recording
+  that arrived a day late (a missed webhook, a slow provider) still
+  expires N days after the class — and expiry does not depend on queue
+  latency. Consequence, stated plainly: a recording captured *more*
+  than N days after the lesson is published with an `expires_at`
+  already in the past and is removed by the next `recordings:expire`.
+- **Fallback:** when the provider supplied no recording time, the
+  anchor is the publish instant (`available_at`), else now. Both are
+  later than the true recording time, so the fallback can only keep a
+  recording longer — never delete one early.
+- **Boundary:** `expires_at = anchor + N days`, exact to the second;
+  `recordings:expire` (daily) removes rows where `expires_at <= now`.
+  `RecordingRetentionTest` pins the anchor, the default, the setting,
+  the fallback and the boundary.
+
+**What expiry deletes — and what it does not.** `recordings:expire`
+deletes exactly one object: SIRI's own stored copy, through the driver
+recorded on the row (`RecordingStorage::delete()`). The row survives as
+`expired` with duration, size, MIME type, timestamps, provider
+reference and `storage_driver` intact; only `storage_path` is cleared.
+It never touches anything at the meeting provider:
+
+| Object | Owner | SIRI retention applies? | Retention is configured in |
+|---|---|---|---|
+| SIRI's copy in Drive (later S3) | SIRI | **yes** — this section | `meeting.recording_retention_days` |
+| Zoom cloud recording (the original SIRI downloaded) | Zoom account | no | Zoom admin → Account Settings → Recording → auto-delete cloud recordings after N days |
+| Meet-generated MP4 in the platform account's Drive | Google Workspace | no | Workspace admin (Drive retention / Vault) or a deliberate, separately built deletion |
+
+Both provider-side retentions must be set **deliberately** by the
+operator; SIRI deletes nothing it did not create, and a Zoom or
+Workspace default that keeps originals forever is a storage and privacy
+posture the platform is relying on without noticing. See
+`docs/deployment/zoom-activation.md` "Remaining product decisions".
+
+**Existing recordings (rollout note, not applied by this change).**
+Before 2026-09-11 `expires_at` was set to *publish time* + N days.
+Rows published before that keep the `expires_at` they were given —
+this change shortens nothing retroactively and deletes no file. For a
+recording published shortly after its lesson the two anchors differ by
+minutes; for one captured late they differ by the delay. To see the
+gap (read-only):
+
+```sql
+SELECT id, provider, recorded_at, available_at, expires_at,
+       TIMESTAMPDIFF(SECOND, recorded_at, available_at) AS publish_lag_seconds,
+       DATE_ADD(recorded_at, INTERVAL 30 DAY)             AS expires_at_by_recorded_at
+FROM recordings
+WHERE status = 'available'
+  AND expires_at <> DATE_ADD(recorded_at, INTERVAL 30 DAY);
+```
+
+Whether to re-anchor those rows (`expires_at = recorded_at + N days`,
+which can only shorten retention, never lengthen it) is a decision to
+take explicitly, with the list above in hand, and then to apply as a
+one-off, audited, reviewed update — not silently as part of a deploy.
+
+---
+
 ## 12. Configuration
 
 **Deployment configuration** — `config/recordings.php` / `.env`:
@@ -714,7 +810,10 @@ object. The domain would not need to know it happened.
 | `RECORDING_STORAGE_DRIVER` | `filesystem` or `google_drive` |
 | `RECORDING_STORAGE_DISK` | disk for the filesystem driver — must be private, never `public` |
 | `RECORDING_STAGING_STALE_HOURS` | how long an orphaned staged file survives before the sweep purges it |
-| `RECORDING_MAX_SOURCE_BYTES` | hard ceiling on an accepted source (default 5 GB) |
+| `RECORDING_MAX_SOURCE_BYTES` | hard ceiling on an accepted source (default 5 GB) — enforced on declared length before the body and on received bytes during streaming |
+| `RECORDING_ZOOM_DOWNLOAD_TIMEOUT`, `RECORDING_ZOOM_CONNECT_TIMEOUT` | Zoom download read timeout (default 900 s) and connect timeout (default 15 s) |
+| `RECORDING_ZOOM_MAX_REDIRECTS` | redirect hops followed for a Zoom download (default 5); every hop is validated |
+| `recordings.zoom.download_hosts` (config array, not env) | the ONLY hosts a Zoom download or any of its redirects may go to — `zoom.us`, `*.zoom.us`, `*.zoom.com`; adding a CDN host is a reviewed deploy change |
 | `RECORDING_DRIVE_CHUNK_BYTES`, `RECORDING_DRIVE_TIMEOUT` | resumable upload mechanics |
 | `RECORDING_QUEUE_DRIVER`, `RECORDING_QUEUE_RETRY_AFTER` | the dedicated ingestion connection |
 | `RECORDING_PLAYBACK_MAX_RANGE_BYTES`, `RECORDING_PLAYBACK_CHUNK_BYTES` | playback window cap and read chunk (§8) |
@@ -722,7 +821,8 @@ object. The domain would not need to know it happened.
 | `RECORDING_DENIAL_AUDIT_WINDOW_SECONDS` | repeated refusals inside this window are logged, not audited |
 
 **Admin settings** (`meeting.*`, database, encrypted where sensitive):
-`recording_enabled`, `recording_retention_days`,
+`recording_enabled`, `recording_retention_days` (days from `recorded_at`,
+ships 30 — §11a),
 `recording_student_playback_enabled` (student watch policy, ships OFF),
 `recording_drive_root_folder_id`, `recording_drive_shared_drive_id`,
 `recording_transfer_stale_minutes`, and the capture window/attempt

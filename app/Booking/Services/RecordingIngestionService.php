@@ -434,7 +434,10 @@ final class RecordingIngestionService
                 'failed_at' => null,
                 'transfer_started_at' => null,
                 'available_at' => now(),
-                'expires_at' => now()->addDays(max(1, $this->settings->recording_retention_days)),
+                // Retention runs from when the class was RECORDED (see
+                // Recording::retentionAnchor()), for the admin-configured
+                // number of days — never a literal.
+                'expires_at' => $fresh->retentionExpiryFor($this->settings->recording_retention_days),
             ])->save();
 
             return $fresh;

@@ -70,22 +70,11 @@ final class GoogleMeetRecordingStager
 
         try {
             return $this->staging->stageStream(
-                function ($handle) use ($stream): void {
-                    // Fixed-size chunks: a multi-gigabyte class video
-                    // is never materialized in PHP memory.
-                    while (! feof($stream)) {
-                        $chunk = fread($stream, 1024 * 1024);
-
-                        if ($chunk === false) {
-                            throw new RecordingIngestionException(
-                                RecordingFailureCode::SourceDownloadFailed,
-                                'Google Drive download stream failed mid-transfer.',
-                            );
-                        }
-
-                        fwrite($handle, $chunk);
-                    }
-                },
+                // The shared pump: fixed-size chunks (a multi-gigabyte
+                // class video is never materialized in PHP memory), the
+                // size ceiling enforced as bytes arrive, every write
+                // checked.
+                fn ($handle) => $this->staging->pump($stream, $handle),
                 sprintf('meet-recording.%s', RecordingStagingArea::extensionFor($mimeType, 'recording.mp4')),
                 $mimeType,
             );

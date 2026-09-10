@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Support;
 
 use App\Booking\Contracts\ZoomMeetingClient;
+use App\Booking\DTOs\ProviderDownloadStream;
 use App\Booking\Exceptions\GatewayRequestException;
 
 /**
@@ -37,6 +38,13 @@ final class FakeZoomMeetingClient implements ZoomMeetingClient
     public array $downloads = [];
 
     public string $downloadBytes = 'zoom recording bytes';
+
+    /**
+     * What the fake "response" declares as Content-Length. Null means
+     * no declared length; set it above strlen($downloadBytes) to
+     * simulate a connection that closed before the body was complete.
+     */
+    public ?int $declaredDownloadBytes = null;
 
     public bool $credentialsValid = true;
 
@@ -108,7 +116,7 @@ final class FakeZoomMeetingClient implements ZoomMeetingClient
         return ['uuid' => 'uuid-'.$meetingId, 'files' => $this->recordingFiles[$meetingId] ?? []];
     }
 
-    public function openRecordingStream(string $downloadUrl, ?string $downloadToken = null)
+    public function openRecordingStream(string $downloadUrl, ?string $downloadToken = null): ProviderDownloadStream
     {
         $this->calls[] = 'openRecordingStream';
 
@@ -122,7 +130,7 @@ final class FakeZoomMeetingClient implements ZoomMeetingClient
         fwrite($stream, $this->downloadBytes);
         rewind($stream);
 
-        return $stream;
+        return new ProviderDownloadStream($stream, $this->declaredDownloadBytes);
     }
 
     public function validateCredentials(): bool
