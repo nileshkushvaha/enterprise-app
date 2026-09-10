@@ -13,6 +13,7 @@ use App\Settings\MeetingSettings;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Queue;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\Support\FakeZoomMeetingClient;
 use Tests\TestCase;
 
@@ -64,11 +65,19 @@ final class ZoomRecordingWebhookTest extends TestCase
         return route('api.meetings.recordings.webhook', ['provider' => $provider]);
     }
 
-    /** @param  array<string, mixed>  $payload */
-    private function signed(array $payload, ?string $secret = null, ?int $timestampMs = null): array
+    /**
+     * Signs a body exactly as Zoom does. The `x-zm-request-timestamp`
+     * header is Unix time in SECONDS (Zoom's headers are seconds; only
+     * the payload's `event_ts` is milliseconds). The raw header value is
+     * accepted as a string so tests can send malformed ones.
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array{body: string, headers: array<string, string>}
+     */
+    private function signed(array $payload, ?string $secret = null, ?string $timestamp = null): array
     {
         $body = json_encode($payload, JSON_THROW_ON_ERROR);
-        $timestamp = (string) ($timestampMs ?? (now()->getTimestamp() * 1000));
+        $timestamp ??= (string) now()->getTimestamp();
         $signature = 'v0='.hash_hmac('sha256', sprintf('v0:%s:%s', $timestamp, $body), $secret ?? self::SECRET);
 
         return [
@@ -82,11 +91,21 @@ final class ZoomRecordingWebhookTest extends TestCase
     }
 
     /** @param  array<string, mixed>  $payload */
-    private function sendWebhook(array $payload, ?string $secret = null, ?int $timestampMs = null)
+    private function sendWebhook(array $payload, ?string $secret = null, ?string $timestamp = null)
     {
-        ['body' => $body, 'headers' => $headers] = $this->signed($payload, $secret, $timestampMs);
+        ['body' => $body, 'headers' => $headers] = $this->signed($payload, $secret, $timestamp);
 
         return $this->call('POST', $this->url(), [], [], [], $this->serverHeaders($headers), $body);
+    }
+
+    private function secondsAgo(int $seconds): string
+    {
+        return (string) now()->subSeconds($seconds)->getTimestamp();
+    }
+
+    private function secondsAhead(int $seconds): string
+    {
+        return (string) now()->addSeconds($seconds)->getTimestamp();
     }
 
     /**
@@ -178,12 +197,72 @@ final class ZoomRecordingWebhookTest extends TestCase
             ->assertStatus(401);
     }
 
-    public function test_a_stale_timestamp_is_rejected(): void
+    /**
+     * Zoom sends `x-zm-request-timestamp` in Unix SECONDS. The payload's
+     * `event_ts` is milliseconds — a different field with a different
+     * unit — and the two must never be conflated: dividing the header
+     * by 1000 pushed every genuine delivery ~54 years into the past and
+     * the endpoint rejected all of them as stale.
+     */
+    public function test_a_realistic_seconds_header_within_the_window_is_accepted(): void
+    {
+        Queue::fake();
+        $this->zoomLesson();
+
+        $this->sendWebhook($this->recordingCompletedPayload(), timestamp: $this->secondsAgo(299))->assertOk();
+        $this->sendWebhook($this->recordingCompletedPayload(eventTs: 1700000001000), timestamp: $this->secondsAhead(299))->assertOk();
+    }
+
+    /** A millisecond header is not what Zoom sends; it reads as far-future and fails freshness. */
+    public function test_a_millisecond_header_is_rejected(): void
     {
         $this->sendWebhook(
             $this->recordingCompletedPayload(),
-            timestampMs: now()->subHours(2)->getTimestamp() * 1000,
+            timestamp: (string) (now()->getTimestamp() * 1000),
         )->assertStatus(401);
+    }
+
+    public function test_a_stale_timestamp_is_rejected(): void
+    {
+        $this->sendWebhook($this->recordingCompletedPayload(), timestamp: $this->secondsAgo(301))->assertStatus(401);
+        $this->sendWebhook($this->recordingCompletedPayload(), timestamp: $this->secondsAgo(7200))->assertStatus(401);
+    }
+
+    public function test_a_future_timestamp_is_rejected(): void
+    {
+        $this->sendWebhook($this->recordingCompletedPayload(), timestamp: $this->secondsAhead(301))->assertStatus(401);
+        $this->sendWebhook($this->recordingCompletedPayload(), timestamp: $this->secondsAhead(7200))->assertStatus(401);
+    }
+
+    /**
+     * A header that is not a plain non-negative integer is refused
+     * before any arithmetic — even when the signature over it is valid.
+     */
+    #[DataProvider('malformedTimestamps')]
+    public function test_a_malformed_timestamp_is_rejected(string $timestamp): void
+    {
+        $this->sendWebhook($this->recordingCompletedPayload(), timestamp: $timestamp)->assertStatus(401);
+    }
+
+    /** @return iterable<string, array{string}> */
+    public static function malformedTimestamps(): iterable
+    {
+        yield 'empty' => [''];
+        yield 'alphabetic' => ['abc'];
+        yield 'fractional seconds' => ['1700000000.5'];
+        yield 'negative' => ['-1700000000'];
+        yield 'unit suffix' => ['1700000000s'];
+        yield 'iso-8601' => ['2026-09-11T10:00:00Z'];
+    }
+
+    /** The timestamp is part of the signed message, so changing it after signing breaks the signature. */
+    public function test_a_timestamp_altered_after_signing_is_rejected(): void
+    {
+        ['body' => $body, 'headers' => $headers] = $this->signed($this->recordingCompletedPayload(), timestamp: $this->secondsAgo(200));
+        $headers['x-zm-request-timestamp'] = (string) now()->getTimestamp();
+
+        $this->call('POST', $this->url(), [], [], [], $this->serverHeaders($headers), $body)
+            ->assertStatus(401);
     }
 
     /** Fail closed: with no secret configured, nothing is trusted. */

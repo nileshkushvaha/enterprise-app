@@ -227,6 +227,15 @@ recordings:capture │  (bounded, every 15 min — the guarantee)
 The webhook is an optimization; the sweep is the guarantee. A webhook
 that was never delivered costs latency, never a recording.
 
+**Webhook authenticity** (`VerifiesZoomWebhooks`): the HMAC-SHA256 of
+`v0:<x-zm-request-timestamp>:<raw body>` under `zoom_webhook_secret` is
+compared constant-time against `x-zm-signature`; a missing secret fails
+closed. The `x-zm-request-timestamp` header is Unix time in **seconds**
+and must fall within five minutes of the server clock (past or future),
+or the delivery is refused as a replay. The payload's `event_ts` is
+**milliseconds** and only ever feeds the idempotency key — it plays no
+part in verification, and the two units are never interchanged.
+
 ### Which file is the class video
 
 Zoom returns a mixture for one meeting: several MP4 layouts, an M4A

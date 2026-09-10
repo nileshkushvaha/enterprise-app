@@ -22,6 +22,9 @@ use Illuminate\Http\Request;
  *    changes escaping and every signature fails.
  *  - the comparison must be constant-time (hash_equals), otherwise the
  *    check leaks the expected signature a byte at a time.
+ *  - the x-zm-request-timestamp header is Unix time in SECONDS. Only the
+ *    payload's `event_ts` field is milliseconds; the two must not be
+ *    conflated, or every genuine delivery reads decades stale.
  *
  * Zoom also validates endpoint ownership before it will deliver events:
  * it posts an `endpoint.url_validation` event carrying a plainToken,
@@ -60,8 +63,10 @@ trait VerifiesZoomWebhooks
             return false;
         }
 
-        // Zoom's timestamps are milliseconds since the epoch.
-        if (abs(now()->getTimestamp() - (int) ($timestamp / 1000)) > self::ZOOM_TIMESTAMP_TOLERANCE_SECONDS) {
+        // The header is whole seconds since the epoch (the payload's
+        // `event_ts` is milliseconds, but that field plays no part in
+        // authenticity). Compared as-is against the freshness window.
+        if (abs(now()->getTimestamp() - (int) $timestamp) > self::ZOOM_TIMESTAMP_TOLERANCE_SECONDS) {
             return false;
         }
 
