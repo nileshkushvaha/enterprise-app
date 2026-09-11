@@ -8,7 +8,9 @@ use App\Booking\DTOs\RecordingProviderReconciliation;
 use App\Booking\Services\RecordingService;
 use App\Models\Recording;
 use App\Models\User;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Gate;
 
 /**
  * Operator recovery for ONE recording whose meeting was replaced on
@@ -57,23 +59,37 @@ final class ReconcileRecordingProvider extends Command
             return self::SUCCESS;
         }
 
+        $adminRef = trim((string) $this->option('admin'));
+        $admin = $adminRef === '' ? null : User::query()->where('email', $adminRef)->orWhere('id', $adminRef)->first();
+        $authorized = $admin !== null && Gate::forUser($admin)->allows('retry', $recording);
+
         if (! $this->option('execute')) {
-            $this->components->warn('Preview only — nothing was changed. Re-run with --execute --admin=<user> to apply.');
+            $this->components->warn('Preview only — nothing was changed.');
             $this->components->twoColumnDetail('Would', $this->describe($recording));
+            $this->components->twoColumnDetail('Requires', 'an administrator who may retry recordings (Retry:Recording, or super admin)');
+
+            if ($adminRef !== '') {
+                $this->components->twoColumnDetail('--admin '.$adminRef, $admin === null ? '<fg=red>not found</>' : ($authorized ? 'authorized' : '<fg=red>NOT authorized</>'));
+            }
+
+            $this->components->info('Re-run with --execute --admin=<user> to apply.');
 
             return self::SUCCESS;
         }
 
-        $adminRef = trim((string) $this->option('admin'));
-        $admin = $adminRef === '' ? null : User::query()->where('email', $adminRef)->orWhere('id', $adminRef)->first();
-
         if ($admin === null) {
-            $this->components->error('--admin=<user id or email> is required with --execute and must name an existing administrator.');
+            $this->components->error('--admin=<user id or email> is required with --execute and must name an existing user.');
 
             return self::FAILURE;
         }
 
-        $outcome = $recordings->reconcileProvider($recording, audit: true, admin: $admin);
+        try {
+            $outcome = $recordings->reconcileProvider($recording, audit: true, admin: $admin);
+        } catch (AuthorizationException) {
+            $this->components->error(sprintf('%s may not repair recordings (Retry:Recording). Nothing changed.', $admin->email));
+
+            return self::FAILURE;
+        }
 
         return match ($outcome->decision) {
             RecordingProviderReconciliation::REALIGNED => $this->report(
@@ -91,7 +107,7 @@ final class ReconcileRecordingProvider extends Command
         $meetingLive = $recording->bookingMeeting?->status->value === 'created';
 
         if ($nothingCaptured && $meetingLive) {
-            return sprintf('re-point to %s, reset attempts to 0, clear the old provider reference', (string) $recording->bookingMeeting?->provider);
+            return sprintf('re-point to %s, reset attempts to 0, clear the old provider reference — if the lesson is eligible for recording on %1$s (re-checked at execution)', (string) $recording->bookingMeeting?->provider);
         }
 
         return 'refuse: '.($meetingLive ? 'an in-flight or stored transfer is never relabelled' : 'the meeting is not in a created state');

@@ -2,6 +2,7 @@
 
 namespace Database\Factories;
 
+use App\Booking\Enums\MeetingStatus;
 use App\Booking\Enums\RecordingFailureCode;
 use App\Booking\Enums\RecordingStatus;
 use App\Booking\Storage\FilesystemRecordingStorage;
@@ -30,6 +31,37 @@ class RecordingFactory extends Factory
             'idempotency_key' => 'recording:'.Str::uuid(),
             'consent_snapshot' => ['student_consented' => true, 'teacher_consented' => true],
         ];
+    }
+
+    /**
+     * A recording row and its meeting must agree: the meeting is the
+     * live (created) meeting on the recording's provider. Ingestion
+     * refuses anything else, exactly as production would, so a fixture
+     * that only sets the recording's provider gets a matching meeting.
+     */
+    public function configure(): static
+    {
+        return $this->afterCreating(function (Recording $recording): void {
+            $meeting = $recording->bookingMeeting;
+
+            if ($meeting === null) {
+                return;
+            }
+
+            $changes = [];
+
+            if ($meeting->provider !== $recording->provider) {
+                $changes['provider'] = $recording->provider;
+            }
+
+            if ($meeting->status === MeetingStatus::Pending) {
+                $changes['status'] = MeetingStatus::Created;
+            }
+
+            if ($changes !== []) {
+                $meeting->forceFill($changes)->save();
+            }
+        });
     }
 
     /**

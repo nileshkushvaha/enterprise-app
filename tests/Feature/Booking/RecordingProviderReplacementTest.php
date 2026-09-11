@@ -22,6 +22,7 @@ use App\Models\Recording;
 use App\Models\User;
 use App\Settings\FeatureSettings;
 use App\Settings\MeetingSettings;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Notification;
@@ -354,5 +355,138 @@ final class RecordingProviderReplacementTest extends TestCase
         app(RecordingService::class)->registerIfEligible($booking, BookingMeeting::query()->findOrFail($stale->booking_meeting_id), app(MeetingProviderRegistry::class)->get(FakeMeetingProvider::KEY));
 
         $this->assertSame(1, Recording::query()->where('booking_id', $booking->id)->count());
+    }
+
+    // ── Eligibility is re-evaluated on the destination provider ───────
+
+    public function test_recovery_is_refused_when_the_lesson_is_not_eligible_on_the_new_provider(): void
+    {
+        $stale = $this->replacedMeetingWithStaleRecording();
+        $stale->booking->instructor->profile()->update(['consents_to_recording' => false]);
+
+        $outcome = app(RecordingService::class)->reconcileProvider($stale->fresh());
+
+        $this->assertSame(RecordingProviderReconciliation::PROTECTED, $outcome->decision);
+        $this->assertStringContainsString('instructor_consent_missing', (string) $outcome->reason);
+        $this->assertSame(GoogleCalendarMeetProvider::KEY, $stale->fresh()->provider);
+        $this->assertDatabaseHas('activity_log', ['event' => 'recording_provider_mismatch_retained', 'subject_id' => $stale->id]);
+
+        // The stale job takes the same decision and captures nothing.
+        FakeMeetingProvider::$nextRecordingContents = $this->fakeMp4Bytes();
+        $this->runCaptureJob($stale->fresh());
+        $this->assertSame(RecordingStatus::Pending, $stale->fresh()->status);
+        $this->assertSame(0, $stale->fresh()->capture_attempts);
+    }
+
+    public function test_recovery_is_refused_when_the_destination_provider_is_not_registered(): void
+    {
+        $stale = $this->replacedMeetingWithStaleRecording();
+        $stale->bookingMeeting->update(['provider' => 'nonexistent_provider']);
+
+        $outcome = app(RecordingService::class)->reconcileProvider($stale->fresh(), audit: false);
+
+        $this->assertSame(RecordingProviderReconciliation::PROTECTED, $outcome->decision);
+        $this->assertStringContainsString('not registered', (string) $outcome->reason);
+        $this->assertSame(GoogleCalendarMeetProvider::KEY, $stale->fresh()->provider);
+    }
+
+    public function test_re_pointing_records_the_re_evaluated_consent_beside_the_original_snapshot(): void
+    {
+        $stale = $this->replacedMeetingWithStaleRecording();
+        $original = $stale->consent_snapshot;
+
+        app(RecordingService::class)->reconcileProvider($stale);
+
+        $snapshot = $stale->fresh()->consent_snapshot;
+        foreach ($original as $key => $value) {
+            $this->assertSame($value, $snapshot[$key], 'the original evidence is preserved');
+        }
+        $this->assertSame(GoogleCalendarMeetProvider::KEY, $snapshot['realigned']['from_provider']);
+        $this->assertSame(FakeMeetingProvider::KEY, $snapshot['realigned']['to_provider']);
+        $this->assertTrue($snapshot['realigned']['student_consented']);
+        $this->assertTrue($snapshot['realigned']['instructor_consented']);
+        $this->assertNotEmpty($snapshot['realigned']['at']);
+    }
+
+    // ── Operator authorization ────────────────────────────────────────
+
+    public function test_the_recovery_command_refuses_an_operator_without_the_retry_permission(): void
+    {
+        $stale = $this->replacedMeetingWithStaleRecording();
+        Role::firstOrCreate(['name' => 'manager', 'guard_name' => 'web']);
+        $manager = User::factory()->create(['status' => User::STATUS_ACTIVE]);
+        $manager->assignRole('manager');
+
+        $this->artisan('recordings:reconcile-provider', ['recording' => $stale->id, '--admin' => $manager->email])
+            ->expectsOutputToContain('NOT authorized')
+            ->assertSuccessful();
+
+        $this->artisan('recordings:reconcile-provider', ['recording' => $stale->id, '--execute' => true, '--admin' => $manager->email])
+            ->expectsOutputToContain('may not repair recordings')
+            ->assertFailed();
+
+        $this->assertSame(GoogleCalendarMeetProvider::KEY, $stale->fresh()->provider);
+        $this->assertSame(0, Activity::query()->where('event', 'recording_provider_realigned')->count());
+    }
+
+    public function test_the_service_itself_authorizes_the_operator(): void
+    {
+        $stale = $this->replacedMeetingWithStaleRecording();
+        $nobody = User::factory()->create(['status' => User::STATUS_ACTIVE]);
+
+        $this->expectException(AuthorizationException::class);
+        app(RecordingService::class)->reconcileProvider($stale, admin: $nobody);
+    }
+
+    // ── The claim validates the live meeting under lock ───────────────
+
+    /** A replacement that lands between the job's reconciliation and its claim is caught at the claim. */
+    public function test_the_claim_refuses_when_the_meeting_moved_again_after_reconciliation(): void
+    {
+        $stale = $this->replacedMeetingWithStaleRecording();
+        $outcome = app(RecordingService::class)->reconcileProvider($stale, audit: false);
+        $this->assertSame(RecordingProviderReconciliation::REALIGNED, $outcome->decision);
+
+        // The meeting is replaced yet again before the fetch starts.
+        $stale->bookingMeeting->update(['provider' => 'manual']);
+        FakeMeetingProvider::$nextRecordingContents = $this->fakeMp4Bytes();
+
+        app(RecordingService::class)->capture($stale->fresh(), app(MeetingProviderRegistry::class)->get(FakeMeetingProvider::KEY));
+
+        $fresh = $stale->fresh();
+        $this->assertSame(RecordingStatus::Pending, $fresh->status);
+        $this->assertSame(0, $fresh->capture_attempts, 'no attempt is spent: the provider was never asked');
+    }
+
+    public function test_the_claim_refuses_a_cancelled_meeting(): void
+    {
+        $recording = Recording::factory()->create(['provider' => FakeMeetingProvider::KEY]);
+        $recording->bookingMeeting->update(['status' => MeetingStatus::Cancelled]);
+        FakeMeetingProvider::$nextRecordingContents = $this->fakeMp4Bytes();
+
+        app(RecordingService::class)->capture($recording->fresh(), app(MeetingProviderRegistry::class)->get(FakeMeetingProvider::KEY));
+
+        $this->assertSame(RecordingStatus::Pending, $recording->fresh()->status);
+        $this->assertSame(0, $recording->fresh()->capture_attempts);
+    }
+
+    /** A Google object stored before the switch is never re-verified and published as the Zoom lesson's recording. */
+    public function test_a_stored_object_under_the_old_provider_is_never_published_for_the_new_meeting(): void
+    {
+        $stored = $this->replacedMeetingWithStaleRecording(RecordingStatus::Stored, [
+            'storage_driver' => InMemoryRecordingStorage::KEY,
+            'storage_path' => 'recordings/2026/09/lesson-google.mp4',
+            'size_bytes' => 1234,
+            'capture_attempts' => 1,
+        ]);
+        // Even the OLD provider's own adapter cannot resume it: the meeting is no longer a Google meeting.
+        app(RecordingService::class)->capture($stored, app(MeetingProviderRegistry::class)->get(GoogleCalendarMeetProvider::KEY));
+        $this->runCaptureJob($stored);
+
+        $fresh = $stored->fresh();
+        $this->assertSame(RecordingStatus::Stored, $fresh->status);
+        $this->assertSame(GoogleCalendarMeetProvider::KEY, $fresh->provider);
+        $this->assertNull($fresh->available_at);
+        $this->assertSame(1, $fresh->capture_attempts);
     }
 }

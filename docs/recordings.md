@@ -631,13 +631,19 @@ provider), and the operator command below.
 
 | Row state | Outcome |
 |---|---|
-| `pending` or `failed` with **no storage locator**, meeting `created` on the new provider | **re-pointed**: provider = meeting's, status `pending`, attempts 0, old provider reference cleared. Audit `recording_provider_realigned`. |
+| `pending` or `failed` with **no storage locator**, meeting `created` on the new provider, and the lesson **eligible on that provider now** (`RecordingEligibilityResolver`, the same gates as registration) | **re-pointed**: provider = meeting's, status `pending`, attempts 0, old provider reference cleared; the re-evaluated consent is recorded beside the original snapshot. Audit `recording_provider_realigned`. |
 | `transferring`, `stored`, `available`, `expired`, or any row with a locator | **protected** — never relabelled, cleared or deleted. Audit `recording_provider_mismatch_retained`; an operator decides. |
-| meeting not `created` | protected — nothing to re-point at. |
+| meeting not `created`, destination provider not registered, or lesson not eligible on it | protected — nothing to re-point at, with the reason. |
 
-`RecordingIngestionService::claim()` additionally refuses to claim a
-row when the adapter it was handed is not the row's provider, without
-spending an attempt.
+Both `reconcileProvider()` and `RecordingIngestionService::claim()`
+lock the **meeting row first, then the recording**, so a meeting
+replacement, a reconciliation and a claim serialise rather than
+interleave. The claim then re-validates, under that lock, that the
+meeting is `created`, that its provider is the row's provider, and that
+the adapter is that provider; otherwise nothing is claimed and no
+attempt is spent. That is also what stops a `stored` object captured
+under the old provider from being re-verified and published as the new
+meeting's recording.
 
 Operator recovery for one row:
 
@@ -645,6 +651,10 @@ Operator recovery for one row:
 php artisan recordings:reconcile-provider <recording id>                       # read-only preview
 php artisan recordings:reconcile-provider <recording id> --execute --admin=<user>  # apply, audited
 ```
+
+`--admin` must be a user `RecordingPolicy::retry` allows
+(`Retry:Recording`, or a super admin); the preview reports whether the
+named user is authorized and what execution would do.
 
 None of this relies on in-memory state or on queue-level uniqueness.
 `RecordingIdempotencyTest` runs the full realistic sequence — dispatch,

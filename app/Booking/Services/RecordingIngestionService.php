@@ -17,11 +17,13 @@ use App\Booking\DTOs\ProviderRecordingResult;
 use App\Booking\DTOs\RecordingLocator;
 use App\Booking\DTOs\RecordingStorageRequest;
 use App\Booking\DTOs\StagedRecordingFile;
+use App\Booking\Enums\MeetingStatus;
 use App\Booking\Enums\RecordingFailureCode;
 use App\Booking\Enums\RecordingStatus;
 use App\Booking\Exceptions\RecordingIngestionException;
 use App\Booking\Exceptions\RecordingStorageException;
 use App\Booking\Storage\RecordingStorageResolver;
+use App\Models\BookingMeeting;
 use App\Models\Recording;
 use App\Settings\MeetingSettings;
 use Carbon\CarbonImmutable;
@@ -279,6 +281,12 @@ final class RecordingIngestionService
     private function claim(Recording $recording, MeetingProviderInterface $provider): ?array
     {
         return DB::transaction(function () use ($recording, $provider): ?array {
+            // Meeting row FIRST, then the recording — the same order
+            // RecordingService::reconcileProvider() takes, so a meeting
+            // replacement, a reconciliation and this claim serialise
+            // instead of interleaving.
+            $meeting = BookingMeeting::query()->whereKey($recording->booking_meeting_id)->lockForUpdate()->first();
+
             /** @var Recording $fresh */
             $fresh = Recording::query()->whereKey($recording->getKey())->lockForUpdate()->firstOrFail();
 
@@ -288,17 +296,28 @@ final class RecordingIngestionService
                 return null;
             }
 
-            // Defence in depth for a replaced meeting: the adapter asked
-            // to fetch must be the provider the row names. A row that
-            // disagrees with its MEETING is re-pointed (or protected) by
-            // RecordingService::reconcileProvider() before the job ever
-            // gets here; this catches any caller that bypassed that and
-            // would otherwise ask one provider for another's recording.
-            // Nothing is claimed and no attempt is spent.
-            if ($provider->key() !== $fresh->provider) {
-                Log::warning('Recording ingestion refused: adapter does not match the recording provider', [
+            // The meeting this row belongs to must be the live meeting on
+            // the provider the row names, and the adapter must be that
+            // provider. A replaced or cancelled meeting, or a row whose
+            // provider disagrees with its meeting, is never fetched from
+            // — and a Stored object under the OLD provider is never
+            // re-verified and published as the NEW meeting's recording.
+            // Nothing is claimed and no attempt is spent; the job and the
+            // recovery command re-point what can be re-pointed.
+            $mismatch = match (true) {
+                $meeting === null => 'meeting row missing',
+                $meeting->status !== MeetingStatus::Created => 'meeting is '.$meeting->status->value,
+                $meeting->provider !== $fresh->provider => 'meeting provider differs from recording provider',
+                $provider->key() !== $fresh->provider => 'adapter differs from recording provider',
+                default => null,
+            };
+
+            if ($mismatch !== null) {
+                Log::warning('Recording ingestion refused: '.$mismatch, [
                     'recording_id' => $fresh->getKey(),
                     'recording_provider' => $fresh->provider,
+                    'meeting_provider' => $meeting?->provider,
+                    'meeting_status' => $meeting?->status?->value,
                     'adapter' => $provider->key(),
                 ]);
 

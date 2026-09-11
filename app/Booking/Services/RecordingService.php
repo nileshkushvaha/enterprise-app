@@ -54,6 +54,7 @@ final class RecordingService
         private readonly RecordingIngestionService $ingestion,
         private readonly RecordingLifecycleNotifier $lifecycle,
         private readonly RecordingStorageResolver $storage,
+        private readonly MeetingProviderRegistry $providers,
     ) {}
 
     /**
@@ -138,23 +139,39 @@ final class RecordingService
      * meeting it belongs to, after that meeting was replaced.
      *
      * Re-points the row ONLY when nothing has been captured under the
-     * old provider: status Pending or Failed, no storage locator, and
-     * the meeting itself is live (Created) on the new provider. The
-     * attempt budget restarts because the old attempts asked the wrong
-     * provider. A row that is Transferring, Stored, Available or Expired
-     * — or that already holds a locator — is never relabelled, never
-     * cleared, never deleted: an operator decides.
+     * old provider (status Pending or Failed, no storage locator), the
+     * meeting itself is live (Created) on the new provider, AND the
+     * lesson is eligible to be recorded on that provider right now —
+     * the same RecordingEligibilityResolver gates registration applies
+     * (booking status, participants active, consent, provider
+     * capability), re-evaluated here because the queued job and the
+     * operator command reach this without passing through registration.
+     * The attempt budget restarts because the old attempts asked the
+     * wrong provider; the consent evidence is re-snapshotted alongside
+     * the original. A row that is Transferring, Stored, Available or
+     * Expired — or that already holds a locator — is never relabelled,
+     * never cleared, never deleted: an operator decides.
      *
-     * Row-locked and idempotent, so the registration path, a stale
-     * queued capture job and the recovery command can all call it for
-     * the same row and converge on one outcome.
+     * Locks the MEETING row first, then the recording — the same order
+     * the ingestion claim uses — so a meeting replacement committing at
+     * the same instant is either fully seen or not at all.
+     *
+     * @param  User|null  $admin  the operator, when invoked on demand; must hold
+     *                            RecordingPolicy::retry for this recording
+     *
+     * @throws AuthorizationException when $admin may not repair recordings
      */
     public function reconcileProvider(Recording $recording, bool $audit = true, ?User $admin = null): RecordingProviderReconciliation
     {
+        if ($admin !== null) {
+            Gate::forUser($admin)->authorize('retry', $recording);
+        }
+
         $outcome = DB::transaction(function () use ($recording): RecordingProviderReconciliation {
+            $meeting = BookingMeeting::query()->whereKey($recording->booking_meeting_id)->lockForUpdate()->first();
+
             /** @var Recording $fresh */
-            $fresh = Recording::query()->whereKey($recording->getKey())->lockForUpdate()->with('bookingMeeting')->firstOrFail();
-            $meeting = $fresh->bookingMeeting;
+            $fresh = Recording::query()->whereKey($recording->getKey())->lockForUpdate()->firstOrFail();
             $meetingProvider = $meeting?->provider;
 
             if ($meeting === null) {
@@ -181,6 +198,26 @@ final class RecordingService
                 ));
             }
 
+            // Eligibility on the DESTINATION provider, exactly as at
+            // registration. A lesson that may not be recorded on Zoom is
+            // not recovered onto Zoom just because it once qualified on
+            // Google Meet.
+            if (! $this->providers->has($meetingProvider)) {
+                return new RecordingProviderReconciliation(RecordingProviderReconciliation::PROTECTED, $fresh, $meetingProvider, reason: sprintf('Provider %s is not registered; the recording cannot be re-pointed to it.', $meetingProvider));
+            }
+
+            $booking = $fresh->booking;
+
+            if ($booking === null) {
+                return new RecordingProviderReconciliation(RecordingProviderReconciliation::PROTECTED, $fresh, $meetingProvider, reason: 'The recording has no booking.');
+            }
+
+            $eligibility = $this->eligibility->evaluate($booking, $this->providers->get($meetingProvider));
+
+            if (! $eligibility->eligible) {
+                return new RecordingProviderReconciliation(RecordingProviderReconciliation::PROTECTED, $fresh, $meetingProvider, reason: sprintf('The lesson is not eligible for recording on %s (%s).', $meetingProvider, (string) $eligibility->reason));
+            }
+
             $previous = (string) $fresh->provider;
 
             $fresh->fill([
@@ -192,6 +229,18 @@ final class RecordingService
                 'failure_code' => null,
                 'failed_at' => null,
                 'transfer_started_at' => null,
+                // Evidence: the original snapshot stays; the re-evaluation
+                // at re-point time is recorded beside it.
+                'consent_snapshot' => [
+                    ...($fresh->consent_snapshot ?? []),
+                    'realigned' => [
+                        'from_provider' => $previous,
+                        'to_provider' => $meetingProvider,
+                        'student_consented' => (bool) $booking->student?->profile?->consents_to_recording,
+                        'instructor_consented' => (bool) $booking->instructor?->profile?->consents_to_recording,
+                        'at' => now()->toIso8601String(),
+                    ],
+                ],
             ])->save();
 
             return new RecordingProviderReconciliation(RecordingProviderReconciliation::REALIGNED, $fresh, $meetingProvider, $previous);
