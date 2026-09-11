@@ -517,6 +517,19 @@ whom, why) — each stamped. Declaring none clears the
 `remote_state_unknown` flag and keeps everything else; a later
 successful create carries the record forward.
 
+**No provider switch after creation.** A booking whose meeting is
+`created` on one provider is never moved to another: an explicit
+request for a different provider (the admin action, or
+`meetings:pin-provider`) is refused with
+`MeetingProviderSwitchNotSupportedException`, the existing meeting and
+its join link stand, and the administrator is told so — never
+"Meeting created". The automatic path stays a silent idempotent no-op
+for the same provider. The supported way to route a single booking to
+Zoom while Google Meet remains the default is to pin it **before** its
+meeting exists (`BookingMeetingService::pinProvider()` →
+`bookings.meeting_provider_intent`, reserving the host at once);
+`docs/deployment/zoom-activation.md` §6c.
+
 ### Rollout control, preflight, backfill
 
 - `meeting.zoom_host_capacity_enabled` (Settings → Meetings → Zoom →

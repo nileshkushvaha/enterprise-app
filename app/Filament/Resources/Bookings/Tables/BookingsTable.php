@@ -278,14 +278,22 @@ class BookingsTable
                     ->action(function (Booking $record, array $data): void {
                         $service = app(BookingMeetingServiceInterface::class);
 
-                        $meeting = $data['provider'] === ManualMeetingProvider::KEY
-                            ? $service->saveManualMeeting($record, new MeetingUpdateContext(
-                                requestedBy: auth()->id(),
-                                providerLabel: $data['manual_label'] ?? null,
-                                joinUrl: $data['join_url'] ?? null,
-                                password: $data['password'] ?? null,
-                            ))
-                            : $service->createMeeting($record, $data['provider']);
+                        try {
+                            $meeting = $data['provider'] === ManualMeetingProvider::KEY
+                                ? $service->saveManualMeeting($record, new MeetingUpdateContext(
+                                    requestedBy: auth()->id(),
+                                    providerLabel: $data['manual_label'] ?? null,
+                                    joinUrl: $data['join_url'] ?? null,
+                                    password: $data['password'] ?? null,
+                                ))
+                                : $service->createMeeting($record, $data['provider']);
+                        } catch (BookingException $e) {
+                            // A created meeting on another provider is never
+                            // replaced; say so instead of "Meeting created".
+                            Notification::make()->title('Meeting not changed')->body($e->getMessage())->danger()->persistent()->send();
+
+                            return;
+                        }
 
                         self::notifyMeetingOutcome($meeting);
                     }),

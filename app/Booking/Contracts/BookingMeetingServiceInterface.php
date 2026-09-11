@@ -43,6 +43,15 @@ interface BookingMeetingServiceInterface
     public function cancelMeeting(Booking $booking): ?BookingMeeting;
 
     /**
+     * Route ONE booking to a specific provider before its meeting exists
+     * (sets meeting_provider_intent and reserves capacity where needed).
+     * Refused once a meeting has been created on another provider.
+     *
+     * @throws BookingException
+     */
+    public function pinProvider(Booking $booking, string $providerKey, User $admin): Booking;
+
+    /**
      * Explicit resolution of an AMBIGUOUS create (remote_state_unknown):
      * an administrator declares, with a reason, that the provider holds
      * no meeting for this booking. Clears the flag so the next create

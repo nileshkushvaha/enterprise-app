@@ -24,6 +24,7 @@ use App\Booking\Events\MeetingUpdated;
 use App\Booking\Exceptions\AmbiguousMeetingCreationException;
 use App\Booking\Exceptions\BookingException;
 use App\Booking\Exceptions\MeetingHostCapacityException;
+use App\Booking\Exceptions\MeetingProviderSwitchNotSupportedException;
 use App\Booking\Jobs\CaptureLessonRecordingJob;
 use App\Booking\Meetings\ManualMeetingProvider;
 use App\Exceptions\Student\StudentActionNotAvailableException;
@@ -104,6 +105,16 @@ final class BookingMeetingService implements BookingMeetingServiceInterface
         $existing = $this->findForBooking($booking);
 
         if ($existing?->status === MeetingStatus::Created) {
+            // An EXPLICIT request for a different provider is refused
+            // loudly rather than answered with the untouched existing
+            // meeting — an administrator must never read "created" about
+            // a switch that did not happen. The automatic path (null
+            // provider) stays idempotent and silent, as it must for a
+            // redelivered listener.
+            if ($providerKey !== null && $providerKey !== $existing->provider) {
+                throw MeetingProviderSwitchNotSupportedException::between($booking->reference, $existing->provider, $providerKey);
+            }
+
             return $existing;
         }
 
@@ -381,6 +392,74 @@ final class BookingMeetingService implements BookingMeetingServiceInterface
         }
     }
 
+    // ── Explicit provider pin before any meeting exists ───────────────
+
+    /**
+     * The supported way to route ONE booking to a specific provider
+     * without touching the global default: set its
+     * meeting_provider_intent before its meeting is created, reserving
+     * host capacity when the provider is capacity-governed. The meeting
+     * itself is then created by the normal path — the BookingConfirmed
+     * listener on confirmation, or the admin action — exactly as it
+     * would be for a default-provider booking.
+     *
+     * Refused when a created meeting already exists (see
+     * MeetingProviderSwitchNotSupportedException), when the provider is
+     * not usable right now, or when Zoom capacity cannot be reserved.
+     *
+     * @throws BookingException
+     */
+    public function pinProvider(Booking $booking, string $providerKey, User $admin): Booking
+    {
+        Gate::forUser($admin)->authorize('manageMeeting', $booking);
+
+        if ($booking->status->isTerminal()) {
+            throw new BookingException(sprintf('Booking %s is %s; its meeting provider cannot be changed.', $booking->reference, $booking->status->label()));
+        }
+
+        $existing = $this->findForBooking($booking);
+
+        if ($existing?->status === MeetingStatus::Created && $existing->provider !== $providerKey) {
+            throw MeetingProviderSwitchNotSupportedException::between($booking->reference, $existing->provider, $providerKey);
+        }
+
+        // Fails clearly when the provider is disabled or misconfigured.
+        $provider = $this->providers->resolve($providerKey);
+
+        return $this->bookings->withMeetingCreationLock($booking->id, function () use ($booking, $provider, $admin): Booking {
+            return DB::transaction(function () use ($booking, $provider, $admin): Booking {
+                $previous = $booking->meeting_provider_intent;
+
+                // Same lock order as acceptance: host rows first, then the
+                // booking row, then the reservation.
+                $this->hostCapacity->lockPoolFor($provider->key());
+
+                /** @var Booking $locked */
+                $locked = Booking::query()->whereKey($booking->getKey())->lockForUpdate()->firstOrFail();
+                $locked->forceFill(['meeting_provider_intent' => $provider->key()])->save();
+
+                if ($this->hostCapacity->appliesTo($provider->key())) {
+                    // Throws MeetingHostCapacityException (no room, or the
+                    // reservation switch is off) and rolls the pin back.
+                    $this->hostCapacity->ensureReserved($locked);
+                } elseif ($previous !== null && $this->hostCapacity->appliesTo($previous)) {
+                    // Moving a not-yet-created booking OFF Zoom frees its host.
+                    $this->hostCapacity->release($locked, MeetingHostCapacityService::RELEASE_CANCELLED);
+                }
+
+                $this->audit->logSystem(
+                    'bookings',
+                    'meeting_provider_pinned',
+                    sprintf('Booking %s pinned to meeting provider %s before meeting creation.', $locked->reference, $provider->key()),
+                    $locked,
+                    ['provider' => $provider->key(), 'previous_intent' => $previous, 'admin_id' => $admin->id],
+                );
+
+                return $locked;
+            });
+        });
+    }
+
     // ── Explicit resolution of an ambiguous create ────────────────────
 
     public function acknowledgeNoRemoteMeeting(Booking $booking, User $admin, string $reason): BookingMeeting
@@ -609,6 +688,10 @@ final class BookingMeetingService implements BookingMeetingServiceInterface
         }
 
         $existing = $this->findForBooking($booking);
+
+        if ($existing?->status === MeetingStatus::Created && $existing->provider !== ManualMeetingProvider::KEY) {
+            throw MeetingProviderSwitchNotSupportedException::between($booking->reference, $existing->provider, ManualMeetingProvider::KEY);
+        }
         $previousStatus = $existing?->status;
         $previousJoinUrl = $existing?->join_url;
 

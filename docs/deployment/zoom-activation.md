@@ -438,6 +438,51 @@ Then observe, without forcing anything:
 
 ---
 
+## 6c. Creating the first Zoom canary booking (Google Meet stays the default)
+
+**A booking whose meeting already exists is never switched.** Choosing
+Zoom in Admin → Bookings → *Create/Update Meeting* for a booking that
+already has a created Google Meet meeting is refused with "Switching it
+to zoom is not supported" (it used to report "Meeting created" while
+changing nothing — fixed). The existing meeting and the participants'
+link stay exactly as they are; there is no migration workflow for a live
+meeting, by design.
+
+The supported route is to decide the provider **before the meeting is
+created**, for one booking, without touching `default_provider`:
+
+1. Preconditions: `meetings:zoom:check-auth` exit 0; host registered;
+   preflight clean; **Reserve Zoom Host Capacity** on (a pin reserves the
+   host immediately and is refused while the switch is off).
+2. Create a **paid** lesson for the test student with the test
+   instructor. Do not pay yet. A paid booking sits in `pending` with a
+   payment hold and **no meeting row** — that is the window. (A free
+   demo auto-confirms and gets its meeting at once, so it cannot be used
+   as the canary unless automatic demo meeting creation is off.)
+3. Pin it:
+
+   ```bash
+   php artisan meetings:pin-provider BK-XXXXXXXXXX --provider=zoom --admin=<admin id or email>
+   ```
+
+   Verify: `bookings.meeting_provider_intent = zoom`;
+   `meeting_host_reservations` one `active` row for the booking with
+   `expires_at` = the payment hold; `activity_log`:
+   `meeting_provider_pinned`. Refused (nothing changes) if a meeting
+   already exists, if the host has no room at that hour, if the
+   reservation switch is off, or if Zoom is not configured.
+4. Pay for the lesson. Payment settles → the booking confirms → the
+   normal listener creates the meeting **on Zoom**, hostless, on the
+   reserved host; the reservation's expiry is cleared.
+5. Continue with §7a from step 3 (inspect the created meeting).
+
+To take a pinned-but-unpaid booking back to the default, run the same
+command with `--provider=google_meet`; the Zoom reservation is released.
+Once a meeting exists, the only ways out are cancelling the booking
+(which deletes the meeting at its provider) or booking again.
+
+---
+
 ## 7a. Real end-to-end staging test — one virtual host (room01), one lesson
 
 Hostless provisioning shipped in Phase 4 (`docs/meetings.md` §4). The
