@@ -6,6 +6,7 @@ namespace App\Livewire\Frontend\Student;
 
 use App\Booking\Contracts\AvailabilityServiceInterface;
 use App\Booking\Contracts\BookingMeetingServiceInterface;
+use App\Booking\Contracts\BookingPaymentReconciliationServiceInterface;
 use App\Booking\Contracts\BookingPaymentServiceInterface;
 use App\Booking\Contracts\BookingRepositoryInterface;
 use App\Booking\Contracts\BookingServiceInterface;
@@ -558,11 +559,36 @@ final class BookingDetail extends Component
             // Non-authoritative by design — see BookingWizard::
             // verifyPayment() for why calling markPaid() here produced
             // confirmed bookings with no receipt and no notifications.
-            $this->razorpay->verifyCheckout($this->booking, $orderId, $paymentId, $signature);
+            $obligation = $this->razorpay->verifyCheckout($this->booking, $orderId, $paymentId, $signature);
+
+            // Ask Razorpay now; a captured order settles in this request
+            // through the same path the webhook uses.
+            $this->settleFromProviderNow($obligation);
 
             $this->booking = $this->booking->refresh()->loadMissing(['type', 'instructor']);
         } catch (InvalidPaymentWebhookException|BookingException $exception) {
             $this->banner = $exception->getMessage();
+        }
+    }
+
+    /**
+     * The browser's success callback is not evidence that money moved —
+     * but it IS the moment to ask the provider. Reconciliation fetches
+     * the order from Razorpay and, when it reports paid, settles through
+     * the very same path the webhook uses (attempt captured, obligation
+     * captured, booking confirmed, receipt, notifications). So a
+     * captured payment confirms in this request instead of waiting for
+     * a webhook that may be delayed, misconfigured or lost. If the
+     * provider cannot be reached or has not captured yet, nothing is
+     * settled and the confirming state polls; the webhook and the sweep
+     * remain the safety net.
+     */
+    private function settleFromProviderNow(BookingPayment $obligation): void
+    {
+        try {
+            app(BookingPaymentReconciliationServiceInterface::class)->reconcileAttempt($obligation);
+        } catch (\Throwable $e) {
+            report($e);
         }
     }
 

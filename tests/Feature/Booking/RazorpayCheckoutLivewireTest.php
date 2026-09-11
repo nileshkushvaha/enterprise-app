@@ -31,6 +31,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Crypt;
 use Livewire\Livewire;
 use Mockery;
+use Mockery\MockInterface;
 use Tests\Support\CreatesAcademicBookingContext;
 use Tests\Support\CreatesStudentLessonPrices;
 use Tests\TestCase;
@@ -115,7 +116,21 @@ class RazorpayCheckoutLivewireTest extends TestCase
 
         $mock = Mockery::mock(RazorpayGatewayClient::class);
         $mock->shouldReceive('createOrder')->andReturn(['id' => 'order_LW1', 'amount' => 49900, 'currency' => 'INR']);
+        // The checkout callback now asks Razorpay for the order at once.
+        // By default the order is NOT yet paid, so the existing tests keep
+        // exercising the "verified but unsettled" state; tests that want
+        // instant confirmation override this with status 'paid'.
+        $mock->shouldReceive('fetchOrder')->andReturn(['id' => 'order_LW1', 'status' => 'created', 'amount' => 49900, 'currency' => 'INR'])->byDefault();
         $this->app->instance(RazorpayGatewayClient::class, $mock);
+        $this->razorpayMock = $mock;
+    }
+
+    private MockInterface $razorpayMock;
+
+    /** Razorpay reports the order as paid when asked — the normal case right after a successful checkout. */
+    private function razorpayReportsPaid(string $orderId = 'order_LW1'): void
+    {
+        $this->razorpayMock->shouldReceive('fetchOrder')->andReturn(['id' => $orderId, 'status' => 'paid', 'amount' => 49900, 'currency' => 'INR']);
     }
 
     private function checkoutSignature(string $orderId, string $paymentId): string
@@ -206,6 +221,80 @@ class RazorpayCheckoutLivewireTest extends TestCase
         $this->assertSame(BookingStatus::Confirmed, $booking->status);
         $this->assertSame(PaymentStatus::Paid, $attempt->refresh()->status);
         $this->assertSame(1, Invoice::query()->count());
+    }
+
+    /**
+     * The normal case: Razorpay's checkout reports success and, asked at
+     * once, Razorpay confirms the order is paid. The booking must be
+     * settled and CONFIRMED in this very request — through the same
+     * settlement path the webhook uses, receipt included — and the
+     * student must see "Booking confirmed", never a confirming screen.
+     */
+    public function test_a_captured_payment_confirms_immediately_on_the_checkout_callback(): void
+    {
+        $student = User::factory()->activeStudent()->create(['status' => User::STATUS_ACTIVE]);
+        $this->withBillingCountry($student);
+        $slot = CarbonImmutable::now('UTC')->addDays(3)->setTime(10, 0);
+
+        $component = $this->navigateAcademicWizardToSlot(
+            Livewire::actingAs($student)->test('frontend.booking.booking-wizard'),
+            $this->academic,
+            $slot,
+        );
+        $component->call('submit');
+        $component->call('initiatePayment');
+        $orderId = $component->get('paymentOrder')['order_id'];
+        $this->razorpayReportsPaid($orderId);
+
+        $component->call('verifyPayment', $orderId, 'pay_LW1', $this->checkoutSignature($orderId, 'pay_LW1'))
+            ->assertSet('awaitingPaymentConfirmation', false)
+            ->assertSee('Booking confirmed')
+            ->assertDontSee('Confirming your payment')
+            ->assertDontSee('Pay 499.00 INR securely');
+
+        $booking = Booking::query()->findOrFail($component->get('bookingId'));
+        $this->assertSame(BookingPaymentStatus::Paid, $booking->payment_status);
+        $this->assertSame(BookingStatus::Confirmed, $booking->status);
+        $obligation = BookingPayment::query()->where('booking_id', $booking->id)->sole();
+        $attempt = Payment::query()->where('payable_id', $obligation->getKey())->sole();
+        $this->assertSame(PaymentStatus::Paid, $attempt->status, 'settled through the real settlement path');
+        $this->assertSame(BookingPaymentRecordStatus::Captured, $obligation->status);
+        $this->assertSame(1, Invoice::query()->count(), 'the receipt chain fires exactly as for a webhook');
+    }
+
+    /** The provider says "not yet": the confirming screen shows, and a later poll re-asks the provider and confirms. */
+    public function test_polling_re_asks_the_provider_and_confirms_once_it_reports_paid(): void
+    {
+        $student = User::factory()->activeStudent()->create(['status' => User::STATUS_ACTIVE]);
+        $this->withBillingCountry($student);
+        $slot = CarbonImmutable::now('UTC')->addDays(3)->setTime(10, 0);
+
+        $component = $this->navigateAcademicWizardToSlot(
+            Livewire::actingAs($student)->test('frontend.booking.booking-wizard'),
+            $this->academic,
+            $slot,
+        );
+        $component->call('submit');
+        $component->call('initiatePayment');
+        $orderId = $component->get('paymentOrder')['order_id'];
+
+        // Not captured yet when the callback arrives.
+        $component->call('verifyPayment', $orderId, 'pay_LW1', $this->checkoutSignature($orderId, 'pay_LW1'))
+            ->assertSet('awaitingPaymentConfirmation', true)
+            ->assertSee('Confirming your payment');
+        $this->assertNotNull($component->get('lastProviderCheckAt'));
+
+        // Razorpay now reports paid, but a poll within 20 s only re-reads locally.
+        $this->razorpayReportsPaid($orderId);
+        $component->call('checkPaymentStatus')->assertSet('awaitingPaymentConfirmation', true);
+
+        // After the re-check interval the poll asks Razorpay again and settles.
+        $this->travel(21)->seconds();
+        $component->call('checkPaymentStatus')
+            ->assertSet('awaitingPaymentConfirmation', false)
+            ->assertSee('Booking confirmed');
+
+        $this->assertSame(BookingStatus::Confirmed, Booking::query()->findOrFail($component->get('bookingId'))->status);
     }
 
     /**
