@@ -14,9 +14,11 @@ use App\Models\Recording;
 use App\Settings\MeetingSettings;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
 use Tests\Support\InMemoryRecordingStorage;
 use Tests\TestCase;
+use Throwable;
 
 /**
  * The provider → storage transfer, exercised entirely against a fake
@@ -401,5 +403,87 @@ final class RecordingIngestionTest extends TestCase
 
         $this->service->capture($recording->fresh(), new FakeMeetingProvider);
 
+    }
+
+    // ── Logging is never load-bearing ────────────────────────────────
+
+    /**
+     * The 2026-09-11 incident: the worker ran as a user that could not
+     * write the day's log file, so logging the storage failure threw
+     * before the row was settled and the recording sat in Transferring.
+     * Settlement must not depend on the logging sink at all.
+     */
+    public function test_a_storage_failure_still_settles_as_retryable_when_the_log_sink_is_unwritable(): void
+    {
+        $meetings = app(MeetingSettings::class);
+        $meetings->recording_capture_max_attempts = 5;
+        $meetings->recording_capture_retry_minutes = 1440;
+        $meetings->save();
+
+        $recording = $this->pendingRecording();
+        FakeMeetingProvider::$nextRecordingContents = $this->fakeMp4Bytes();
+        $this->storage->failNextPut = RecordingStorageException::quotaExceeded('drive is full');
+
+        $this->withUnwritableLogSink(function () use ($recording): void {
+            $this->service->capture($recording, new FakeMeetingProvider);
+        });
+
+        $recording->refresh();
+        $this->assertSame(RecordingStatus::Pending, $recording->status, 'the row was released for retry despite the logging failure');
+        $this->assertNull($recording->transfer_started_at);
+        $this->assertSame(1, $recording->capture_attempts);
+    }
+
+    public function test_a_permanent_failure_still_settles_as_failed_and_is_audited_when_the_log_sink_is_unwritable(): void
+    {
+        $recording = $this->pendingRecording();
+        FakeMeetingProvider::$nextRecordingContents = $this->fakeMp4Bytes();
+        $this->storage->failNextPut = RecordingStorageException::notConfigured(InMemoryRecordingStorage::KEY);
+
+        $this->withUnwritableLogSink(function () use ($recording): void {
+            $this->service->capture($recording, new FakeMeetingProvider);
+        });
+
+        $recording->refresh();
+        $this->assertSame(RecordingStatus::Failed, $recording->status);
+        $this->assertSame(RecordingFailureCode::StorageNotConfigured, $recording->failure_code);
+        // The audit trail — the record of truth — was written even though the log line could not be.
+        $this->assertDatabaseHas('activity_log', ['event' => 'recording_failed', 'subject_id' => $recording->getKey()]);
+    }
+
+    /**
+     * Points the default log channel at a path that cannot be opened for
+     * writing (a directory), runs the callback, and proves the sink
+     * really does throw — so the assertion above is about resilience,
+     * not about a sink that happened to work.
+     */
+    private function withUnwritableLogSink(callable $callback): void
+    {
+        $directory = sys_get_temp_dir().'/siri-unwritable-log-'.uniqid();
+        File::makeDirectory($directory, 0755, true);
+
+        config([
+            'logging.default' => 'unwritable_for_test',
+            'logging.channels.unwritable_for_test' => ['driver' => 'single', 'path' => $directory, 'level' => 'debug'],
+        ]);
+        Log::forgetChannel('unwritable_for_test');
+
+        $threw = false;
+
+        try {
+            Log::warning('probe');
+        } catch (Throwable) {
+            $threw = true;
+        }
+
+        $this->assertTrue($threw, 'the test sink must genuinely refuse writes');
+
+        try {
+            $callback();
+        } finally {
+            Log::forgetChannel('unwritable_for_test');
+            config(['logging.default' => 'stack']);
+            File::deleteDirectory($directory);
+        }
     }
 }

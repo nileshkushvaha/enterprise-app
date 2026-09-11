@@ -70,6 +70,14 @@ final class RecordingDeliveryService
      */
     public function respond(Recording $recording, ?string $rangeHeader, bool $inline, bool $headOnly = false): Response
     {
+        // Business state, separate from authorization: only a VERIFIED,
+        // available object is ever served. RecordingPolicy already says
+        // so for everyone it evaluates, but Gate::before lets a super
+        // admin past the policy — never past this. A failed row that
+        // still holds a preserved locator, a Stored row awaiting
+        // verification, or an expired row has no servable content.
+        abort_unless($recording->isPlayable(), 404);
+
         $locator = RecordingLocator::fromRecording($recording);
         abort_if($locator === null, 404);
 

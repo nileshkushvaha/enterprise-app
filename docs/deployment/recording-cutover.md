@@ -519,3 +519,35 @@ activity without touching Google at all.
 
 Nothing in this runbook deletes a recording. Retention deletion happens
 only via `recordings:expire` on rows past `expires_at`.
+
+## Post-incident acceptance (2026-09-11 Zoom recording) — read-only unless marked ✎
+
+Root causes and the code changes that address them are in
+`docs/recordings.md` §8 (state guards), §10 (settlement never depends
+on logging) and §13 (daily log permissions).
+
+```bash
+# read-only: storage presence, log writability as THIS user, queue, failed/stalled rows
+sudo -u deploy   php artisan recordings:preflight
+sudo -u www-data php artisan recordings:preflight
+# read-only, one Drive metadata GET: proves the delegated account sees the folder
+sudo -u www-data php artisan recordings:preflight --probe
+# read-only: one booking's recording evidence and audit trail
+php artisan recordings:inspect BK-XDHJAJ80WY
+php artisan recordings:explain BK-XDHJAJ80WY
+```
+
+Deploy: code only (no schema or settings migration). `git pull`,
+`composer install --no-dev`, `php artisan optimize:clear && php artisan
+optimize` ✎, then graceful `php artisan queue:restart` ✎ (a running
+transfer may take up to 3600 s to drain). Apply the log-permission
+steps from §13 once per host ✎ (filesystem only; no application data).
+
+Rollback: revert the commit and redeploy; nothing persisted changes
+shape. Recordings settled while the fix was live stay settled.
+
+Acceptance for the next Zoom lesson: the row moves pending →
+transferring → stored → available within one capture cycle; the
+student sees "Recording processing" only after the lesson is Completed
+and "Watch recording" once available; `recordings:preflight` exits 0
+as both users; no `UnexpectedValueException` in `failed_jobs`.

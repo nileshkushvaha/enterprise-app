@@ -38,6 +38,11 @@ final class RecordingWatchController extends Controller
             abort(403);
         }
 
+        // Business state is not authorization: a super admin passes the
+        // Gate through Gate::before, but a recording without a verified
+        // stored object has no player page. Same rule as the stream.
+        abort_unless($recording->isPlayable(), 404);
+
         $auditor->playbackOpened($viewer, $recording);
 
         $recording->loadMissing(['booking.type', 'booking.instructor']);

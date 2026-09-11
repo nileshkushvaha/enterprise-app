@@ -13,7 +13,9 @@ use App\Booking\Enums\RecordingFailureCode;
 use App\Models\Recording;
 use App\Models\User;
 use App\Services\AuditTrailService;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use Throwable;
 
 /**
  * Everything a recording lifecycle transition emits outward: the audit
@@ -149,6 +151,10 @@ final class RecordingLifecycleNotifier
 
     public function recordingFailed(Recording $recording, RecordingFailureCode $code): void
     {
+        // The audit entry is the record of truth and is written inside
+        // the caller's row transaction — if it cannot be written, the
+        // failure is not settled. The operational alert is a courtesy
+        // to administrators: it must never be what rolls that back.
         $this->audit->logSystem(
             'recordings',
             'recording_failed',
@@ -157,22 +163,30 @@ final class RecordingLifecycleNotifier
             ['provider' => $recording->provider, 'failure_code' => $code->value],
         );
 
-        $this->alerts->createOrMerge(new OperationalAlertSignal(
-            type: OperationalAlertType::RecordingCaptureFailed,
-            category: OperationalAlertCategory::BookingMeeting,
-            severity: OperationalAlertSeverity::Warning,
-            title: 'Lesson recording capture failed',
-            // The stable failure LABEL, never a raw exception message.
-            summary: sprintf(
-                'Recording capture failed for booking %s after %d attempt(s): %s',
-                $recording->booking_id,
-                $recording->capture_attempts,
-                $code->label(),
-            ),
-            subjectType: Recording::class,
-            subjectId: $recording->getKey(),
-            metadata: ['failure_code' => $code->value, 'provider' => $recording->provider],
-        ));
+        try {
+            $this->alerts->createOrMerge(new OperationalAlertSignal(
+                type: OperationalAlertType::RecordingCaptureFailed,
+                category: OperationalAlertCategory::BookingMeeting,
+                severity: OperationalAlertSeverity::Warning,
+                title: 'Lesson recording capture failed',
+                // The stable failure LABEL, never a raw exception message.
+                summary: sprintf(
+                    'Recording capture failed for booking %s after %d attempt(s): %s',
+                    $recording->booking_id,
+                    $recording->capture_attempts,
+                    $code->label(),
+                ),
+                subjectType: Recording::class,
+                subjectId: $recording->getKey(),
+                metadata: ['failure_code' => $code->value, 'provider' => $recording->provider],
+            ));
+        } catch (Throwable $e) {
+            try {
+                Log::warning('Recording failure alert could not be raised', ['recording_id' => $recording->getKey(), 'reason' => $e->getMessage()]);
+            } catch (Throwable) {
+                // The audit row already carries the failure.
+            }
+        }
     }
 
     /**

@@ -58,10 +58,20 @@ return [
             'ignore_exceptions' => false,
         ],
 
+        /*
+         * 'permission' is the mode Monolog gives a log file it CREATES.
+         * Several system users write these files (php-fpm as www-data,
+         * the scheduler and queue workers as the deploy user), so a
+         * file created 0644 by one is unwritable by the other and the
+         * next write throws — the 2026-09-11 recording incident. Group-
+         * writable by default; both users must share the group and the
+         * directory should be setgid (docs/recordings.md §13).
+         */
         'single' => [
             'driver' => 'single',
             'path' => storage_path('logs/laravel.log'),
             'level' => env('LOG_LEVEL', 'debug'),
+            'permission' => octdec((string) env('LOG_FILE_PERMISSION', '0664')),
             'replace_placeholders' => true,
         ],
 
@@ -70,6 +80,7 @@ return [
             'path' => storage_path('logs/laravel.log'),
             'level' => env('LOG_LEVEL', 'debug'),
             'days' => env('LOG_DAILY_DAYS', 14),
+            'permission' => octdec((string) env('LOG_FILE_PERMISSION', '0664')),
             'replace_placeholders' => true,
         ],
 

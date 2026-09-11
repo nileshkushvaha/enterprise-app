@@ -183,7 +183,7 @@ final class RecordingIngestionService
                     throw $e;
                 }
 
-                Log::info('Backend-side recording copy unavailable; falling back to streamed ingestion', [
+                $this->diagnostic('info', 'Backend-side recording copy unavailable; falling back to streamed ingestion', [
                     'recording_id' => $recording->getKey(),
                     'storage_driver' => $storage->key(),
                     'reason' => $e->getMessage(),
@@ -314,7 +314,7 @@ final class RecordingIngestionService
             };
 
             if ($mismatch !== null) {
-                Log::warning('Recording ingestion refused: '.$mismatch, [
+                $this->diagnostic('warning', 'Recording ingestion refused: '.$mismatch, [
                     'recording_id' => $fresh->getKey(),
                     'recording_provider' => $fresh->provider,
                     'meeting_provider' => $meeting?->provider,
@@ -481,7 +481,9 @@ final class RecordingIngestionService
             // kept under its locator and NOT published as the new
             // meeting's recording. Permanent failure, operator decides.
             if ($meeting === null || ! $identity->matches($meeting)) {
-                Log::warning('Recording publication refused: the meeting was replaced during capture', [
+                // Inside the publication transaction: a throwing log sink
+                // here would roll the Failed state back. Guarded.
+                $this->diagnostic('warning', 'Recording publication refused: the meeting was replaced during capture', [
                     'recording_id' => $fresh->getKey(),
                     'captured_for' => $identity->describe(),
                     'meeting_now' => $meeting === null ? null : MeetingIdentitySnapshot::of($meeting)->describe(),
@@ -534,7 +536,7 @@ final class RecordingIngestionService
                 $this->lifecycle->sourceRecordingDisposed($recording);
             }
         } catch (Throwable $e) {
-            Log::warning('Provider source recording could not be disposed of after verified persistence', [
+            $this->diagnostic('warning', 'Provider source recording could not be disposed of after verified persistence', [
                 'recording_id' => $recording->getKey(),
                 'provider' => $recording->provider,
                 'reason' => $e->getMessage(),
@@ -551,10 +553,32 @@ final class RecordingIngestionService
      */
     private function settle(Recording $recording, RecordingFailureCode $code, Throwable $e): void
     {
+        // The ROW is settled first. Diagnostics come after, and can
+        // never throw: an unwritable log file (the 2026-09-11 incident —
+        // daily logs owned by another user) must not leave a recording
+        // stuck in Transferring with its failure unrecorded. The audit
+        // trail (RecordingLifecycleNotifier, database) is the record of
+        // truth; the log line is a best-effort operator hint.
+        if ($code->isPermanent()) {
+            $this->failLocked($recording, $code);
+        } else {
+            $endsAt = $recording->bookingMeeting?->ends_at;
+            $withinWindow = $endsAt === null || now()->lessThanOrEqualTo(
+                $endsAt->addMinutes(max(0, $this->settings->recording_capture_retry_minutes)),
+            );
+            $attemptsLeft = $recording->capture_attempts < max(1, $this->settings->recording_capture_max_attempts);
+
+            if ($withinWindow && $attemptsLeft) {
+                $this->release($recording);
+            } else {
+                $this->failLocked($recording, RecordingFailureCode::RetriesExhausted);
+            }
+        }
+
         // Structured, safe context only. No signed URLs, no tokens, no
         // Authorization headers — adapters sanitize before throwing,
         // and the exception message is the sanitized diagnostic.
-        Log::warning('Recording ingestion attempt failed', [
+        $this->diagnostic('warning', 'Recording ingestion attempt failed', [
             'recording_id' => $recording->getKey(),
             'provider' => $recording->provider,
             'storage_driver' => $recording->storage_driver ?? config('recordings.storage_driver'),
@@ -562,26 +586,24 @@ final class RecordingIngestionService
             'attempts' => $recording->capture_attempts,
             'reason' => $e->getMessage(),
         ]);
+    }
 
-        if ($code->isPermanent()) {
-            $this->failLocked($recording, $code);
-
-            return;
+    /**
+     * Best-effort operational logging. The logging sink is
+     * infrastructure (a file another user owns, a full disk, a dead
+     * syslog) and its failure is never allowed to change the outcome
+     * of an ingestion: the row state and the database audit trail are
+     * what settle a recording, the log line only explains it.
+     *
+     * @param  array<string, mixed>  $context
+     */
+    private function diagnostic(string $level, string $message, array $context = []): void
+    {
+        try {
+            Log::log($level, $message, $context);
+        } catch (Throwable) {
+            // Nowhere safe left to report to; the audit trail still has the outcome.
         }
-
-        $endsAt = $recording->bookingMeeting?->ends_at;
-        $withinWindow = $endsAt === null || now()->lessThanOrEqualTo(
-            $endsAt->addMinutes(max(0, $this->settings->recording_capture_retry_minutes)),
-        );
-        $attemptsLeft = $recording->capture_attempts < max(1, $this->settings->recording_capture_max_attempts);
-
-        if ($withinWindow && $attemptsLeft) {
-            $this->release($recording);
-
-            return;
-        }
-
-        $this->failLocked($recording, RecordingFailureCode::RetriesExhausted);
     }
 
     private function failLocked(Recording $recording, RecordingFailureCode $code): void
@@ -620,7 +642,7 @@ final class RecordingIngestionService
         try {
             $storage->delete($locator);
         } catch (Throwable $e) {
-            Log::warning('Orphaned recording object could not be removed from storage', [
+            $this->diagnostic('warning', 'Orphaned recording object could not be removed from storage', [
                 'storage_driver' => $locator->driver,
                 'reason' => $e->getMessage(),
             ]);

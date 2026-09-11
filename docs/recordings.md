@@ -447,7 +447,11 @@ Notably:
 - `download` (admin) is stricter than `view`: it additionally requires
   the recording to be `available` and to still have a locator, so an
   expired or failed recording is never half-served. `watch` has the
-  same object requirement.
+  same object requirement. Because `Gate::before` lets a super admin
+  past every policy, the same playable-state rule is enforced again by
+  `RecordingDeliveryService::respond()` (every byte route) and the
+  watch page: business state is not authorization, and nobody is served
+  a failed row's preserved object or a stored-but-unverified upload.
 - There is no signed, tokenised or pre-generated URL anywhere, so there
   is nothing to leak or forward.
 - The stream route serves **player requests only**, using Fetch
@@ -749,6 +753,18 @@ locator/provider-reference *presence*, every timestamp, the retry
 decision, guidance, and the `recordings` audit events — and changes
 nothing. `recordings:explain BK-…` remains the student-access walk.
 
+**Settlement never depends on logging.** `settle()` changes the row
+(release for retry, or fail) and writes the audit entry FIRST; the
+explanatory log line comes after and is wrapped so a throwing sink
+(unwritable file, full disk) cannot abort the catch block. The
+operational alert raised on failure is likewise best-effort; the
+`recording_failed` audit row inside the transaction is the record of
+truth. `RecordingIngestionTest` reproduces an unwritable sink during a
+storage exception for both the retryable and the permanent case. If
+settlement itself fails (database down), the row stays Transferring and
+`recordings:capture` reclaims it after `recording_transfer_stale_minutes`
+— the last-resort path, not the normal one.
+
 **Recording failure never touches lesson completion, booking payment,
 instructor earnings, or wallet settlement.** Recording persistence is
 an independent post-lesson workflow and the SRS establishes no
@@ -958,6 +974,46 @@ recordings are copied server-side and consume essentially no worker
 bandwidth or staging disk. Budget for the streaming path (full download
 + full upload per recording) only from the point storage moves to S3, or
 if Drive starts refusing server-side copies.
+
+**Daily log permissions — deploy and www-data.** Several system users
+write `storage/logs`: php-fpm (www-data), the scheduler and the queue
+workers (the deploy user). A daily file created `0644` by one user is
+unwritable by the other, and the next write from that user throws
+`UnexpectedValueException` from Monolog — which on 2026-09-11 aborted a
+recording's failure handling mid-flight (the row is now settled before
+any log line is written, and every diagnostic log in ingestion is
+best-effort, so this can no longer strand a recording; the logging
+still has to be fixed). Durable setup, once per host:
+
+```bash
+# 1. one shared group for every writer
+sudo usermod -aG www-data deploy
+# 2. group-owned, group-writable, setgid so new files inherit the group
+sudo chgrp -R www-data storage/logs && sudo chmod 2775 storage/logs
+sudo chmod g+w storage/logs/*.log
+# 3. files are created group-writable by the application itself
+#    (config/logging.php 'permission' => 0664, env LOG_FILE_PERMISSION)
+#    and by the scheduler's appendOutputTo files via the workers' umask:
+#    add `umask 002` (or environment=UMASK="002") to the Supervisor
+#    programs and to the cron line running schedule:run.
+# 4. logrotate (if used) must keep the group: `create 0664 deploy www-data`
+```
+
+Verify as EACH user with the read-only report:
+
+```bash
+sudo -u deploy   php artisan recordings:preflight
+sudo -u www-data php artisan recordings:preflight
+```
+
+It prints the effective log channel, file and level, whether the
+running user can write the directory and today's file, the owner and
+mode of any file it cannot write, plus storage configuration presence,
+the recordings queue backlog, failed/stalled recordings and the
+join-handoff cache store. `--probe` adds ONE read-only Drive metadata
+request to prove the delegated account can see the destination folder —
+configuration presence is never reported as access, and a provider's
+"Ready" badge in Meeting Settings says nothing about storage.
 
 **Also check on the recording worker host:** PHP `memory_limit` needs
 only to cover the upload chunk size (8 MB default), not the recording;

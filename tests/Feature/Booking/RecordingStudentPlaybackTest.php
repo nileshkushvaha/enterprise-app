@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Booking;
 
+use App\Booking\Enums\RecordingFailureCode;
 use App\Booking\Enums\RecordingStatus;
+use App\Booking\Services\RecordingDeliveryService;
 use App\Booking\Storage\FilesystemRecordingStorage;
 use App\Enums\StudentStatus;
 use App\Lessons\Enums\LessonOutcome;
@@ -22,6 +24,7 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 use Tests\TestCase;
 
 /**
@@ -728,5 +731,64 @@ final class RecordingStudentPlaybackTest extends TestCase
         }
 
         $this->assertSame(0, Activity::query()->where('log_name', 'recordings')->where('event', 'recording_playback_opened')->count());
+    }
+
+    // ── Business state applies even where the policy is bypassed ──────
+
+    /**
+     * Gate::before lets a super admin through RecordingPolicy, so the
+     * playable-state rule (verified, available object) is enforced by
+     * the delivery boundary itself: a failed row that still holds a
+     * preserved locator, a stored-but-unverified row, or an expired row
+     * is never served to anyone. Super admins are redirected off the
+     * student portal by the frontend middleware, so their reachable
+     * byte route is the admin download; the shared delivery service is
+     * exercised directly for the stream behaviour.
+     */
+    public function test_a_super_admin_cannot_download_or_be_served_a_recording_that_is_not_playable(): void
+    {
+        $super = User::factory()->create(['status' => User::STATUS_ACTIVE]);
+        $super->assignRole(Role::firstOrCreate(['name' => 'super_admin', 'guard_name' => 'web']));
+
+        $preserved = 'recordings/2026/09/lesson-preserved.mp4';
+        $unverified = 'recordings/2026/09/lesson-unverified.mp4';
+        Storage::disk('local')->put($preserved, self::CONTENT);
+        Storage::disk('local')->put($unverified, self::CONTENT);
+        $delivery = app(RecordingDeliveryService::class);
+
+        foreach ([
+            Recording::factory()->failed()->create(['failure_code' => RecordingFailureCode::MeetingReplacedDuringCapture, 'storage_driver' => FilesystemRecordingStorage::KEY, 'storage_path' => $preserved, 'size_bytes' => strlen(self::CONTENT)]),
+            Recording::factory()->stored()->create(['storage_path' => $unverified, 'size_bytes' => strlen(self::CONTENT)]),
+            Recording::factory()->expired()->create(),
+        ] as $recording) {
+            $this->actingAs($super)->get(route('admin.recordings.download', $recording))->assertNotFound();
+            $this->actingAs($super)->head(route('admin.recordings.download', $recording))->assertNotFound();
+
+            try {
+                $delivery->respond($recording, 'bytes=0-3', inline: true);
+                $this->fail('the delivery boundary served a non-playable recording');
+            } catch (HttpException $e) {
+                $this->assertSame(404, $e->getStatusCode());
+            }
+        }
+
+        // And a playable one is still served to the same super admin.
+        $playable = $this->storedRecording($this->activeStudent(), $this->activeInstructor());
+        $this->actingAs($super)->get(route('admin.recordings.download', $playable))->assertOk();
+    }
+
+    /** Withholding or expiring after a first successful request bites on the very next request — no cached decision. */
+    public function test_access_revoked_between_requests_is_refused_on_the_next_range_request(): void
+    {
+        $student = $this->activeStudent();
+        $recording = $this->storedRecording($student, $this->activeInstructor());
+
+        $this->actingAs($student)->get(route('dashboard.recordings.stream', $recording), ['Range' => 'bytes=0-3'])->assertStatus(206);
+
+        $recording->forceFill(['student_access_revoked_at' => now()])->save();
+        $this->actingAs($student)->get(route('dashboard.recordings.stream', $recording), ['Range' => 'bytes=4-7'])->assertForbidden();
+
+        $recording->forceFill(['student_access_revoked_at' => null, 'status' => RecordingStatus::Expired, 'storage_path' => null])->save();
+        $this->actingAs($student)->get(route('dashboard.recordings.stream', $recording), ['Range' => 'bytes=4-7'])->assertForbidden();
     }
 }

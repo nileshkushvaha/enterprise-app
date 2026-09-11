@@ -69,6 +69,39 @@ final class GoogleDriveRecordingStorage implements RecordingStorage, SupportsNat
             && $this->settings->decryptedGoogleCredentials() !== null;
     }
 
+    /**
+     * READ-ONLY proof that the delegated account can actually reach the
+     * configured destination folder — configuration PRESENCE
+     * (isConfigured) is not access. One metadata GET on the root folder
+     * id; nothing is created, uploaded or changed. Returns a safe,
+     * credential-free explanation on failure (the gateway sanitizes its
+     * messages before throwing).
+     *
+     * @return array{ok: bool, detail: string}
+     */
+    public function probeAccess(): array
+    {
+        if (! $this->isConfigured()) {
+            return ['ok' => false, 'detail' => 'not configured (root folder id, platform account or credentials missing)'];
+        }
+
+        try {
+            $folder = $this->client->getFile($this->target(), (string) $this->settings->recording_drive_root_folder_id);
+        } catch (GatewayRequestException $e) {
+            return ['ok' => false, 'detail' => $this->translate($e)->failureCode->value.': '.$e->getMessage()];
+        }
+
+        if ($folder === null) {
+            return ['ok' => false, 'detail' => 'the root folder is not visible to the delegated account (not found or not shared with it)'];
+        }
+
+        if ($folder['trashed'] === true) {
+            return ['ok' => false, 'detail' => 'the root folder is in the Drive trash'];
+        }
+
+        return ['ok' => true, 'detail' => 'root folder readable by the delegated account'];
+    }
+
     public function put(RecordingStorageRequest $request): StoredRecording
     {
         $target = $this->target();
