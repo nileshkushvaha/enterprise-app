@@ -69,7 +69,7 @@ class PaymentConfigurationPage extends PaymentSettingsPage
                 ->footer([
                     ActionsComponent::make([
                         Action::make('save')
-                            ->label('Save Configuration')
+                            ->label('Save changes')
                             ->submit('save')
                             ->keyBindings(['mod+s']),
                     ])->key('form-actions'),

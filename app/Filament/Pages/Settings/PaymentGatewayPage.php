@@ -47,7 +47,7 @@ class PaymentGatewayPage extends PaymentSettingsPage
 
     public function getSubheading(): ?string
     {
-        return 'Choose which gateway collects payments and manage gateway credentials.';
+        return 'Which gateway collects payments, its credentials and webhook secrets. Leaving a secret blank keeps the stored value.';
     }
 
     public function content(Schema $schema): Schema
@@ -63,9 +63,10 @@ class PaymentGatewayPage extends PaymentSettingsPage
                             ->submit('save')
                             ->keyBindings(['mod+s']),
                         Action::make('validate_credentials')
-                            ->label('Validate Credentials')
+                            ->label('Check credentials')
+                            ->tooltip('Checks that the saved keys are present and have the expected format, and records the result on the tab. Does not contact the gateway.')
                             ->icon(Heroicon::OutlinedCheckBadge)
-                            ->color('warning')
+                            ->color('gray')
                             ->form([
                                 Select::make('gateway')
                                     ->label('Gateway')
@@ -75,9 +76,10 @@ class PaymentGatewayPage extends PaymentSettingsPage
                             ])
                             ->action(fn (array $data) => $this->validateGatewayCredentials($data['gateway'])),
                         Action::make('test_connection')
-                            ->label('Test Connection')
+                            ->label('Check enabled gateway')
+                            ->tooltip('Same format check, for a gateway that is switched on. No request is sent to the gateway; a real payment is the only end-to-end test.')
                             ->icon(Heroicon::OutlinedSignal)
-                            ->color('info')
+                            ->color('gray')
                             ->form([
                                 Select::make('gateway')
                                     ->label('Gateway')
@@ -87,7 +89,8 @@ class PaymentGatewayPage extends PaymentSettingsPage
                             ])
                             ->action(fn (array $data) => $this->testGatewayConnection($data['gateway'])),
                         Action::make('generate_webhook_secret')
-                            ->label('Generate Webhook Secret')
+                            ->label('Generate test webhook secret')
+                            ->tooltip('Fills a random secret into the form for local testing only. Production uses the secret shown in the gateway dashboard.')
                             ->icon(Heroicon::OutlinedKey)
                             ->color('gray')
                             ->form([
@@ -99,9 +102,9 @@ class PaymentGatewayPage extends PaymentSettingsPage
                             ])
                             ->action(fn (array $data) => $this->generateWebhookSecret($data['gateway'])),
                         Action::make('copy_webhook_url')
-                            ->label('Copy Webhook URL')
+                            ->label('Copy webhook URL')
                             ->icon(Heroicon::OutlinedClipboardDocument)
-                            ->color('primary')
+                            ->color('gray')
                             ->form([
                                 Select::make('gateway')
                                     ->label('Gateway')
@@ -111,11 +114,13 @@ class PaymentGatewayPage extends PaymentSettingsPage
                             ])
                             ->action(fn (array $data) => $this->copyWebhookUrl($data['gateway'])),
                         Action::make('reset_credentials')
-                            ->label('Reset Stored Secrets')
+                            ->label('Remove all stored secrets')
                             ->icon(Heroicon::OutlinedArrowPathRoundedSquare)
                             ->color('danger')
                             ->requiresConfirmation()
-                            ->modalDescription('Removes every stored API key and webhook secret for all gateways. Payments stop until new credentials are saved.')
+                            ->modalHeading('Remove every stored secret?')
+                            ->modalDescription('Deletes the stored secret keys and webhook secrets of every gateway. Key IDs and publishable keys stay. Online payments stop until new secrets are saved. This cannot be undone.')
+                            ->modalSubmitActionLabel('Remove secrets')
                             ->action(fn () => $this->resetGatewayCredentials()),
                     ])->key('form-actions'),
                 ]),

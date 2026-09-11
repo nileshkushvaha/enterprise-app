@@ -181,7 +181,7 @@ abstract class PaymentSettingsPage extends Page
                 ->footer([
                     ActionsComponent::make([
                         Action::make('save')
-                            ->label('Save Payment Settings')
+                            ->label('Save changes')
                             ->submit('save')
                             ->keyBindings(['mod+s']),
                         Action::make('validate_credentials')
@@ -311,30 +311,30 @@ abstract class PaymentSettingsPage extends Page
      */
     protected function providerRoutingSection(): Section
     {
-        return Section::make('Provider Routing')
-            ->description('Choose which gateway collects payments. A configured gateway is only used once it is selected here.')
+        return Section::make('Provider routing')
+            ->description('Choose which gateway collects payments. A configured gateway is only used once it is selected here. "Configured" on a tab means the saved keys have the expected format; no payment gateway is contacted from this page.')
             ->icon(Heroicon::OutlinedArrowsRightLeft)
             ->schema([
                 Grid::make(2)->schema([
                     Toggle::make('payments_enabled')
-                        ->label('Payments Enabled')
+                        ->label('Accept online payments')
                         ->helperText('Turn off to block all new online payments.'),
                     Toggle::make('fake_enabled')
-                        ->label('Allow Fake Provider')
+                        ->label('Allow the test provider')
                         ->helperText('Simulated payments for local and testing environments only.'),
                 ]),
                 Select::make('default_provider')
-                    ->label('Active Payment Provider')
+                    ->label('Default gateway')
                     ->options($this->routableProviderOptions())
                     ->native(false)
                     ->placeholder('Use the booking default')
-                    ->helperText('Used when a country has no provider of its own.'),
+                    ->helperText('Used when a country has no gateway of its own.'),
                 Select::make('allowed_providers')
-                    ->label('Allowed Providers')
+                    ->label('Allowed gateways')
                     ->options($this->routableProviderOptions())
                     ->multiple()
                     ->native(false)
-                    ->helperText('Restrict payments to selected providers. Leave empty to allow all configured providers.'),
+                    ->helperText('Leave empty to allow every configured gateway.'),
             ]);
     }
 
@@ -367,16 +367,16 @@ abstract class PaymentSettingsPage extends Page
                     ->schema([
                         $this->gatewaySwitches('stripe_enabled', $this->keyDerivedMode('stripe')),
                         Grid::make(2)->schema([
-                            TextInput::make('stripe_publishable_key')->label('Publishable Key')->maxLength(255),
+                            TextInput::make('stripe_publishable_key')->label('Publishable key')->maxLength(255),
                             TextInput::make('stripe_secret_key')
-                                ->label('Secret Key')
+                                ->label('Secret key')
                                 ->password()
                                 ->revealable()
                                 ->maxLength(255)
                                 ->helperText('Leave blank to keep the stored key.'),
                         ]),
                         Textarea::make('stripe_webhook_secret')
-                            ->label('Webhook Secret')
+                            ->label('Webhook secret')
                             ->rows(2)
                             ->autosize()
                             ->helperText('One secret per line. Prefix a line with booking:, package: or wallet: to limit it to that endpoint. Leave blank to keep the stored value.'),
@@ -399,18 +399,18 @@ abstract class PaymentSettingsPage extends Page
                         Grid::make(2)->schema([
                             TextInput::make('razorpay_key_id')->label('Key ID')->maxLength(255),
                             TextInput::make('razorpay_key_secret')
-                                ->label('Key Secret')
+                                ->label('Key secret')
                                 ->password()
                                 ->revealable()
                                 ->maxLength(255)
                                 ->helperText('Leave blank to keep the stored key.'),
                         ]),
-                        Section::make('Webhook Secrets')
-                            ->description('Razorpay gives each webhook its own secret. Paste the secret for each endpoint below.')
+                        Section::make('Webhook secrets')
+                            ->description('Razorpay gives each webhook its own secret. Paste the secret for each endpoint. Blank keeps the stored value.')
                             ->schema([
-                                $this->razorpayWebhookSecretInput(PaymentWebhookSignatureService::PURPOSE_BOOKING, 'Booking Payment Webhook Secret'),
-                                $this->razorpayWebhookSecretInput(PaymentWebhookSignatureService::PURPOSE_PACKAGE, 'Package Purchase Webhook Secret'),
-                                $this->razorpayWebhookSecretInput(PaymentWebhookSignatureService::PURPOSE_WALLET, 'Wallet Recharge Webhook Secret'),
+                                $this->razorpayWebhookSecretInput(PaymentWebhookSignatureService::PURPOSE_BOOKING, 'Booking payments'),
+                                $this->razorpayWebhookSecretInput(PaymentWebhookSignatureService::PURPOSE_PACKAGE, 'Package purchases'),
+                                $this->razorpayWebhookSecretInput(PaymentWebhookSignatureService::PURPOSE_WALLET, 'Wallet recharges'),
                             ]),
                         $this->gatewayUrls('razorpay'),
                     ]),
@@ -435,23 +435,23 @@ abstract class PaymentSettingsPage extends Page
      */
     protected function razorpayInternationalSection(): Section
     {
-        return Section::make('International Collection')
+        return Section::make('International collection')
             ->description('Collect in currencies other than INR. INR is always available.')
             ->icon(Heroicon::OutlinedGlobeAlt)
             ->schema([
                 Toggle::make('razorpay_international_enabled')
-                    ->label('International Payments Approved')
+                    ->label('International payments approved by Razorpay')
                     ->live()
                     ->helperText('Turn on only after Razorpay has approved International Payments for this account.'),
                 Select::make('razorpay_international_currencies')
-                    ->label('Approved Currencies')
+                    ->label('Approved currencies')
                     ->options($this->internationalCurrencyOptions())
                     ->multiple()
                     ->native(false)
                     ->live()
                     ->helperText('Currencies Razorpay has approved for this account. Students in a country whose currency is not listed cannot pay.'),
                 Placeholder::make('razorpay_international_coverage')
-                    ->label('Country Coverage')
+                    ->label('Country coverage')
                     ->content(fn (): HtmlString => $this->internationalCoverageWarning()),
             ]);
     }
@@ -562,7 +562,7 @@ abstract class PaymentSettingsPage extends Page
                 Section::make('PayPal')
                     ->description('Not connected to checkout yet. Credentials are stored for a future integration.')
                     ->schema([
-                        Toggle::make('paypal_enabled')->label('Enable Gateway')->live(),
+                        Toggle::make('paypal_enabled')->label('Enable gateway')->live(),
                         Select::make('paypal_mode')
                             ->label('Mode')
                             ->options(['sandbox' => 'Sandbox', 'live' => 'Live'])
@@ -571,14 +571,14 @@ abstract class PaymentSettingsPage extends Page
                         Grid::make(2)->schema([
                             TextInput::make('paypal_client_id')->label('Client ID')->maxLength(255),
                             TextInput::make('paypal_client_secret')
-                                ->label('Client Secret')
+                                ->label('Client secret')
                                 ->password()
                                 ->revealable()
                                 ->maxLength(255)
                                 ->helperText('Leave blank to keep the stored secret.'),
                         ]),
                         Textarea::make('paypal_webhook_secret')
-                            ->label('Webhook Secret')
+                            ->label('Webhook secret')
                             ->rows(2)
                             ->autosize()
                             ->helperText('Leave blank to keep the stored value.'),
@@ -599,29 +599,29 @@ abstract class PaymentSettingsPage extends Page
                         $this->gatewaySwitches('applepay_enabled'),
                         Grid::make(2)->schema([
                             TextInput::make('applepay_merchant_id')
-                                ->label('Merchant Identifier')
+                                ->label('Merchant identifier')
                                 ->placeholder('merchant.com.example.siri')
                                 ->maxLength(255),
                             TextInput::make('applepay_merchant_domain')
-                                ->label('Verified Domain')
+                                ->label('Verified domain')
                                 ->placeholder('sirieducation.com')
                                 ->maxLength(255)
                                 ->helperText('The domain that serves the payment page.'),
                         ]),
                         Grid::make(2)->schema([
                             Textarea::make('applepay_merchant_certificate')
-                                ->label('Merchant Identity Certificate')
+                                ->label('Merchant identity certificate')
                                 ->rows(3)
                                 ->autosize()
                                 ->helperText('Leave blank to keep the stored certificate.'),
                             Textarea::make('applepay_merchant_key')
-                                ->label('Merchant Private Key')
+                                ->label('Merchant private key')
                                 ->rows(3)
                                 ->autosize()
                                 ->helperText('Leave blank to keep the stored key.'),
                         ]),
                         Textarea::make('applepay_webhook_secret')
-                            ->label('Webhook Secret')
+                            ->label('Webhook secret')
                             ->rows(2)
                             ->autosize()
                             ->helperText('Leave blank to keep the stored value.'),
@@ -639,9 +639,9 @@ abstract class PaymentSettingsPage extends Page
                 Section::make('Manual Payment')
                     ->description('Instructions shown to students who pay outside the platform.')
                     ->schema([
-                        Toggle::make('manual_enabled')->label('Enable Gateway'),
+                        Toggle::make('manual_enabled')->label('Enable gateway'),
                         Textarea::make('manual_payment_instructions')
-                            ->label('Payment Instructions')
+                            ->label('Payment instructions')
                             ->rows(4)
                             ->maxLength(2000)
                             ->helperText('Shown to the student at checkout, for example bank transfer details.'),
@@ -659,7 +659,7 @@ abstract class PaymentSettingsPage extends Page
     protected function gatewaySwitches(string $enabledField, ?Closure $modeHint = null): Grid
     {
         return Grid::make(2)->schema(array_filter([
-            Toggle::make($enabledField)->label('Enable Gateway')->live(),
+            Toggle::make($enabledField)->label('Enable gateway')->live(),
             $modeHint === null ? null : Placeholder::make($enabledField.'_mode')
                 ->label('Mode')
                 ->content($modeHint),
@@ -726,8 +726,8 @@ abstract class PaymentSettingsPage extends Page
     protected function paymentConfigurationSchema(): array
     {
         return [
-            Section::make('Payment Configuration')
-                ->description('Currency, tax and invoice defaults.')
+            Section::make('Currency, tax & invoices')
+                ->description('Defaults applied to new payments and invoices.')
                 ->schema([
                     Grid::make(3)->schema([
                         Select::make('currency')
@@ -742,28 +742,28 @@ abstract class PaymentSettingsPage extends Page
                             ->required()
                             ->native(false),
                         TextInput::make('currency_symbol')
-                            ->label('Currency Symbol')
+                            ->label('Currency symbol')
                             ->required()
                             ->maxLength(6),
                         Select::make('decimal_precision')
-                            ->label('Decimal Precision')
+                            ->label('Decimal places')
                             ->options([0 => '0', 1 => '1', 2 => '2', 3 => '3'])
                             ->required()
                             ->native(false),
                     ]),
                     Grid::make(3)->schema([
                         TextInput::make('default_tax_percent')
-                            ->label('Default Tax %')
+                            ->label('Default tax (%)')
                             ->numeric()
                             ->required()
                             ->minValue(0)
                             ->maxValue(100),
                         TextInput::make('invoice_prefix')
-                            ->label('Invoice Prefix')
+                            ->label('Invoice prefix')
                             ->required()
                             ->maxLength(20),
                         TextInput::make('invoice_number_length')
-                            ->label('Invoice Number Length')
+                            ->label('Invoice number length')
                             ->numeric()
                             ->required()
                             ->minValue(4)
@@ -771,16 +771,16 @@ abstract class PaymentSettingsPage extends Page
                     ]),
                     Grid::make(3)->schema([
                         TextInput::make('payment_due_days')
-                            ->label('Payment Due Days')
+                            ->label('Payment due (days)')
                             ->numeric()
                             ->required()
                             ->minValue(0)
                             ->maxValue(365),
-                        Toggle::make('allow_partial_payment')->label('Allow Partial Payment'),
-                        Toggle::make('auto_generate_invoice')->label('Auto Generate Invoice'),
+                        Toggle::make('allow_partial_payment')->label('Allow partial payment'),
+                        Toggle::make('auto_generate_invoice')->label('Generate invoices automatically'),
                     ]),
                     Grid::make(2)->schema([
-                        Toggle::make('auto_capture_payment')->label('Auto Capture Payment'),
+                        Toggle::make('auto_capture_payment')->label('Capture payments automatically'),
                     ]),
                 ]),
         ];
@@ -793,27 +793,27 @@ abstract class PaymentSettingsPage extends Page
     {
         return [
             Section::make('Advanced')
-                ->description('Retries, queueing and logging for payment events.')
+                ->description('Retries, queueing and logging for payment events. Rarely changed.')
                 ->schema([
                     Grid::make(3)->schema([
                         TextInput::make('webhook_timeout')
-                            ->label('Webhook Timeout (sec)')
+                            ->label('Webhook timeout (seconds)')
                             ->numeric()
                             ->required()
                             ->minValue(5)
                             ->maxValue(300),
                         TextInput::make('max_retry_count')
-                            ->label('Maximum Retry Count')
+                            ->label('Maximum retries')
                             ->numeric()
                             ->required()
                             ->minValue(1)
                             ->maxValue(20),
-                        Toggle::make('retry_failed_payments')->label('Retry Failed Payments'),
+                        Toggle::make('retry_failed_payments')->label('Retry failed payments'),
                     ]),
                     Grid::make(3)->schema([
-                        Toggle::make('queue_payment_events')->label('Queue Payment Events'),
-                        Toggle::make('payment_logging')->label('Payment Logging'),
-                        Toggle::make('enable_audit_log')->label('Enable Audit Log'),
+                        Toggle::make('queue_payment_events')->label('Queue payment events'),
+                        Toggle::make('payment_logging')->label('Log payment events'),
+                        Toggle::make('enable_audit_log')->label('Audit payment changes'),
                     ]),
                 ]),
         ];
@@ -1251,7 +1251,7 @@ abstract class PaymentSettingsPage extends Page
         $status = app(PaymentGatewaySettings::class)->{"{$provider}_config_status"} ?? 'not_configured';
 
         return match ($status) {
-            'ready' => 'Ready',
+            'ready' => 'Configured',
             'incomplete' => 'Incomplete',
             'invalid' => 'Invalid credentials',
             default => 'Not configured',

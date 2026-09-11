@@ -26,7 +26,7 @@ ls app/Settings/*.php | xargs -n1 basename -s .php
 
 | Class | Group | Admin page |
 |---|---|---|
-| `GeneralSettings` | `general` | General Settings |
+| `GeneralSettings` | `general` | General |
 | `SeoSettings` | `seo` | SEO Settings (defaults, analytics, Open Graph, plus per-page overrides for home, blog, instructors, FAQs, login, register, become-instructor, forgot-password) |
 | `MailSettings` | `mail` | Mail Settings |
 | `AuthenticationSettings` | `security_auth` | Authentication |
@@ -35,20 +35,20 @@ ls app/Settings/*.php | xargs -n1 basename -s .php
 | `SessionSettings` | `security_session` | Session |
 | `RegistrationSettings` | `security_registration` | Registration |
 | `AccountProtectionSettings` | `security_account` | Account Protection |
-| `PaymentGatewaySettings` | `payment_gateways` | Payment Settings (Gateways tab) |
-| `PaymentConfigurationSettings` | `payment_configuration` | Payment Settings (Configuration tab) |
-| `PaymentAdvancedSettings` | `payment_advanced` | Payment Settings (Advanced tab) |
+| `PaymentGatewaySettings` | `payment_gateways` | Payment Gateways |
+| `PaymentConfigurationSettings` | `payment_configuration` | Payment Gateways → Payment Configuration |
+| `PaymentAdvancedSettings` | `payment_advanced` | Payment Gateways → Advanced Finance Settings |
 | `BankSettings` | `payment_bank` | Payment Settings (Bank Account tab) |
-| `BookingSettings` | `booking` | Platform Foundation |
-| `MeetingSettings` | `meeting` | Meeting Settings |
-| `InstructorSettings` | `instructor` | Platform Foundation |
-| `LocalizationSettings` | `localization` | Platform Foundation |
-| `FeatureSettings` | `features` | Platform Foundation |
+| `BookingSettings` | `booking` | Platform |
+| `MeetingSettings` | `meeting` | Meetings |
+| `InstructorSettings` | `instructor` | Platform |
+| `LocalizationSettings` | `localization` | Platform |
+| `FeatureSettings` | `features` | Platform |
 | `HomeworkSettings` | `homework` | Homework Reminder Settings |
-| `ReviewSettings` | `reviews` | Review & Quality Settings |
+| `ReviewSettings` | `reviews` | Reviews & Quality |
 | `InstructorEarningSettings` | `instructor_earnings` | Instructor Earning Settings |
 | `RazorpayXPayoutSettings` | `razorpayx_payout` | RazorpayX Payout Settings |
-| `AiSettings` | `ai` | AI Platform Settings |
+| `AiSettings` | `ai` | AI |
 | `DemoConversionIncentiveSettings` | `demo_conversion_incentive` | Demo Conversion Incentive Settings |
 | `ComplianceMonitoringSettings` | `compliance_monitoring` | *(no admin page yet — configured via settings migration defaults only)* |
 | `InvoiceSettings` | `invoice` | *(no admin page yet)* |

@@ -138,7 +138,7 @@ class InstructorEarningSettingsPage extends Page
                 ->footer([
                     ActionsComponent::make([
                         Action::make('save')
-                            ->label('Save Settings')
+                            ->label('Save changes')
                             ->submit('save')
                             ->keyBindings(['mod+s']),
                     ])->key('form-actions'),
