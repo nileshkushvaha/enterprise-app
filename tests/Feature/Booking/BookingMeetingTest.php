@@ -433,7 +433,8 @@ class BookingMeetingTest extends TestCase
         $resource = (new StudentBookingResource($booking->fresh()->load('meeting')))
             ->toArray($viewerRequest);
         $resource = collect($resource)->reject(fn ($v) => $v instanceof MissingValue)->all();
-        $this->assertSame('https://meet.example.test/abc', $resource['meeting_url']);
+        // The resource carries the SIRI join gateway; the provider URL is only its redirect.
+        $this->assertSame(route('dashboard.meetings.join', $booking), $resource['meeting_url']);
 
         $pendingBooking = Booking::factory()->create([
             'instructor_id' => $this->teacher->id,
