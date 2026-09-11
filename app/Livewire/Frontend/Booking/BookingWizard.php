@@ -222,6 +222,20 @@ final class BookingWizard extends Component
     public string $paymentBanner = '';
 
     /**
+     * True between a verified Razorpay checkout callback and the moment
+     * settlement is observed. The callback proves the student completed
+     * checkout, not that money moved — that arrives from the signed
+     * webhook (seconds) or the reconciliation sweep (minutes). While this
+     * is set the payment screen polls checkPaymentStatus() and shows a
+     * "confirming" state instead of a Pay button the student would
+     * otherwise be tempted to press again.
+     */
+    public bool $awaitingPaymentConfirmation = false;
+
+    /** When the confirming state began (ISO-8601), so the view can say "taking longer than usual". */
+    public ?string $awaitingPaymentSince = null;
+
+    /**
      * Display-only — never treated as authoritative. Populated by
      * refreshWalletOption() whenever the payment-awaiting phase is
      * reached or re-rendered; payWithWallet() always re-checks balance
@@ -1485,6 +1499,8 @@ final class BookingWizard extends Component
     {
         $this->paymentBanner = '';
         $this->paymentOrder = [];
+        $this->awaitingPaymentConfirmation = false;
+        $this->awaitingPaymentSince = null;
 
         if ($this->bookingId === null) {
             return;
@@ -1662,8 +1678,16 @@ final class BookingWizard extends Component
             // is lost. Until then the UI shows a confirming state.
             $this->razorpay->verifyCheckout($booking, $orderId, $paymentId, $signature);
 
-            $this->result = $this->wizard->result($booking->refresh());
+            $booking->refresh();
+            $this->result = $this->wizard->result($booking);
+
+            // Verified but not yet settled: show "confirming" and poll.
+            // Already settled (a fast webhook beat us here): nothing to wait for.
+            $this->awaitingPaymentConfirmation = $booking->payment_status->isPayable();
+            $this->awaitingPaymentSince = $this->awaitingPaymentConfirmation ? now()->toIso8601String() : null;
         } catch (InvalidPaymentWebhookException|BookingException $exception) {
+            $this->awaitingPaymentConfirmation = false;
+            $this->awaitingPaymentSince = null;
             $this->paymentBanner = $exception->getMessage();
         }
     }
@@ -1687,8 +1711,18 @@ final class BookingWizard extends Component
 
         if ($booking->payment_status->value === 'paid') {
             $this->paymentBanner = '';
+            $this->awaitingPaymentConfirmation = false;
+            $this->awaitingPaymentSince = null;
         } elseif ($booking->payment_status->value === 'failed') {
             $this->paymentBanner = 'Payment failed. Please try again.';
+            $this->awaitingPaymentConfirmation = false;
+            $this->awaitingPaymentSince = null;
+        } elseif ($booking->status->isTerminal()) {
+            // The hold lapsed before settlement arrived. Stop polling; the
+            // expired-reservation state renders, and a payment that still
+            // settles later is redirected to the wallet by markPaid().
+            $this->awaitingPaymentConfirmation = false;
+            $this->awaitingPaymentSince = null;
         }
     }
 

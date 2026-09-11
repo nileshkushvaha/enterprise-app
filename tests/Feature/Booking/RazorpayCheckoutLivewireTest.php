@@ -208,6 +208,102 @@ class RazorpayCheckoutLivewireTest extends TestCase
         $this->assertSame(1, Invoice::query()->count());
     }
 
+    /**
+     * After the checkout callback the booking is verified but not yet
+     * settled. The screen must say so and poll — never show a second
+     * "Pay" button for money the provider has already accepted — and
+     * must flip to confirmed on its own once the webhook settles.
+     */
+    public function test_the_payment_screen_shows_a_confirming_state_after_checkout_until_the_webhook_settles(): void
+    {
+        $student = User::factory()->activeStudent()->create(['status' => User::STATUS_ACTIVE]);
+        $this->withBillingCountry($student);
+        $slot = CarbonImmutable::now('UTC')->addDays(3)->setTime(10, 0);
+
+        $component = $this->navigateAcademicWizardToSlot(
+            Livewire::actingAs($student)->test('frontend.booking.booking-wizard'),
+            $this->academic,
+            $slot,
+        );
+        $component->call('submit')->assertSet('awaitingPaymentConfirmation', false)->assertSee('Complete your payment');
+        $component->call('initiatePayment');
+        $orderId = $component->get('paymentOrder')['order_id'];
+
+        $component->call('verifyPayment', $orderId, 'pay_LW1', $this->checkoutSignature($orderId, 'pay_LW1'))
+            ->assertSet('awaitingPaymentConfirmation', true)
+            ->assertSee('Confirming your payment')
+            ->assertSee('wire:poll.3s="checkPaymentStatus"', false)
+            ->assertDontSee('Pay 499.00 INR securely')
+            ->assertDontSee('Complete your payment');
+
+        // Polling while nothing has changed keeps waiting — and keeps the Pay button hidden.
+        $component->call('checkPaymentStatus')
+            ->assertSet('awaitingPaymentConfirmation', true)
+            ->assertDontSee('Pay 499.00 INR securely');
+
+        $bookingId = $component->get('bookingId');
+        $obligation = BookingPayment::query()->where('booking_id', $bookingId)->sole();
+        $attempt = Payment::query()->where('payable_id', $obligation->getKey())->sole();
+        $body = (string) json_encode([
+            'event' => 'payment.captured',
+            'payload' => ['payment' => ['entity' => [
+                'id' => 'pay_LW1', 'order_id' => $orderId, 'amount' => 49900, 'currency' => 'INR',
+                'notes' => ['payment_reference' => $attempt->idempotency_key],
+            ]]],
+        ]);
+        $this->call('POST', '/api/webhooks/bookings/payments/razorpay', [], [], [], [
+            'HTTP_X_RAZORPAY_SIGNATURE' => hash_hmac('sha256', $body, 'webhook_secret'),
+            'CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT' => 'application/json',
+        ], $body)->assertOk();
+
+        // The next poll observes settlement and the screen becomes the confirmed state.
+        $component->call('checkPaymentStatus')
+            ->assertSet('awaitingPaymentConfirmation', false)
+            ->assertSee('Booking confirmed')
+            ->assertDontSee('Confirming your payment');
+    }
+
+    /** A rejected callback never enters the confirming state — the Pay button stays available. */
+    public function test_a_forged_callback_does_not_show_the_confirming_state(): void
+    {
+        $student = User::factory()->activeStudent()->create(['status' => User::STATUS_ACTIVE]);
+        $this->withBillingCountry($student);
+        $slot = CarbonImmutable::now('UTC')->addDays(3)->setTime(10, 0);
+
+        $component = $this->navigateAcademicWizardToSlot(
+            Livewire::actingAs($student)->test('frontend.booking.booking-wizard'),
+            $this->academic,
+            $slot,
+        );
+        $component->call('submit');
+        $component->call('initiatePayment');
+        $orderId = $component->get('paymentOrder')['order_id'];
+
+        $component->call('verifyPayment', $orderId, 'pay_FORGED', 'not-the-real-signature')
+            ->assertSet('awaitingPaymentConfirmation', false)
+            ->assertSee('Pay 499.00 INR securely')
+            ->assertDontSee('Confirming your payment');
+    }
+
+    /** Pressing Pay again (a retry after a failure) leaves any stale confirming state behind. */
+    public function test_initiating_payment_resets_the_confirming_state(): void
+    {
+        $student = User::factory()->activeStudent()->create(['status' => User::STATUS_ACTIVE]);
+        $this->withBillingCountry($student);
+        $slot = CarbonImmutable::now('UTC')->addDays(3)->setTime(10, 0);
+
+        $component = $this->navigateAcademicWizardToSlot(
+            Livewire::actingAs($student)->test('frontend.booking.booking-wizard'),
+            $this->academic,
+            $slot,
+        );
+        $component->call('submit');
+        $component->set('awaitingPaymentConfirmation', true);
+
+        $component->call('initiatePayment')->assertSet('awaitingPaymentConfirmation', false);
+    }
+
     public function test_booking_wizard_shows_safe_error_when_no_matrix_price_configured(): void
     {
         // Drives the actual wizard submit() flow (not the service layer

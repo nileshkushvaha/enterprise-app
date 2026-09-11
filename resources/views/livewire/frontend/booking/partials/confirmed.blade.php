@@ -199,13 +199,20 @@
                         Reserved temporarily
                     @endif
                 </span>
-                <h2 data-booking-step-title tabindex="-1" class="mt-3 text-2xl font-black tracking-tight text-fg-strong outline-none sm:text-3xl">Complete your payment</h2>
-                <p class="mx-auto mt-2 max-w-md text-sm leading-6 text-fg-muted">
-                    Your lesson time is reserved while you complete payment.
-                    @if($reservedUntil)
-                        Reserved until {{ $reservedUntil->format('g:i A') }}.
-                    @endif
-                </p>
+                @if($awaitingPaymentConfirmation)
+                    <h2 data-booking-step-title tabindex="-1" class="mt-3 text-2xl font-black tracking-tight text-fg-strong outline-none sm:text-3xl">Confirming your payment</h2>
+                    <p class="mx-auto mt-2 max-w-md text-sm leading-6 text-fg-muted">
+                        Your payment has been accepted. We are waiting for the payment provider to confirm it — this usually takes a few seconds. Your lesson time stays reserved.
+                    </p>
+                @else
+                    <h2 data-booking-step-title tabindex="-1" class="mt-3 text-2xl font-black tracking-tight text-fg-strong outline-none sm:text-3xl">Complete your payment</h2>
+                    <p class="mx-auto mt-2 max-w-md text-sm leading-6 text-fg-muted">
+                        Your lesson time is reserved while you complete payment.
+                        @if($reservedUntil)
+                            Reserved until {{ $reservedUntil->format('g:i A') }}.
+                        @endif
+                    </p>
+                @endif
             @else
                 <span class="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-bold text-emerald-700 dark:text-emerald-300">
                     <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/></svg>
@@ -265,6 +272,36 @@
                     <p class="mt-2 text-sm text-fg-muted">Total due</p>
                     <p class="text-3xl font-black tracking-tight text-fg-strong">{{ $result['amount_formatted'] ?? '—' }}</p>
 
+                    @if($awaitingPaymentConfirmation)
+                        {{-- Verified checkout, settlement pending. Poll the server
+                             (the webhook or the reconciliation sweep settles it) and
+                             never offer a second Pay button for money already taken. --}}
+                        <div
+                            class="booking-payment-confirming mt-4 rounded-xl border border-indigo-300/50 bg-indigo-500/5 px-4 py-4"
+                            role="status"
+                            aria-live="polite"
+                            wire:poll.3s="checkPaymentStatus"
+                            x-data="{ since: {{ \Carbon\CarbonImmutable::parse($awaitingPaymentSince ?? now())->getTimestampMs() }}, now: Date.now(), init() { setInterval(() => this.now = Date.now(), 1000); }, get slow() { return this.now - this.since > 60000; } }"
+                        >
+                            <div class="flex items-start gap-3">
+                                <x-ui.spinner size="sm" class="mt-0.5 shrink-0 text-indigo-600 dark:text-indigo-300" />
+                                <div>
+                                    <p class="text-sm font-bold text-fg-strong">Confirming your payment…</p>
+                                    <p class="mt-0.5 text-sm leading-6 text-fg-muted">Payment accepted. Waiting for the provider's confirmation — usually a few seconds. Please don't pay again.</p>
+                                    <p x-show="slow" x-cloak class="mt-2 text-sm leading-6 text-fg-muted">
+                                        This is taking longer than usual. You can safely leave this page: your booking is confirmed automatically the moment the provider confirms, and you'll receive an email. Your time stays reserved until the hold ends.
+                                    </p>
+                                </div>
+                            </div>
+                            <div class="mt-3 flex flex-wrap gap-3">
+                                <x-ui.button type="button" size="sm" variant="secondary" wire:click="checkPaymentStatus" wire:loading.attr="disabled" wire:target="checkPaymentStatus">
+                                    <span wire:loading.remove wire:target="checkPaymentStatus">Check again</span>
+                                    <span wire:loading wire:target="checkPaymentStatus">Checking…</span>
+                                </x-ui.button>
+                                <a href="{{ route('dashboard.bookings.index') }}" class="inline-flex items-center text-sm font-semibold text-indigo-700 hover:underline dark:text-indigo-300">Back to my bookings</a>
+                            </div>
+                        </div>
+                    @else
                     @if($paymentBanner || $paymentFailed)
                         <div class="booking-payment-error mt-4 rounded-xl border px-4 py-3" role="alert">
                             <p class="text-sm font-bold">{{ $paymentFailed ? 'Payment wasn’t completed.' : 'Payment needs attention' }}</p>
@@ -286,6 +323,7 @@
                         <svg class="mt-0.5 h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z"/></svg>
                         <span>Secure payment. Your booking is confirmed after the payment succeeds.</span>
                     </p>
+                    @endif
 
                     @if($stripeMounted)
                         {{-- wire:ignore: this subtree is polled by checkPaymentStatus() every
@@ -361,13 +399,21 @@
         <div class="booking-mobile-footer fixed inset-x-0 bottom-0 z-40 border-t border-edge bg-surface-raised/95 px-4 py-3 backdrop-blur md:hidden" style="padding-bottom: max(0.75rem, env(safe-area-inset-bottom));">
             <div class="mx-auto flex max-w-3xl items-center justify-between gap-3">
                 <div class="min-w-0">
-                    <p class="text-[11px] font-bold uppercase tracking-wide text-fg-muted">Total due</p>
-                    <p class="text-lg font-black leading-6 text-fg-strong">{{ $result['amount_formatted'] ?? '—' }}</p>
+                    <p class="text-[11px] font-bold uppercase tracking-wide text-fg-muted">{{ $awaitingPaymentConfirmation ? 'Payment' : 'Total due' }}</p>
+                    <p class="text-lg font-black leading-6 text-fg-strong">{{ $awaitingPaymentConfirmation ? 'Confirming…' : ($result['amount_formatted'] ?? '—') }}</p>
                 </div>
-                <x-ui.button type="button" class="booking-checkout-primary shrink-0" wire:click="initiatePayment" wire:loading.attr="disabled" wire:target="initiatePayment" aria-label="Pay {{ $result['amount_formatted'] ?? '' }} securely">
-                    <span wire:loading.remove wire:target="initiatePayment">Pay securely</span>
-                    <span wire:loading wire:target="initiatePayment">Preparing…</span>
-                </x-ui.button>
+                @if($awaitingPaymentConfirmation)
+                    {{-- Money has been accepted: no second Pay button, on any screen size. --}}
+                    <span class="inline-flex shrink-0 items-center gap-2 text-sm font-semibold text-indigo-700 dark:text-indigo-300" role="status">
+                        <x-ui.spinner size="sm" class="text-indigo-600 dark:text-indigo-300" />
+                        Confirming payment
+                    </span>
+                @else
+                    <x-ui.button type="button" class="booking-checkout-primary shrink-0" wire:click="initiatePayment" wire:loading.attr="disabled" wire:target="initiatePayment" aria-label="Pay {{ $result['amount_formatted'] ?? '' }} securely">
+                        <span wire:loading.remove wire:target="initiatePayment">Pay securely</span>
+                        <span wire:loading wire:target="initiatePayment">Preparing…</span>
+                    </x-ui.button>
+                @endif
             </div>
         </div>
     @endif
