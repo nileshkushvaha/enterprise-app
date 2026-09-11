@@ -17,6 +17,7 @@ use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\Auth\ResetPasswordController;
 use App\Http\Controllers\Auth\VerifyEmailController;
 use App\Http\Controllers\Booking\BookingWizardPageController;
+use App\Http\Controllers\Booking\MeetingJoinController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\ContactFormController;
 use App\Http\Controllers\Dashboard\DashboardController;
@@ -260,6 +261,11 @@ Route::prefix('dashboard')->name('dashboard.')->middleware([
     Route::post('/notifications/read-all', [StudentNotificationsController::class, 'markAllRead'])->name('notifications.read-all');
     Route::post('/notifications/{id}/read', [StudentNotificationsController::class, 'markRead'])->name('notifications.read');
     Route::get('/faqs', [DashboardFaqController::class, 'index'])->name('faqs');
+    // Authenticated meeting join gateway: re-checks participant, account,
+    // meeting status and join window server-side, then redirects to the
+    // provider's participant URL. The link every participant surface and
+    // notification carries; never the provider URL itself.
+    Route::get('/meetings/{booking}/join', MeetingJoinController::class)->name('meetings.join');
     Route::get('/instructor/onboarding', [InstructorOnboardingController::class, 'show'])->name('instructor.onboarding');
 
     // ── Instructor teaching workspace — gated behind

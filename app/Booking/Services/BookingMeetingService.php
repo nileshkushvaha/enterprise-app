@@ -27,6 +27,7 @@ use App\Booking\Exceptions\MeetingHostCapacityException;
 use App\Booking\Exceptions\MeetingProviderSwitchNotSupportedException;
 use App\Booking\Jobs\CaptureLessonRecordingJob;
 use App\Booking\Meetings\ManualMeetingProvider;
+use App\Enums\InstructorStatus;
 use App\Exceptions\Student\StudentActionNotAvailableException;
 use App\Lessons\Enums\LessonStatus;
 use App\Models\Booking;
@@ -992,6 +993,50 @@ final class BookingMeetingService implements BookingMeetingServiceInterface
         return $endsAt === null
             ? null
             : CarbonImmutable::parse($endsAt)->addMinutes(max(0, $this->settings->meeting_link_visible_after_minutes));
+    }
+
+    public function joinLinkFor(Booking $booking): string
+    {
+        return route('dashboard.meetings.join', $booking);
+    }
+
+    public function participantJoinUrlFor(Booking $booking, User $viewer): ?string
+    {
+        if ($viewer->id === $booking->student_id) {
+            return $this->studentJoinUrlFor($booking, $viewer);
+        }
+
+        if ($viewer->id === $booking->instructor_id && $this->instructorMayJoin($viewer)) {
+            return $this->joinUrlFor($booking, $this->settings->instructor_join_url_visible, $booking->lesson?->status);
+        }
+
+        return null;
+    }
+
+    public function participantJoinAvailabilityFor(Booking $booking, User $viewer): MeetingJoinAvailability
+    {
+        if ($viewer->id === $booking->student_id) {
+            try {
+                $this->studentLifecycle->assertEligibleForStudentAction($viewer);
+            } catch (StudentActionNotAvailableException) {
+                return MeetingJoinAvailability::Unavailable;
+            }
+
+            return $this->joinAvailabilityFor($booking, $this->settings->student_join_url_visible);
+        }
+
+        if ($viewer->id === $booking->instructor_id && $this->instructorMayJoin($viewer)) {
+            return $this->joinAvailabilityFor($booking, $this->settings->instructor_join_url_visible, $booking->lesson?->status);
+        }
+
+        return MeetingJoinAvailability::Unavailable;
+    }
+
+    /** Same gate the instructor workspace applies: an active account whose instructor status is publicly visible. */
+    private function instructorMayJoin(User $instructor): bool
+    {
+        return $instructor->isActive()
+            && in_array($instructor->profile?->instructor_status, InstructorStatus::publiclyVisible(), true);
     }
 
     public function studentJoinUrlFor(Booking $booking, ?User $viewer): ?string

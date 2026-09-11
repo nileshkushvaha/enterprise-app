@@ -104,7 +104,10 @@ final class StudentDashboardService
         // hint — derived from the SAME authoritative availability
         // result, never an independent (weaker) authorization decision.
         $availability = $this->bookingMeetings->joinAvailabilityFor($booking, $this->meetings->student_join_url_visible);
-        $joinUrl = $this->bookingMeetings->studentJoinUrlFor($booking, $student);
+        // The SIRI join link, released only when the provider URL would be.
+        $joinUrl = $this->bookingMeetings->studentJoinUrlFor($booking, $student) !== null
+            ? $this->bookingMeetings->joinLinkFor($booking)
+            : null;
 
         return [
             'id' => $booking->id,

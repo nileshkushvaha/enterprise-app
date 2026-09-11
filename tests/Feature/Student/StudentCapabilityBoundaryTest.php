@@ -381,9 +381,11 @@ class StudentCapabilityBoundaryTest extends TestCase
         Http::fake();
         [$student, $booking] = $this->confirmedBookingWithMeeting(StudentStatus::Active);
 
+        // The SIRI join gateway link is rendered; the provider URL never is.
         Livewire::actingAs($student)
             ->test(BookingDetail::class, ['bookingId' => $booking->id])
-            ->assertSee('https://meet.example.test/abc');
+            ->assertSee(route('dashboard.meetings.join', $booking))
+            ->assertDontSee('https://meet.example.test/abc');
 
         Http::assertNothingSent();
     }

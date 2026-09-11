@@ -78,9 +78,11 @@ class MeetingNotificationsTest extends TestCase
         $this->service()->saveManualMeeting($booking, new MeetingUpdateContext(joinUrl: 'https://meet.example.test/n1'));
 
         foreach ([$this->student, $this->teacher] as $recipient) {
-            Notification::assertSentTo($recipient, MeetingCreatedNotification::class, function ($notification) use ($recipient): bool {
+            Notification::assertSentTo($recipient, MeetingCreatedNotification::class, function ($notification) use ($recipient, $booking): bool {
                 $mail = $notification->toMail($recipient);
-                $this->assertSame('https://meet.example.test/n1', $mail->actionUrl);
+                // The SIRI join gateway; the provider URL is only ever its redirect.
+                $this->assertSame(route('dashboard.meetings.join', $booking), $mail->actionUrl);
+                $this->assertStringNotContainsString('https://meet.example.test/n1', (string) json_encode($mail));
 
                 return true;
             });

@@ -687,6 +687,26 @@ A lesson's meeting is bounded by the lesson's own timeslot. For a
                                                         provider (visible_after)
 ```
 
+**The link participants receive is SIRI's, not the provider's.** Every
+student- and instructor-facing surface (booking detail, both
+dashboards, `StudentBookingResource`, the meeting-created/updated
+notifications) carries `/dashboard/meetings/{booking}/join`
+(`BookingMeetingService::joinLinkFor()`, `MeetingJoinController`). It
+is an authenticated gateway on SIRI's own domain — not a custom Zoom
+domain and not a proxy of the meeting. Following it re-runs the whole
+decision at click time — signed in and active (dashboard middleware),
+participant of this booking (`BookingPolicy::view`, 403 otherwise),
+the student's strict lifecycle guard or the instructor's publicly
+visible status, the role visibility setting, booking `confirmed`,
+meeting `created`, and the window below — and only then answers a 302
+to the provider's **participant** join URL, audited as
+`meeting_join_redirected` (provider and role, never the URL). Outside
+the window it renders a "not yet" / "cannot be joined" page. The Zoom
+host start URL is never returned by anything. A copied link therefore
+stops working the moment the lesson ends, the booking is cancelled or
+the account is suspended. Google Meet bookings take the same path.
+`MeetingJoinGatewayTest` covers the matrix.
+
 **One window, two enforcement points.**
 `BookingMeetingService::joinAvailabilityFor()` decides what SIRI hands
 out; `closeExpiredMeeting()` decides what stays alive at the provider.

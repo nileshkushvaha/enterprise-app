@@ -106,7 +106,8 @@ final class InstructorDashboardService
                     'starts_at' => $booking->starts_at->timezone($timezone),
                     'ends_at' => $booking->ends_at->timezone($timezone),
                     'status' => $booking->status->label(),
-                    'join_url' => $joinAvailability === MeetingJoinAvailability::Available ? $booking->meeting?->join_url : null,
+                    // The SIRI join link; the gateway re-checks and redirects.
+                    'join_url' => $joinAvailability === MeetingJoinAvailability::Available ? $this->meetings->joinLinkFor($booking) : null,
                 ];
             })->all(),
             learningPlans: [

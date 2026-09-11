@@ -348,7 +348,7 @@ final class LessonFeedbackManager extends Component
 
             return [$lesson->id => [
                 'availability' => $availability,
-                'url' => $availability === MeetingJoinAvailability::Available ? $lesson->booking->meeting?->join_url : null,
+                'url' => $availability === MeetingJoinAvailability::Available ? $meetings->joinLinkFor($lesson->booking) : null,
             ]];
         });
 

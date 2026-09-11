@@ -44,7 +44,9 @@ final class MeetingCreatedNotification extends BookingNotification
             ));
 
         if ($this->includeJoinUrl && $this->meeting->join_url !== null) {
-            $mail->action('Join meeting', $this->meeting->join_url);
+            // The SIRI join link — the gateway re-checks the recipient's
+            // right to join at click time and redirects to the provider.
+            $mail->action('Join meeting', route('dashboard.meetings.join', $this->booking));
         } else {
             // Outside the visibility window (or when the
             // student's access is otherwise restricted) the credential is
@@ -69,7 +71,7 @@ final class MeetingCreatedNotification extends BookingNotification
             $this->booking->reference,
             $this->meeting->starts_at->timezone($timezone)->format('D, M j Y H:i'),
             $timezone,
-            $this->includeJoinUrl && $this->meeting->join_url !== null ? ' Join: '.$this->meeting->join_url : '',
+            $this->includeJoinUrl && $this->meeting->join_url !== null ? ' Join: '.route('dashboard.meetings.join', $this->booking) : '',
         );
     }
 }

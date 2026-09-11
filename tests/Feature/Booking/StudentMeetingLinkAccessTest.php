@@ -386,9 +386,11 @@ class StudentMeetingLinkAccessTest extends TestCase
 
         app(SendMeetingNotifications::class)->handleUpdated(new MeetingUpdated($booking, $booking->meeting));
 
-        Notification::assertSentTo($student, MeetingUpdatedNotification::class, function (MeetingUpdatedNotification $notification) use ($student): bool {
+        Notification::assertSentTo($student, MeetingUpdatedNotification::class, function (MeetingUpdatedNotification $notification) use ($student, $booking): bool {
+            // The mail carries the SIRI join gateway, never the provider URL.
             return $notification->includeJoinUrl === true
-                && $notification->toMail($student)->actionUrl === self::JOIN_URL;
+                && $notification->toMail($student)->actionUrl === route('dashboard.meetings.join', $booking)
+                && ! str_contains((string) json_encode($notification->toMail($student)), self::JOIN_URL);
         });
     }
 
@@ -458,13 +460,16 @@ class StudentMeetingLinkAccessTest extends TestCase
             ->assertDontSee(self::JOIN_URL);
     }
 
-    public function test_booking_history_renders_the_url_for_an_active_student(): void
+    public function test_booking_history_renders_the_siri_join_link_for_an_active_student(): void
     {
         [$booking, $student] = $this->confirmedBookingWithMeeting();
 
+        // The page carries the authenticated gateway link; the provider
+        // URL is only ever a server-side redirect from it.
         Livewire::actingAs($student)
             ->test(BookingDetail::class, ['bookingId' => $booking->id])
-            ->assertSee(self::JOIN_URL);
+            ->assertSee(route('dashboard.meetings.join', $booking))
+            ->assertDontSee(self::JOIN_URL);
     }
 
     // ── Resource serialization ───────────────────────────────────────────────
@@ -493,7 +498,7 @@ class StudentMeetingLinkAccessTest extends TestCase
 
         $payload = (new StudentBookingResource($booking))->toArray($request);
 
-        $this->assertSame(self::JOIN_URL, $payload['meeting_url']);
+        $this->assertSame(route('dashboard.meetings.join', $booking), $payload['meeting_url']);
     }
 
     private function suspend(User $student): void

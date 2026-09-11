@@ -144,8 +144,10 @@ final class InstructorLessonManagementTest extends TestCase
 
         $response = $this->actingAs($this->instructor)->get(route('dashboard.instructor.lessons'))->assertOk();
 
+        // The page carries the SIRI join gateway, never the provider URL.
         $response->assertSee('Join Class');
-        $response->assertSee('https://meet.example.test/join-me', false);
+        $response->assertSee(route('dashboard.meetings.join', $lesson->booking_id), false);
+        $response->assertDontSee('https://meet.example.test/join-me', false);
     }
 
     public function test_join_class_hidden_when_meeting_not_ready(): void
@@ -338,7 +340,8 @@ final class InstructorLessonManagementTest extends TestCase
         $response = $this->actingAs($this->instructor->fresh())->get(route('dashboard'))->assertOk();
 
         $response->assertSee('Join Class');
-        $response->assertSee('https://meet.example.test/dashboard-join', false);
+        $response->assertSee(route('dashboard.meetings.join', $lesson->booking_id), false);
+        $response->assertDontSee('https://meet.example.test/dashboard-join', false);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────

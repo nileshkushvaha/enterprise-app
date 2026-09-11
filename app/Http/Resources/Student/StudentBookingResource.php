@@ -21,8 +21,12 @@ final class StudentBookingResource extends JsonResource
         // this resource serializes only what the domain releases, and
         // an ineligible viewer's payload contains no URL key at all
         // (never an empty-but-present attribute).
-        $joinUrl = app(BookingMeetingServiceInterface::class)
-            ->studentJoinUrlFor($this->resource, $request->user());
+        $meetings = app(BookingMeetingServiceInterface::class);
+        // The SIRI join link (authenticated gateway), present only when
+        // the authoritative decision would release the provider URL.
+        $joinUrl = $meetings->studentJoinUrlFor($this->resource, $request->user()) !== null
+            ? $meetings->joinLinkFor($this->resource)
+            : null;
 
         return [
             'reference' => $this->reference,

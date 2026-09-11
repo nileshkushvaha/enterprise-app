@@ -102,6 +102,30 @@ interface BookingMeetingServiceInterface
     public function studentJoinUrlFor(Booking $booking, ?User $viewer): ?string;
 
     /**
+     * The SIRI join link for a booking — the authenticated gateway
+     * (`dashboard.meetings.join`) that re-checks the viewer's right to
+     * join at click time and then redirects to the provider's
+     * PARTICIPANT join URL. This is what every participant-facing page,
+     * API payload and notification carries; the provider URL itself
+     * never leaves the server except as that redirect. It is an entry
+     * point on SIRI's own domain, not a custom Zoom domain.
+     */
+    public function joinLinkFor(Booking $booking): string;
+
+    /**
+     * The provider join URL a participant may be redirected to right
+     * now, or null: the booking's student (studentJoinUrlFor rules) or
+     * its instructor (active account, publicly visible instructor
+     * status, instructor visibility setting, lesson still open).
+     * Anyone else — including administrators — gets null; the host start
+     * URL is never returned by anything.
+     */
+    public function participantJoinUrlFor(Booking $booking, User $viewer): ?string;
+
+    /** Why participantJoinUrlFor() is null, in the vocabulary the join page shows. */
+    public function participantJoinAvailabilityFor(Booking $booking, User $viewer): MeetingJoinAvailability;
+
+    /**
      * The instant this meeting's join window closes: its scheduled end
      * plus MeetingSettings::meeting_link_visible_after_minutes. The same
      * value joinAvailabilityFor() stops returning Available at — one

@@ -789,10 +789,14 @@ final class BookingDetail extends Component
             // with no provider URL. Boundary: a URL already copied
             // externally cannot be revoked without provider integration;
             // this controls what the application serves.
+            // What the page renders is the SIRI join link (the
+            // authenticated gateway), shown only when the authoritative
+            // decision would release the provider URL to this viewer;
+            // the provider URL itself is only ever a server-side redirect.
             'joinUrl' => $this->booking !== null
-                ? app(BookingMeetingServiceInterface::class)
-                    ->studentJoinUrlFor($this->booking, auth()->user())
-                : null,
+                && app(BookingMeetingServiceInterface::class)->studentJoinUrlFor($this->booking, auth()->user()) !== null
+                    ? app(BookingMeetingServiceInterface::class)->joinLinkFor($this->booking)
+                    : null,
             // Same discipline for the recording: the blade renders only
             // the state RecordingPlaybackAccessResolver releases for the
             // authenticated viewer (playback setting, ownership, lifecycle,
