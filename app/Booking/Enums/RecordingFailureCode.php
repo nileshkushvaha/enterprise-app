@@ -124,4 +124,54 @@ enum RecordingFailureCode: string
             self::RetriesExhausted => 'Retries exhausted',
         };
     }
+
+    /** A few words for a table cell; label() is the full sentence. */
+    public function shortLabel(): string
+    {
+        return match ($this) {
+            self::MeetingReplacedDuringCapture => 'Meeting replaced mid-capture',
+            self::ProviderCapabilityMissing => 'Provider cannot record',
+            self::SourceExpired => 'Provider recording gone',
+            self::SourceNotFound => 'No recording produced',
+            self::SourceDownloadFailed => 'Provider download failed',
+            self::SourceAccessDenied => 'Provider access denied',
+            self::SourceRateLimited => 'Provider rate limited',
+            self::SourceRejected => 'Rejected by safety limits',
+            self::StorageNotConfigured => 'Storage not configured',
+            self::StorageAuthFailed => 'Storage auth failed',
+            self::StorageQuotaExceeded => 'Storage quota exceeded',
+            self::StorageUploadFailed => 'Storage upload failed',
+            self::StorageVerificationFailed => 'Verification failed',
+            self::StorageReadFailed => 'Stored object unreadable',
+            self::StorageNativeCopyUnavailable => 'Streamed copy used',
+            self::RetriesExhausted => 'Retries exhausted',
+        };
+    }
+
+    /**
+     * What an operator does about it — safe to show on an admin screen
+     * (no locators, URLs or exception text). Retry eligibility itself is
+     * decided by RecordingService::retryRefusalReason(), never here.
+     */
+    public function operatorGuidance(): string
+    {
+        return match ($this) {
+            self::MeetingReplacedDuringCapture => 'The stored object belongs to the meeting that was replaced. An operator decides whether to keep it under the old meeting or discard it; an ordinary retry is refused so the object is never overwritten.',
+            self::ProviderCapabilityMissing => 'The meeting provider in use cannot supply recordings. Nothing to retry; enable recording on a capable provider for future lessons.',
+            self::SourceExpired => 'The provider no longer holds the recording. Unrecoverable; retrying cannot bring it back.',
+            self::SourceNotFound => 'The provider reports no recording for this meeting — recording was never started, or the meeting ran under a different identity. Check with the instructor before retrying; a retry only helps if the provider now shows a recording.',
+            self::SourceDownloadFailed => 'The download from the provider was interrupted. Transient: the sweep retries inside the capture window, or use Retry ingestion.',
+            self::SourceAccessDenied => 'The provider refused access to the recording (credentials or scopes). Fix the provider authorization in Meeting Settings, then retry.',
+            self::SourceRateLimited => 'The provider throttled the request. Transient; wait for the sweep or retry later.',
+            self::SourceRejected => 'The recording exceeded the configured safety limits (size or duration). Nothing to retry unless the limits are raised.',
+            self::StorageNotConfigured => 'Recording storage is not configured (folder or credentials missing). Complete Meeting Settings → Recording Storage, then retry.',
+            self::StorageAuthFailed => 'The storage backend rejected the platform credentials. Re-grant the storage authorization, then retry.',
+            self::StorageQuotaExceeded => 'The storage backend is out of space. Free space or raise the quota, then retry.',
+            self::StorageUploadFailed => 'The upload to storage failed. Transient: the sweep retries, or use Retry ingestion.',
+            self::StorageVerificationFailed => 'The stored object did not match what was uploaded (truncated or removed). Retry ingestion uploads afresh.',
+            self::StorageReadFailed => 'The stored object could not be read back. Check the storage backend; retry re-verifies.',
+            self::StorageNativeCopyUnavailable => 'Informational: the backend-side copy was unavailable and the file was streamed instead.',
+            self::RetriesExhausted => 'The capture window closed without success. Find the earlier failure in the logs, fix its cause, then Retry ingestion once.',
+        };
+    }
 }

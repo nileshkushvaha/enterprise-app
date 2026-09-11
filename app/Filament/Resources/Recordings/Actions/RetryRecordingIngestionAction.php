@@ -44,23 +44,32 @@ final class RetryRecordingIngestionAction
             ->color('warning')
             ->requiresConfirmation()
             ->modalHeading('Retry recording ingestion')
-            ->modalDescription('The recording will be fetched from the meeting provider and stored again. Existing stored recordings are never affected.')
+            ->modalDescription('The recording is fetched from the meeting provider and stored again, in the background. Recordings that are already stored are never touched. The current state is re-checked when you confirm.')
             ->visible(fn (Recording $record): bool => $record->status === RecordingStatus::Failed
                 && auth()->user()?->can('retry', $record) === true)
             // A Failed row that still points at a preserved object (the
             // meeting was replaced mid-capture) is shown but not
-            // retryable: the button explains that operator recovery is
-            // required. The service refuses regardless, under its lock.
+            // retryable: the label and tooltip say that operator recovery
+            // is required. The service refuses regardless, under its lock.
+            ->label(fn (Recording $record, RecordingService $recordings): string => $recordings->retryRefusalReason($record) !== null
+                ? 'Operator recovery required'
+                : 'Retry ingestion')
             ->disabled(fn (Recording $record, RecordingService $recordings): bool => $recordings->retryRefusalReason($record) !== null)
             ->tooltip(fn (Recording $record, RecordingService $recordings): ?string => $recordings->retryRefusalReason($record))
             ->action(function (Recording $record, RecordingService $recordings): void {
-                $refusal = $recordings->retryRefusalReason($record);
-                $queued = $refusal === null && $recordings->retryFailed($record, auth()->user());
+                // The service takes the decision under its row lock on a
+                // fresh read; a stale page (row no longer failed) or a
+                // protected row therefore never queues anything. The
+                // refreshed row is only used to phrase the outcome.
+                $queued = $recordings->retryFailed($record, auth()->user());
 
                 if (! $queued) {
+                    $record->refresh();
+                    $refusal = $recordings->retryRefusalReason($record);
+
                     Notification::make()
                         ->title($refusal !== null ? 'Operator recovery required' : 'Nothing to retry')
-                        ->body($refusal ?? 'This recording is no longer in a failed state.')
+                        ->body($refusal ?? sprintf('This recording is now %s, so there is nothing to retry. The page has been refreshed.', $record->status->label()))
                         ->warning()
                         ->persistent()
                         ->send();

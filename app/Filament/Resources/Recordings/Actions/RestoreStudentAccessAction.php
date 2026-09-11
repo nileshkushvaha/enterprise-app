@@ -21,7 +21,7 @@ final class RestoreStudentAccessAction
             ->color('success')
             ->requiresConfirmation()
             ->modalHeading('Restore student access')
-            ->modalDescription('The student will again be able to watch this recording, subject to the platform playback setting and the retention window.')
+            ->modalDescription('Returns this recording to the normal student playback policy. It does not by itself make the recording playable: the recording must be available, student playback must be enabled, and the retention window must be open.')
             ->visible(fn (Recording $record): bool => $record->isStudentAccessWithheld()
                 && auth()->user()?->can('withhold', $record) === true)
             ->action(function (Recording $record, RecordingService $recordings): void {

@@ -31,11 +31,12 @@ final class WithholdStudentAccessAction
     {
         return Action::make('withholdStudentAccess')
             ->label('Withhold from student')
+            ->modalIcon(Heroicon::OutlinedEyeSlash)
             ->icon(Heroicon::OutlinedEyeSlash)
             ->color('danger')
             ->requiresConfirmation()
             ->modalHeading('Withhold this recording from its student')
-            ->modalDescription('The student will see the recording as unavailable and cannot watch it. Administrator access, storage and retention are unaffected. This can be restored later.')
+            ->modalDescription('Prevents the student from watching this recording whenever it is available — including a recording that is still being captured. Ingestion, administrator access, storage and retention are unaffected. Restore later from the same menu.')
             ->form([
                 Textarea::make('reason')
                     ->label('Reason')

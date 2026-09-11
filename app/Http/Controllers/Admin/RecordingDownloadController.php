@@ -37,6 +37,16 @@ final class RecordingDownloadController extends Controller
         // failed recording is never half-served.
         Gate::authorize('download', $recording);
 
+        // Business state is not authorization: Gate::before lets a super
+        // admin through the policy, but a recording without a verified
+        // stored object (failed, transferring, expired — or a failed row
+        // still holding a preserved locator) has no downloadable file.
+        // A plain 404, never a backend detail.
+        abort_unless($recording->isPlayable(), 404, 'This recording has no downloadable file.');
+
+        // A missing or unreadable object behind an Available row is
+        // reported by the delivery service as a generic 503 and logged
+        // for operators; the response never carries a URL or exception.
         return $delivery->respond($recording, null, inline: false, headOnly: $request->isMethod('HEAD'));
     }
 }

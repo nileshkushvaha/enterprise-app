@@ -717,7 +717,37 @@ row-locked claim remains what makes concurrent runs safe.
 ingestion" action on failed recordings. It is authorized, audited with
 the acting admin and the previous failure code, idempotent (only
 `failed` transitions, row-locked), non-destructive, and queued — never
-inline.
+inline. The decision is `RecordingService::retryRefusalReason()` and
+is re-taken under the row lock when the action is submitted, so a
+stale page or a crafted request never queues anything; a protected row
+(preserved object, `meeting_replaced_during_capture`) is shown as
+**"Operator recovery required"** instead of a retry button.
+
+**Admin Recordings screen** (`/admin/recordings`). One primary row
+action, **Details** (needs `View:Recording`), and one overflow menu:
+Download (only for an `available` row with a stored object — decided
+from the row and `RecordingPolicy::download()`, never by calling a
+provider or storage API; the endpoint re-checks permission *and* the
+playable state, so even a super admin cannot download a failed row's
+preserved object), Retry ingestion / Operator recovery required, and a
+"Student access" section with Withhold / Restore. Failed rows carry
+the failure's short label under the status badge and the attempt
+count. Details shows what the state means (a `pending` row never
+"never ran" — the attempt count is spelled out), the failure label with
+permanent/transient, the operator's next step
+(`RecordingFailureCode::operatorGuidance()`), every lifecycle
+timestamp, provider-vs-meeting consistency, and whether a stored object
+exists — never its locator. Sentences come from
+`RecordingStatePresenter`; decisions from the service, policy and model.
+A missing or unreadable object behind an `available` row is answered
+with a generic 503 and an operator log line, never a URL or exception.
+
+**Read-only inspection.** `php artisan recordings:inspect BK-…` prints
+one booking's recording evidence — status, failure code and meaning,
+attempts, recording-vs-meeting provider and meeting id consistency,
+locator/provider-reference *presence*, every timestamp, the retry
+decision, guidance, and the `recordings` audit events — and changes
+nothing. `recordings:explain BK-…` remains the student-access walk.
 
 **Recording failure never touches lesson completion, booking payment,
 instructor earnings, or wallet settlement.** Recording persistence is
@@ -1013,8 +1043,10 @@ No credential value is ever entered into `.env` or committed.
 `recording_capture_failed`; the count of rows in `failed`; rows sitting
 in `pending`/`transferring` longer than the stale threshold; and disk
 usage under `storage/app/private/recording-ingestion/`. The admin
-Recordings resource surfaces status, backend, size, attempts, and the
-failure label — never a credential, token, locator, or provider URL.
+Recordings resource surfaces status, backend, size, attempts, the
+failure label, the next step and lifecycle timestamps — never a
+credential, token, locator, or provider URL. For one booking, run
+`recordings:inspect BK-…` (read-only) before deciding on a retry.
 
 ---
 
