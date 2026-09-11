@@ -21,6 +21,7 @@ use App\Lessons\Events\LessonCompleted;
 use App\Lessons\Events\LessonOutcomeFinalized;
 use App\Models\Activity;
 use App\Models\Booking;
+use App\Models\BookingMeeting;
 use App\Models\Currency;
 use App\Models\InstructorCompensationAgreement;
 use App\Models\InstructorEarning;
@@ -127,16 +128,46 @@ class LessonAutomatedFinalizationTest extends TestCase
         $this->assertSame(LessonOutcome::InstructorNoShow, $lesson->refresh()->outcome);
     }
 
-    public function test_no_attendance_becomes_both_absent(): void
+    public function test_no_attendance_with_a_settled_provider_pull_becomes_both_absent(): void
     {
         $this->enableEngine();
         $lesson = $this->makeLesson(endedHoursAgo: 2);
+        // The provider answered for this meeting (with nobody in it):
+        // absence is evidenced, not inferred from silence.
+        BookingMeeting::factory()->created()->create([
+            'booking_id' => $lesson->booking_id,
+            'attendance_sync_status' => 'synced',
+            'attendance_synced_at' => now(),
+        ]);
 
         $this->assertSame(1, $this->finalizer->processDue());
 
         $lesson->refresh();
         $this->assertSame(LessonOutcome::BothAbsent, $lesson->outcome);
         $this->assertSame(LessonStatus::BothNoShow, $lesson->status);
+    }
+
+    public function test_no_evidence_at_all_is_held_for_a_human_and_never_punished(): void
+    {
+        $this->enableEngine();
+        $lesson = $this->makeLesson(endedHoursAgo: 48);
+
+        $this->assertSame(0, $this->finalizer->processDue());
+
+        $lesson->refresh();
+        $this->assertSame(LessonOutcome::Pending, $lesson->outcome);
+        $this->assertTrue($lesson->status->isOpen());
+    }
+
+    public function test_provider_evidence_for_one_party_covers_the_other_partys_absence(): void
+    {
+        $this->enableEngine();
+        $lesson = $this->makeLesson(endedHoursAgo: 2);
+        $this->record($lesson, LessonParticipant::Instructor, 'evt-only-i');
+
+        $this->assertSame(1, $this->finalizer->processDue());
+
+        $this->assertSame(LessonOutcome::StudentNoShow, $lesson->refresh()->outcome);
     }
 
     // ── 5–6. Technical issue ─────────────────────────────────────────

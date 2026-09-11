@@ -28,6 +28,10 @@ use Throwable;
  * a race sees a finalized outcome and no-ops — and safe to rerun: a
  * processed lesson leaves the open set and is never picked up again.
  *
+ * No-show outcomes additionally require evidence COVERAGE
+ * (LessonEvidenceCoverage): a lesson nobody reported on is held for a
+ * human, never finalized as absent.
+ *
  * Ships behind lessons.automated_finalization_enabled (default off).
  * While enabled, the legacy lenient sweep (autoCompleteDue) defers so
  * exactly one automation policy is active at a time.
@@ -41,6 +45,7 @@ final class LessonFinalizationService implements LessonFinalizationServiceInterf
         private readonly LessonOutcomeServiceInterface $outcomes,
         private readonly LessonLifecycleServiceInterface $lifecycle,
         private readonly LessonSettings $settings,
+        private readonly LessonEvidenceCoverage $coverage,
     ) {}
 
     public function processDue(): int
@@ -111,6 +116,16 @@ final class LessonFinalizationService implements LessonFinalizationServiceInterf
         }
 
         $determination = $this->outcomes->determine($lesson);
+
+        // A no-show is a conclusion drawn FROM evidence. Without any
+        // evidence coverage (no human mark, no attendance events, no
+        // settled provider pull) the absence is unknown, not proven:
+        // hold the lesson for a human decision rather than punish a
+        // party for a provider that never reported. Completed is never
+        // reached here without qualifying evidence for both parties.
+        if ($determination->outcome->isNoShow() && ! $this->coverage->hasCoverage($lesson, $record)) {
+            return false;
+        }
 
         if (! $this->outcomeDue($lesson, $determination->outcome)) {
             return false;

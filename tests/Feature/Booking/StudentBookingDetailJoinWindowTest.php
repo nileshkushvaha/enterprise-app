@@ -156,8 +156,60 @@ final class StudentBookingDetailJoinWindowTest extends TestCase
         $this->assertStringNotContainsString('pass1234', $html);
         $this->assertStringNotContainsString(self::JOIN_URL, $html);
         $this->assertStringContainsString('Joining closed at 8:15 PM', $html);
-        $this->assertStringNotContainsString('wire:poll.60s', $html, 'nothing left to refresh');
+        $this->assertStringContainsString('Lesson ended · Completion pending', $html);
+        $this->assertDoesNotMatchRegularExpression('/>\s*Confirmed\s*</', $html, '"Confirmed" reads as upcoming and is replaced while completion is pending');
+        $this->assertStringContainsString('wire:poll.60s', $html, 'kept polling so the page flips to Completed on its own');
         $this->assertSame(1, substr_count($html, 'This lesson has ended'), 'the ended state is said once');
+    }
+
+    public function test_with_the_agreed_ten_five_window_joining_runs_from_six_fifty_to_eight_oh_five(): void
+    {
+        $settings = app(MeetingSettings::class);
+        $settings->meeting_link_visible_before_minutes = 10;
+        $settings->meeting_link_visible_after_minutes = 5;
+        $settings->save();
+
+        $booking = $this->lessonAt(CarbonImmutable::parse('2026-09-13 19:00:00', 'UTC'));
+
+        $this->travelTo(CarbonImmutable::parse('2026-09-13 18:49:00', 'UTC'));
+        $this->page($booking)->assertSee('Joining opens at')->assertSee('6:50 PM')->assertDontSee('Join the lesson');
+
+        $this->travelTo(CarbonImmutable::parse('2026-09-13 18:50:00', 'UTC'));
+        $this->page($booking)->assertSee('Join the lesson');
+
+        $this->travelTo(CarbonImmutable::parse('2026-09-13 20:03:00', 'UTC'));
+        $this->page($booking)
+            ->assertSee('Join the lesson')
+            ->assertSee('Scheduled time ended. Joining closes at 8:05 PM.');
+
+        $this->travelTo(CarbonImmutable::parse('2026-09-13 20:06:00', 'UTC'));
+        $this->page($booking)
+            ->assertDontSee('Join the lesson')
+            ->assertDontSee('pass1234')
+            ->assertSee('Joining closed at 8:05 PM')
+            ->assertSee('Lesson ended · Completion pending')
+            ->assertSee('being marked complete');
+    }
+
+    public function test_once_the_lesson_is_completed_the_pending_state_and_polling_are_gone(): void
+    {
+        $this->travelTo(CarbonImmutable::parse('2026-09-13 20:30:00', 'UTC'));
+        $booking = $this->lessonAt(CarbonImmutable::parse('2026-09-13 19:00:00', 'UTC'));
+        Lesson::factory()->create([
+            'booking_id' => $booking->id,
+            'student_id' => $this->student->id,
+            'instructor_id' => $booking->instructor_id,
+            'outcome' => LessonOutcome::Completed,
+            'outcome_finalized_at' => now(),
+            'outcome_version' => 1,
+        ]);
+        $booking->update(['status' => BookingStatus::Completed]);
+
+        $html = $this->page($booking->fresh())->html();
+
+        $this->assertStringNotContainsString('Completion pending', $html);
+        $this->assertStringNotContainsString('wire:poll.60s', $html);
+        $this->assertMatchesRegularExpression('/>\s*Completed\s*</', $html);
     }
 
     public function test_an_ended_lesson_awaiting_completion_says_so_instead_of_promising_a_recording(): void
@@ -166,7 +218,7 @@ final class StudentBookingDetailJoinWindowTest extends TestCase
         $booking = $this->lessonAt(CarbonImmutable::parse('2026-09-13 19:00:00', 'UTC'));
 
         $this->page($booking)
-            ->assertSee('Awaiting completion')
+            ->assertSee('Completion pending')
             ->assertSee('If this lesson was recorded')
             ->assertDontSee('Recording processing')
             ->assertDontSee('within an hour');
@@ -205,7 +257,7 @@ final class StudentBookingDetailJoinWindowTest extends TestCase
         $this->page($booking)
             ->assertSee('Recording processing')
             ->assertSee('will appear here when it is ready')
-            ->assertDontSee('Awaiting completion')
+            ->assertDontSee('Completion pending')
             ->assertDontSee('within an hour');
     }
 }

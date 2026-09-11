@@ -396,9 +396,12 @@ UTC, half-open, and wider than the lesson:
 The two window settings are the ones §5b already uses for when a
 participant may join and when SIRI closes the meeting; `buffer` is
 `meeting.zoom_host_capacity_buffer_minutes` (ships 5), an explicit
-operational turnaround. With the shipped 15/15/5 a 10:00–10:30 lesson
-occupies 09:40–10:50; the next lesson may begin at 11:10 (its interval
-starts exactly at 10:50, and touching is not overlapping).
+operational turnaround. With the current 10/5/5 a 10:00–10:30 lesson
+occupies 09:45–10:40; the next lesson may begin at 10:55 (its interval
+starts exactly at 10:40, and touching is not overlapping). Reservations
+are computed from the settings at booking time; shortening the window
+leaves existing, longer reservations in place (they are conservative,
+never wrong).
 
 **This prevents planned overlap only.** A reservation says two lessons
 were never *scheduled* on the host at once. It does not prove a remote
@@ -677,10 +680,12 @@ is a policy and terms-of-service matter, not a technical one.
 ## 5b. Meeting window — when a lesson can be joined, and when it closes
 
 A lesson's meeting is bounded by the lesson's own timeslot. For a
-10:00–11:00 class with the shipped settings (15/15):
+10:00–11:00 class with the current settings (10 before / 5 after; the
+package shipped 15/15, changed by the 2026-09-11 completion-policy
+settings migration — see docs/lessons.md, Completion policy):
 
 ```text
-        09:45              10:00 ─── lesson ─── 11:00              11:15
+        09:50              10:00 ─── lesson ─── 11:00              11:05
           │                                                          │
    join link appears                                    link withdrawn AND
    (visible_before)                                     meeting closed at the
@@ -803,7 +808,7 @@ configuration change for both providers at once.
 | Setting | Purpose |
 |---|---|
 | `meetings_enabled` | platform kill switch, all providers |
-| `meeting_link_visible_before_minutes` / `..._after_minutes` | the join window around the lesson (ships 15/15) |
+| `meeting_link_visible_before_minutes` / `..._after_minutes` | the join window around the lesson (10/5 since the completion-policy migration; shipped 15/15) |
 | `meeting_auto_close_enabled` | close the meeting at the provider when that window ends (§5b) |
 | `default_provider` | provider for new meetings |
 | `google_meet_enabled` / `zoom_enabled` / `manual_provider_enabled` | may create meetings |

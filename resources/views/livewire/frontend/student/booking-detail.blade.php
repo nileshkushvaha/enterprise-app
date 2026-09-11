@@ -22,7 +22,14 @@
                 <div class="min-w-0">
                     <div class="flex flex-wrap items-center gap-2">
                         <h2 class="text-lg font-bold text-fg-strong">{{ $booking->type?->name ?? 'Session' }}</h2>
-                        <x-ui.badge :color="$booking->status->color()">{{ $booking->status->label() }}</x-ui.badge>
+                        @if($awaitingCompletion)
+                            {{-- Ended on the clock, outcome not yet finalized: the
+                                 booking is still Confirmed underneath, but "Confirmed"
+                                 reads as upcoming. Polled until it flips to Completed. --}}
+                            <x-ui.badge color="slate" data-booking-state="completion-pending">Lesson ended · Completion pending</x-ui.badge>
+                        @else
+                            <x-ui.badge :color="$booking->status->color()">{{ $booking->status->label() }}</x-ui.badge>
+                        @endif
                         @if($booking->payment_status !== \App\Booking\Enums\BookingPaymentStatus::NotRequired)
                             <x-ui.badge :color="$booking->payment_status->color()">{{ $booking->payment_status->label() }}</x-ui.badge>
                         @endif
@@ -48,6 +55,9 @@
                  Polled while the window can still change on its own. --}}
             @if($joinLive)
                 <div class="mt-4 border-t border-edge pt-4" @if($pollJoinState) wire:poll.60s @endif data-join-state="{{ $joinAvailability->value }}">
+                    @if($awaitingCompletion && ! $joinOpen)
+                        <p class="mb-2 text-sm text-fg-muted">The lesson is being marked complete. This usually takes about 15–20 minutes after the scheduled end.</p>
+                    @endif
                     @if($joinOpen)
                         <div class="flex flex-wrap items-center gap-3">
                             <x-ui.button :href="$joinUrl" target="_blank" rel="noopener" size="sm">Join the lesson</x-ui.button>
@@ -124,7 +134,7 @@
                 @elseif($awaitingCompletion)
                     <div class="sm:col-span-2">
                         <dt class="text-[11px] font-bold uppercase tracking-wide text-fg-faint">Recording</dt>
-                        <dd class="mt-1"><x-ui.badge color="slate">Awaiting completion</x-ui.badge></dd>
+                        <dd class="mt-1"><x-ui.badge color="slate">Completion pending</x-ui.badge></dd>
                         <dd class="mt-1 text-xs text-fg-muted">If this lesson was recorded, the recording appears here once the lesson is marked complete.</dd>
                     </div>
                 @endif

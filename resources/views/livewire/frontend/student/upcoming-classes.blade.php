@@ -5,7 +5,11 @@
                 <div class="min-w-0">
                     <div class="flex items-center gap-2 mb-1">
                         <p class="text-sm font-medium text-fg-strong truncate">{{ $booking->type?->name ?? 'Session' }}</p>
-                        <x-ui.badge :color="$booking->status->color()">{{ $booking->status->label() }}</x-ui.badge>
+                        @if($booking->isAwaitingCompletion())
+                            <x-ui.badge color="slate">Lesson ended · Completion pending</x-ui.badge>
+                        @else
+                            <x-ui.badge :color="$booking->status->color()">{{ $booking->status->label() }}</x-ui.badge>
+                        @endif
                     </div>
                     <p class="text-xs text-fg-muted">with {{ $booking->instructor?->name ?? 'Teacher' }} &middot; {{ $booking->location_type->label() }}</p>
                 </div>

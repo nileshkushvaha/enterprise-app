@@ -56,6 +56,7 @@ Root `README.md` is the short project entry point; this file is the detailed cat
 | Role-scoped user lists + required introduction video deploy runbook | `deployment/user-lists-and-required-intro-video.md` |
 | Google account activation / student Google sign-up / profile-before-booking deploy runbook | `deployment/google-account-activation.md` |
 | Lesson Lifecycle | `lessons.md` |
+| Lesson timing & completion policy rollout (join window 10/5, completion 15–20 min, preflight, audited activation, rollback) | `deployment/lesson-completion-policy.md` |
 | Wallet Ledger | `architecture/wallet.md` |
 | Financial Domain (Earnings, Compensation, Settlement, Withdrawals, Payout Execution) | `financial-domain-architecture.md` |
 | Financial integrity / concurrency testing methodology | `architecture/phase-15.1-financial-integrity-closure.md` |

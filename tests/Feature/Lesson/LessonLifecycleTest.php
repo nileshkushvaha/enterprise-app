@@ -411,6 +411,13 @@ class LessonLifecycleTest extends TestCase
 
     public function test_auto_complete_command_finalizes_due_lessons(): void
     {
+        // A day-long grace keeps the "inside grace" fixture (ended 2h ago)
+        // inside it; the shipped policy value (15 min) is covered by
+        // LessonCompletionPolicyTest.
+        $settings = app(LessonSettings::class);
+        $settings->auto_complete_grace_minutes = 1440;
+        $settings->save();
+
         $due = $this->makeLesson(endedHoursAgo: 48);
 
         $dueNoShow = $this->makeLesson(endedHoursAgo: 48);

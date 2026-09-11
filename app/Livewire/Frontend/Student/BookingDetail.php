@@ -835,6 +835,7 @@ final class BookingDetail extends Component
         $meeting = $this->booking->meeting;
         $confirmed = $this->booking->status === BookingStatus::Confirmed;
         $closesAt = $meeting !== null ? $meetings->joinWindowEndsAt($meeting) : null;
+        $awaitingCompletion = $this->booking->isAwaitingCompletion();
 
         return [
             'joinAvailability' => $confirmed ? $meetings->participantJoinAvailabilityFor($this->booking, auth()->user()) : MeetingJoinAvailability::Unavailable,
@@ -842,13 +843,15 @@ final class BookingDetail extends Component
             'joinClosesAt' => $closesAt,
             // Re-render on a timer only while the answer can still change
             // on its own: from an hour before the window opens until it
-            // has closed. Server-side enforcement is untouched.
-            'pollJoinState' => $confirmed && $closesAt !== null && now()->lt($closesAt->addMinute())
-                && ($meeting?->starts_at === null || now()->gt($meetings->joinWindowStartsAt($meeting)?->subHour() ?? now()->addYear())),
+            // has closed, and again while completion is pending so the
+            // page flips to Completed without a reload. Server-side
+            // enforcement is untouched.
+            'pollJoinState' => $awaitingCompletion
+                || ($confirmed && $closesAt !== null && now()->lt($closesAt->addMinute())
+                    && ($meeting?->starts_at === null || now()->gt($meetings->joinWindowStartsAt($meeting)?->subHour() ?? now()->addYear()))),
             // Ended, not yet marked complete: nothing about the recording
             // can be said until the lesson outcome is finalised.
-            'awaitingCompletion' => $confirmed && $this->booking->hasEnded()
-                && ! (bool) $this->booking->lesson?->hasFinalizedOutcome(),
+            'awaitingCompletion' => $awaitingCompletion,
         ];
     }
 

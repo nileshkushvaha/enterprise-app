@@ -140,7 +140,7 @@ class PlatformFoundationSettingsPage extends Page
                             $this->integerInput('no_show_grace_minutes', 'No-show Grace (minutes)', 0, 120)
                                 ->helperText('How long after the start time a no-show may be recorded.'),
                             $this->integerInput('auto_completion_delay_minutes', 'Auto-completion Delay (minutes)', 0, 10080)
-                                ->helperText('How long after a lesson ends before it is marked completed automatically. Until then the booking stays Confirmed. 1440 = one day.'),
+                                ->helperText('Minutes after the scheduled end before an ended lesson is marked completed (processed every 5 minutes, so 15 means 15–20 minutes). Until then the student sees "Lesson ended · Completion pending".'),
                         ]),
                     ]),
 

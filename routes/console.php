@@ -65,14 +65,16 @@ app(Schedule::class)
     ->weekly()
     ->appendOutputTo(storage_path('logs/activitylog-clean.log'));
 
-// Finalize open lessons past the auto-completion grace period (24h after
-// ends_at): recorded no-shows become no-show outcomes, the rest complete.
+// Finalize open lessons past the auto-completion grace period
+// (lessons.auto_complete_grace_minutes after ends_at, 15 in the agreed
+// policy): recorded no-shows become no-show outcomes, the rest complete.
+// Every 5 minutes so completion lands 15–20 minutes after the end.
 // Idempotent: finalized lessons never re-enter the sweep. Defers (no-op)
 // while lessons.automated_finalization_enabled hands automation to the
 // evidence-driven finalizer below.
 app(Schedule::class)
     ->command(AutoCompleteLessons::class)
-    ->everyFifteenMinutes()
+    ->everyFiveMinutes()
     ->withoutOverlapping()
     ->appendOutputTo(storage_path('logs/lessons-auto-complete.log'));
 
@@ -271,9 +273,12 @@ app(Schedule::class)
 // recently ended meetings from attendance-capable providers into the
 // lesson evidence layer. Idempotent, per-meeting failure isolation,
 // bounded retries; a no-op until meeting.attendance_sync_enabled is on.
+// Every 5 minutes: the pull must have happened between
+// attendance_sync_delay_minutes and the attendance seal
+// (attendance_finalize_delay_minutes) after the lesson end.
 app(Schedule::class)
     ->command(SyncMeetingAttendance::class)
-    ->everyFifteenMinutes()
+    ->everyFiveMinutes()
     ->withoutOverlapping()
     ->onOneServer()
     ->appendOutputTo(storage_path('logs/meetings-attendance-sync.log'));

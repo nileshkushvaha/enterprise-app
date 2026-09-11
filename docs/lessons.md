@@ -99,8 +99,10 @@ lesson notifications remain deferred.
 ## Settings (`LessonSettings`, Spatie group `lessons`)
 
 - `auto_complete_enabled` (true) — kill switch for the sweep.
-- `auto_complete_grace_minutes` (1440) — minutes after `ends_at`
-  before an open lesson auto-finalizes.
+- `auto_complete_grace_minutes` (15 since the 2026-09-11 policy
+  migration; shipped 1440) — minutes after `ends_at` before an open
+  lesson auto-finalizes. The sweep runs every 5 minutes, so
+  completion lands 15–20 minutes after the end.
 - `no_show_grace_minutes` (15) — minutes after `starts_at` before a
   no-show may be recorded (admin/system `override: true` bypasses).
 - `require_instructor_completion` / `require_student_attendance`
@@ -120,12 +122,45 @@ attendance).
 
 ## Auto-completion
 
-`lessons:auto-complete` (scheduled every 15 min, routes/console.php)
+`lessons:auto-complete` (scheduled every 5 min, routes/console.php)
 finalizes open lessons whose `ends_at` passed
 `auto_complete_grace_minutes`: recorded no-shows become the matching
 no-show outcome; lessons missing a required attendance confirmation
 stay open; everything else auto-completes with `auto_completed_at`
-set. Idempotent; no payment/wallet/payout changes.
+set. Idempotent; no payment/wallet/payout changes. Until the lesson is
+finalized the student portal shows the booking as **"Lesson ended ·
+Completion pending"** (`Booking::isAwaitingCompletion()`), never as
+plain Confirmed. Recording ingestion is independent: a recording
+becoming available never completes a lesson, and the recording is only
+shown to the student once the lesson is Completed.
+
+## Completion policy (timing, rollout, activation)
+
+The agreed timeline for a 7:00–8:00 PM lesson: joining opens 6:50
+(`meeting.meeting_link_visible_before_minutes` 10), closes 8:05
+(`..._after_minutes` 5), the first attendance pull may run from 8:05
+(`meeting.attendance_sync_delay_minutes` 5, every 5 min), the
+attendance record is sealed and completion becomes due at 8:15
+(`lessons.attendance_finalize_delay_minutes` and
+`lessons.auto_complete_grace_minutes`, both 15), and the 5-minute
+sweep completes the lesson between 8:15 and 8:20. Exactly one
+automatic policy is active: the time-based sweep above, or — once
+`lessons.automated_finalization_enabled` is on — the evidence-driven
+finalizer. Operational commands:
+
+- `lessons:completion-preflight [--json]` — **read-only**: effective
+  timing and cadence, live policy, which enabled providers can report
+  attendance, ingestion switches, participant-map coverage on upcoming
+  meetings, sync status of recently ended meetings, and every ended
+  lesson still open with what each policy would do to it. Exit 1 while
+  a blocker for evidence-based finalization exists. Prints no secrets.
+- `lessons:evidence-finalization on|off [--confirm]` — the audited
+  activation step (`settings` log,
+  `lesson_evidence_finalization_activated` / `_deactivated`, previous
+  and new value). `on` runs the preflight and refuses on blockers;
+  without `--confirm` it is a dry run; `off` is the rollback.
+
+Runbook: `docs/deployment/lesson-completion-policy.md`.
 
 ## Admin panel
 
@@ -154,7 +189,7 @@ lessons are engine-created.
    the Lessons admin.
 3. Queue worker (`notifications` queue) — lesson creation/sync
    listeners are queued.
-4. Scheduler cron — gates `lessons:auto-complete` (every 15 min).
+4. Scheduler cron — gates `lessons:auto-complete` (every 5 min).
 
 ## Attendance & Lesson Outcome
 
@@ -239,15 +274,23 @@ logs to `lessons-finalize-due.log`) — the evidence-driven finalizer:
 writes outcomes, statuses, bookings, or earnings itself.
 
 - **Master switch** `lessons.automated_finalization_enabled` ships
-  **OFF** — do not enable until providers feed attendance evidence,
-  or evidence-less lessons would finalize as both-absent instead of
-  auto-completing. While ON, the legacy lenient sweep
+  **OFF** — activate only through `lessons:evidence-finalization on
+  --confirm`, which refuses while no enabled provider feeds attendance
+  evidence. **Evidence coverage rule** (`LessonEvidenceCoverage`): a
+  no-show outcome is finalized only when the absence is *evidenced* —
+  a human attendance mark, attendance events on the record, a settled
+  provider pull (`booking_meetings.attendance_sync_status = synced`),
+  or a processed provider attendance event for the meeting/lesson.
+  A lesson nobody reported on (provider without attendance support,
+  pull never ran or failed permanently, participant unmapped) is
+  **held open for a human**, never finalized as absent and never
+  completed. While ON, the legacy lenient sweep
   (`lessons:auto-complete` / `autoCompleteDue`) defers (returns 0), so
   exactly one automation policy runs at a time.
 - **Timing** (all minutes after `ends_at`): pickup requires the
-  evidence window closed (`attendance_finalize_delay_minutes`, 30);
-  then per-outcome gates — Completed waits
-  `auto_complete_grace_minutes` (reused, 1440), no-shows their
+  evidence window closed (`attendance_finalize_delay_minutes`, 15
+  since the policy migration; shipped 30); then per-outcome gates —
+  Completed waits `auto_complete_grace_minutes` (reused, 15), no-shows their
   `student_/instructor_no_show_grace_minutes` (0), BothAbsent the max
   of both, TechnicalIssue holds everything until
   `technical_issue_window_minutes` (1440) closes, then finalizes as
@@ -310,7 +353,7 @@ gated behind `lessons.automated_finalization_enabled`.
   participants settle the event as an operational `review` row and
   never create attendance. Unknown meetings likewise.
 - **Reconciliation** `meetings:sync-attendance {--force}` (scheduled
-  every 15 min, `withoutOverlapping` + `onOneServer`): pulls sessions
+  every 5 min, `withoutOverlapping` + `onOneServer`): pulls sessions
   for Created meetings ended within
   [`attendance_sync_max_age_hours`, `attendance_sync_delay_minutes`],
   chunked by `attendance_sync_batch_size`, per-meeting failure

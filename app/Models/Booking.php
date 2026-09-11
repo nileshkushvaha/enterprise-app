@@ -231,6 +231,19 @@ class Booking extends Model
         return $this->ends_at !== null && $this->ends_at->lessThanOrEqualTo(now());
     }
 
+    /**
+     * Ended on the clock but not yet finalized by the lesson pipeline:
+     * the booking still reads Confirmed while completion is pending. UI
+     * label only — the booking status itself is untouched until the
+     * lesson outcome is finalized (docs/lessons.md, Completion policy).
+     */
+    public function isAwaitingCompletion(): bool
+    {
+        return $this->status === BookingStatus::Confirmed
+            && $this->hasEnded()
+            && ! (bool) $this->lesson?->hasFinalizedOutcome();
+    }
+
     public function scopePast(Builder $query): Builder
     {
         return $query->where('ends_at', '<', now());

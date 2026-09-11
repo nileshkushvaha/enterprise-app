@@ -57,7 +57,11 @@
                                class="text-sm font-semibold text-fg-strong before:absolute before:inset-0 before:content-[''] focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-300">
                                 {{ $booking->type?->name ?? 'Session' }}
                             </a>
-                            <x-ui.badge :color="$booking->status->color()">{{ $booking->status->label() }}</x-ui.badge>
+                            @if($booking->isAwaitingCompletion())
+                                <x-ui.badge color="slate">Lesson ended · Completion pending</x-ui.badge>
+                            @else
+                                <x-ui.badge :color="$booking->status->color()">{{ $booking->status->label() }}</x-ui.badge>
+                            @endif
                             @if($awaitingPayment)
                                 <x-ui.badge :color="$booking->payment_status->color()">{{ $booking->payment_status->label() }}</x-ui.badge>
                             @endif

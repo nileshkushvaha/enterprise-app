@@ -28,4 +28,10 @@ final class MeetingProviderRegistry
     {
         return isset($this->providers[$key]);
     }
+
+    /** @return array<string, MeetingProviderInterface> keyed by provider key */
+    public function all(): array
+    {
+        return $this->providers;
+    }
 }
