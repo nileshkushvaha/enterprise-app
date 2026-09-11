@@ -4,10 +4,13 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Booking;
 
+use App\Booking\Contracts\BookingMeetingServiceInterface;
+use App\Booking\DTOs\MeetingUpdateContext;
 use App\Booking\DTOs\RecordingProviderReconciliation;
 use App\Booking\Enums\BookingStatus;
 use App\Booking\Enums\MeetingStatus;
 use App\Booking\Enums\RecordingStatus;
+use App\Booking\Exceptions\BookingException;
 use App\Booking\Jobs\CaptureLessonRecordingJob;
 use App\Booking\Meetings\FakeMeetingProvider;
 use App\Booking\Meetings\GoogleCalendarMeetProvider;
@@ -488,5 +491,158 @@ final class RecordingProviderReplacementTest extends TestCase
         $this->assertSame(GoogleCalendarMeetProvider::KEY, $fresh->provider);
         $this->assertNull($fresh->available_at);
         $this->assertSame(1, $fresh->capture_attempts);
+    }
+
+    // ── Replacement racing an in-flight capture ───────────────────────
+
+    /** A recording of the fake provider's meeting, claimable now, whose remote id is known. */
+    private function capturableRecording(): Recording
+    {
+        $recording = Recording::factory()->create(['provider' => FakeMeetingProvider::KEY, 'provider_reference' => null]);
+        // The factory gives the meeting its own booking; production rows
+        // share one. Point the meeting at the recording's booking so
+        // BookingMeetingService::findForBooking() sees it.
+        $recording->bookingMeeting->update([
+            'booking_id' => $recording->booking_id,
+            'status' => MeetingStatus::Created,
+            'provider_meeting_id' => 'fake-meeting-1',
+            'starts_at' => now()->subHours(3),
+            'ends_at' => now()->subHours(2),
+        ]);
+        $recording->booking->update(['status' => BookingStatus::Confirmed]);
+
+        return $recording->fresh();
+    }
+
+    /** Replacement lands after the claim and before discovery/fetch: nothing captured for the old meeting is published for the new one. */
+    public function test_a_replacement_after_the_claim_but_before_discovery_is_refused_at_publication_and_the_object_is_kept(): void
+    {
+        $recording = $this->capturableRecording();
+        FakeMeetingProvider::$nextRecordingContents = $this->fakeMp4Bytes();
+        // The window: the row is Transferring, no transaction is open, the
+        // provider has not yet been asked. The meeting moves to Zoom.
+        FakeMeetingProvider::$onFetchRecording = function (BookingMeeting $meeting): void {
+            BookingMeeting::query()->whereKey($meeting->getKey())->update(['provider' => 'zoom', 'provider_meeting_id' => '82122025909']);
+        };
+
+        $this->runCaptureJob($recording);
+
+        $fresh = $recording->fresh();
+        $this->assertSame(RecordingStatus::Failed, $fresh->status);
+        $this->assertSame('meeting_replaced_during_capture', $fresh->failure_code->value);
+        $this->assertNull($fresh->available_at, 'never published');
+        $this->assertNotNull($fresh->storage_path, 'the uploaded object is kept under its locator');
+        $this->assertNotNull($this->storage->storedName($fresh->storage_path), 'and still exists in storage');
+        $this->assertSame(FakeMeetingProvider::KEY, $fresh->provider, 'the row still says what it captured');
+        $this->assertDatabaseHas('activity_log', ['event' => 'recording_failed', 'subject_id' => $recording->id]);
+    }
+
+    /** Replacement lands during the transfer, before publication — the same refusal, because publication re-checks under lock. */
+    public function test_a_replacement_during_transfer_before_publication_is_refused(): void
+    {
+        $recording = $this->capturableRecording();
+        FakeMeetingProvider::$nextRecordingContents = $this->fakeMp4Bytes();
+        FakeMeetingProvider::$onFetchRecording = function (BookingMeeting $meeting): void {
+            // Replaced on another provider while bytes are moving.
+            BookingMeeting::query()->whereKey($meeting->getKey())->update(['provider' => 'google_meet', 'provider_meeting_id' => null, 'provider_event_id' => 'evt_new']);
+        };
+
+        $this->runCaptureJob($recording);
+
+        $fresh = $recording->fresh();
+        $this->assertSame(RecordingStatus::Failed, $fresh->status);
+        $this->assertSame('meeting_replaced_during_capture', $fresh->failure_code->value);
+        $this->assertNotNull($fresh->storage_path);
+
+        // A later job cannot resurrect it as the new meeting's recording:
+        // the row is Failed (permanent) and its provider disagrees with
+        // the meeting, so the claim never happens.
+        $this->runCaptureJob($fresh);
+        $this->assertSame(RecordingStatus::Failed, $fresh->fresh()->status);
+        $this->assertNull($fresh->fresh()->available_at);
+    }
+
+    /** Same provider, new remote meeting id: identity, not just provider, is what publication validates. */
+    public function test_a_same_provider_recreation_with_a_new_remote_id_is_refused(): void
+    {
+        $recording = $this->capturableRecording();
+        FakeMeetingProvider::$nextRecordingContents = $this->fakeMp4Bytes();
+        FakeMeetingProvider::$onFetchRecording = function (BookingMeeting $meeting): void {
+            BookingMeeting::query()->whereKey($meeting->getKey())->update(['provider_meeting_id' => 'fake-meeting-2']);
+        };
+
+        $this->runCaptureJob($recording);
+
+        $fresh = $recording->fresh();
+        $this->assertSame(RecordingStatus::Failed, $fresh->status);
+        $this->assertSame('meeting_replaced_during_capture', $fresh->failure_code->value);
+        $this->assertNotNull($fresh->storage_path);
+        $this->assertNull($fresh->available_at);
+    }
+
+    /** Cancelling the meeting after the lesson ran is not a replacement: same identifiers, the recording publishes. */
+    public function test_a_cancellation_that_keeps_the_remote_id_does_not_block_publication(): void
+    {
+        $recording = $this->capturableRecording();
+        FakeMeetingProvider::$nextRecordingContents = $this->fakeMp4Bytes();
+        FakeMeetingProvider::$onFetchRecording = function (BookingMeeting $meeting): void {
+            BookingMeeting::query()->whereKey($meeting->getKey())->update(['status' => MeetingStatus::Cancelled]);
+        };
+
+        $this->runCaptureJob($recording);
+
+        $this->assertSame(RecordingStatus::Available, $recording->fresh()->status);
+    }
+
+    public function test_an_unchanged_meeting_publishes_normally(): void
+    {
+        $recording = $this->capturableRecording();
+        FakeMeetingProvider::$nextRecordingContents = $this->fakeMp4Bytes();
+
+        $this->runCaptureJob($recording);
+
+        $this->assertSame(RecordingStatus::Available, $recording->fresh()->status);
+    }
+
+    // ── The replacement guard ─────────────────────────────────────────
+
+    public function test_a_replacement_meeting_is_refused_while_a_capture_is_in_flight(): void
+    {
+        $recording = $this->capturableRecording();
+        $recording->update(['status' => RecordingStatus::Transferring, 'transfer_started_at' => now()]);
+        $meeting = $recording->bookingMeeting;
+        $meeting->update(['status' => MeetingStatus::Cancelled]);
+        $before = $meeting->fresh()->only(['provider', 'provider_meeting_id', 'status']);
+
+        // The booking must be eligible for a meeting, or nothing would be
+        // replaced in the first place (payment NotRequired → the demo timing setting).
+        $settings = app(MeetingSettings::class);
+        $settings->create_after_demo_booking_confirmation = true;
+        $settings->meetings_enabled = true;
+        $settings->manual_provider_enabled = true;
+        $settings->save();
+        $booking = $recording->booking->fresh();
+        $this->assertTrue(app(BookingMeetingServiceInterface::class)->isEligible($booking), 'fixture: the booking must be eligible for a replacement meeting');
+
+        try {
+            app(BookingMeetingServiceInterface::class)->createMeeting($booking, FakeMeetingProvider::KEY);
+            $this->fail('A replacement must be refused while the previous meeting\'s recording is in flight.');
+        } catch (BookingException $e) {
+            $this->assertStringContainsString('still being captured', $e->getMessage());
+        }
+
+        try {
+            app(BookingMeetingServiceInterface::class)->saveManualMeeting($booking, new MeetingUpdateContext(joinUrl: 'https://rooms.example.test/x'));
+            $this->fail('The manual path is guarded too.');
+        } catch (BookingException) {
+            $this->addToAssertionCount(1);
+        }
+
+        $this->assertSame($before, $meeting->fresh()->only(['provider', 'provider_meeting_id', 'status']));
+
+        // Once the capture has settled, the replacement proceeds.
+        $recording->update(['status' => RecordingStatus::Failed, 'failure_code' => 'capture_retries_exhausted', 'transfer_started_at' => null]);
+        $replacement = app(BookingMeetingServiceInterface::class)->saveManualMeeting($booking->fresh(), new MeetingUpdateContext(joinUrl: 'https://rooms.example.test/x'));
+        $this->assertSame(MeetingStatus::Created, $replacement?->status);
     }
 }

@@ -645,6 +645,19 @@ attempt is spent. That is also what stops a `stored` object captured
 under the old provider from being re-verified and published as the new
 meeting's recording.
 
+Between those two locks the worker talks to the provider and to storage
+with no transaction open, so the claim also takes a
+`MeetingIdentitySnapshot` (provider + remote meeting/event id) and
+publication re-checks it against the meeting row under lock. If the
+meeting was replaced meanwhile — another provider, or the same
+provider with a new remote id — the row is marked `failed` with
+`meeting_replaced_during_capture` (permanent), the uploaded object is
+kept under its locator, and nothing is published for the new meeting;
+an operator decides. A cancellation that keeps the identifiers is not a
+replacement. As the friendly refusal in front of that guarantee,
+`BookingMeetingService` refuses to create a replacement meeting while a
+recording of the previous one is `transferring` or `stored`.
+
 Operator recovery for one row:
 
 ```bash

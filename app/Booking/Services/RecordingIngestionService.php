@@ -11,6 +11,7 @@ use App\Booking\Contracts\MeetingRecordingProviderInterface;
 use App\Booking\Contracts\RecordingStorage;
 use App\Booking\Contracts\SupportsNativeIngestion;
 use App\Booking\DTOs\DiscoveredRecording;
+use App\Booking\DTOs\MeetingIdentitySnapshot;
 use App\Booking\DTOs\NativeIngestionRequest;
 use App\Booking\DTOs\NativeRecordingSource;
 use App\Booking\DTOs\ProviderRecordingResult;
@@ -86,7 +87,7 @@ final class RecordingIngestionService
             return;
         }
 
-        [$claimed, $resumeLocator] = $claim;
+        [$claimed, $resumeLocator, $identity] = $claim;
         $staged = null;
 
         try {
@@ -94,7 +95,7 @@ final class RecordingIngestionService
             // before verifying it. Re-verify what is already there
             // instead of transferring the same video a second time.
             if ($resumeLocator !== null) {
-                $this->verifyAndPublish($claimed, $resumeLocator, $provider);
+                $this->verifyAndPublish($claimed, $resumeLocator, $provider, $identity);
 
                 return;
             }
@@ -114,7 +115,7 @@ final class RecordingIngestionService
                 $this->reportExtraArtifacts($claimed, $discovered);
 
                 $locator = $this->ingestDiscovered($claimed, $provider, $discovered, $staged);
-                $this->verifyAndPublish($claimed->refresh(), $locator, $provider);
+                $this->verifyAndPublish($claimed->refresh(), $locator, $provider, $identity);
 
                 return;
             }
@@ -130,7 +131,7 @@ final class RecordingIngestionService
             $staged = $result->file;
 
             $locator = $this->store($claimed, $result);
-            $this->verifyAndPublish($claimed->refresh(), $locator, $provider);
+            $this->verifyAndPublish($claimed->refresh(), $locator, $provider, $identity);
         } catch (RecordingIngestionException $e) {
             $this->settle($claimed, $e->failureCode, $e);
         } catch (RecordingStorageException $e) {
@@ -276,7 +277,7 @@ final class RecordingIngestionService
      * is nothing to do — already settled, already being transferred by
      * another worker, or the provider cannot supply recordings at all.
      *
-     * @return array{0: Recording, 1: RecordingLocator|null}|null
+     * @return array{0: Recording, 1: RecordingLocator|null, 2: MeetingIdentitySnapshot}|null
      */
     private function claim(Recording $recording, MeetingProviderInterface $provider): ?array
     {
@@ -340,7 +341,12 @@ final class RecordingIngestionService
                 'capture_attempts' => $fresh->capture_attempts + 1,
             ])->save();
 
-            return [$fresh, $resumeLocator];
+            // Discovery and the fetch work from the meeting as it was
+            // when the row was claimed — the same instance the identity
+            // snapshot describes — never from a later re-read.
+            $fresh->setRelation('bookingMeeting', $meeting);
+
+            return [$fresh, $resumeLocator, MeetingIdentitySnapshot::of($meeting)];
         });
     }
 
@@ -451,18 +457,40 @@ final class RecordingIngestionService
      * warning, because a truncated recording that students can open
      * is worse than one they can see is missing.
      */
-    private function verifyAndPublish(Recording $recording, RecordingLocator $locator, ?MeetingProviderInterface $provider = null): void
+    private function verifyAndPublish(Recording $recording, RecordingLocator $locator, ?MeetingProviderInterface $provider, MeetingIdentitySnapshot $identity): void
     {
         $storage = $this->storage->forRecording($recording);
 
         $storage->verify($locator, (int) $recording->size_bytes, $recording->storage_checksum);
 
-        $published = DB::transaction(function () use ($recording): ?Recording {
+        $published = DB::transaction(function () use ($recording, $identity): ?Recording {
+            // Meeting first, then the recording — the claim's order.
+            $meeting = BookingMeeting::query()->whereKey($recording->booking_meeting_id)->lockForUpdate()->first();
+
             /** @var Recording $fresh */
             $fresh = Recording::query()->whereKey($recording->getKey())->lockForUpdate()->firstOrFail();
 
             if ($fresh->status === RecordingStatus::Available) {
                 return null; // another worker already published it
+            }
+
+            // No transaction was held across the provider and storage
+            // calls, so the meeting may have been replaced since the
+            // claim. The object was captured for the meeting the claim
+            // saw; if that is no longer the booking's meeting, it is
+            // kept under its locator and NOT published as the new
+            // meeting's recording. Permanent failure, operator decides.
+            if ($meeting === null || ! $identity->matches($meeting)) {
+                Log::warning('Recording publication refused: the meeting was replaced during capture', [
+                    'recording_id' => $fresh->getKey(),
+                    'captured_for' => $identity->describe(),
+                    'meeting_now' => $meeting === null ? null : MeetingIdentitySnapshot::of($meeting)->describe(),
+                    'storage_driver' => $fresh->storage_driver,
+                ]);
+
+                $this->fail($fresh, RecordingFailureCode::MeetingReplacedDuringCapture);
+
+                return null;
             }
 
             $fresh->fill([

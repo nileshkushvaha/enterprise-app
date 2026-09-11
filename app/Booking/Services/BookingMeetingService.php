@@ -19,6 +19,7 @@ use App\Booking\Enums\BookingPaymentStatus;
 use App\Booking\Enums\BookingStatus;
 use App\Booking\Enums\MeetingJoinAvailability;
 use App\Booking\Enums\MeetingStatus;
+use App\Booking\Enums\RecordingStatus;
 use App\Booking\Events\MeetingCreated;
 use App\Booking\Events\MeetingUpdated;
 use App\Booking\Exceptions\AmbiguousMeetingCreationException;
@@ -32,6 +33,7 @@ use App\Exceptions\Student\StudentActionNotAvailableException;
 use App\Lessons\Enums\LessonStatus;
 use App\Models\Booking;
 use App\Models\BookingMeeting;
+use App\Models\Recording;
 use App\Models\User;
 use App\Services\AuditTrailService;
 use App\Services\Student\StudentLifecycleService;
@@ -142,6 +144,10 @@ final class BookingMeetingService implements BookingMeetingServiceInterface
             return $existing;
         }
 
+        if ($existing !== null) {
+            $this->assertNoCaptureInFlight($booking, $existing);
+        }
+
         // Explicit admin choice > the provider the booking was ACCEPTED
         // for (meeting_provider_intent, pinned when capacity reservation
         // is on) > today's global default. The intent is what stops a
@@ -238,6 +244,33 @@ final class BookingMeetingService implements BookingMeetingServiceInterface
         }
 
         return $meeting;
+    }
+
+    /**
+     * Replacing a meeting changes which remote meeting the row names. A
+     * recording captured for the OLD meeting that is still being
+     * transferred, or stored but not yet verified and published, would
+     * otherwise be published under the new one. The replacement waits;
+     * the capture finishes (Available or Failed) within the job timeout
+     * and the operator retries. Publication independently re-checks the
+     * meeting identity it captured for, so this guard is the friendly
+     * refusal and that check is the guarantee.
+     *
+     * @throws BookingException
+     */
+    private function assertNoCaptureInFlight(Booking $booking, BookingMeeting $existing): void
+    {
+        $inFlight = Recording::query()
+            ->where('booking_meeting_id', $existing->getKey())
+            ->whereIn('status', [RecordingStatus::Transferring, RecordingStatus::Stored])
+            ->exists();
+
+        if ($inFlight) {
+            throw new BookingException(sprintf(
+                'Booking %s: a recording of the previous meeting is still being captured. Wait for it to finish before creating a replacement meeting.',
+                $booking->reference,
+            ));
+        }
     }
 
     private function remoteStateUnknown(?BookingMeeting $existing, string $providerKey): bool
@@ -682,17 +715,24 @@ final class BookingMeetingService implements BookingMeetingServiceInterface
             return $this->findForBooking($booking);
         }
 
+        $existing = $this->findForBooking($booking);
+
+        if ($existing?->status === MeetingStatus::Created && $existing->provider !== ManualMeetingProvider::KEY) {
+            throw MeetingProviderSwitchNotSupportedException::between($booking->reference, $existing->provider, ManualMeetingProvider::KEY);
+        }
+
+        // Before the provider is even resolved: whether a replacement may
+        // happen does not depend on the manual provider being enabled.
+        if ($existing !== null && $existing->status !== MeetingStatus::Created) {
+            $this->assertNoCaptureInFlight($booking, $existing);
+        }
+
         try {
             $provider = $this->providers->resolve(ManualMeetingProvider::KEY);
         } catch (BookingException $e) {
             return $this->persistFailure($booking, ManualMeetingProvider::KEY, $e->getMessage());
         }
 
-        $existing = $this->findForBooking($booking);
-
-        if ($existing?->status === MeetingStatus::Created && $existing->provider !== ManualMeetingProvider::KEY) {
-            throw MeetingProviderSwitchNotSupportedException::between($booking->reference, $existing->provider, ManualMeetingProvider::KEY);
-        }
         $previousStatus = $existing?->status;
         $previousJoinUrl = $existing?->join_url;
 

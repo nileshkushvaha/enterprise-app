@@ -23,6 +23,7 @@ use App\Booking\Services\RecordingStagingArea;
 use App\Models\Booking;
 use App\Models\BookingMeeting;
 use Carbon\CarbonImmutable;
+use Closure;
 use Illuminate\Http\Request;
 use Throwable;
 
@@ -74,6 +75,16 @@ final class FakeMeetingProvider implements MeetingAttendanceProviderInterface, M
 
     public static bool $failNextRecordingFetch = false;
 
+    /**
+     * Test seam: runs inside fetchRecording(), i.e. after the row was
+     * claimed and before anything is stored — the window in which no
+     * transaction is open and the meeting row can change underneath a
+     * worker. Lets a test replace the meeting deterministically.
+     *
+     * @var (Closure(BookingMeeting): void)|null
+     */
+    public static ?Closure $onFetchRecording = null;
+
     public function __construct(
         private readonly RecordingStagingArea $staging = new RecordingStagingArea,
     ) {}
@@ -89,6 +100,7 @@ final class FakeMeetingProvider implements MeetingAttendanceProviderInterface, M
         self::$nextRecordingReference = 'fake-recording-reference';
         self::$nextRecordingDurationSeconds = 1800;
         self::$failNextRecordingFetch = false;
+        self::$onFetchRecording = null;
     }
 
     public static function sign(string $body): string
@@ -288,6 +300,10 @@ final class FakeMeetingProvider implements MeetingAttendanceProviderInterface, M
             self::$failNextRecordingFetch = false;
 
             throw new BookingException('Fake provider recording fetch failed.');
+        }
+
+        if (self::$onFetchRecording !== null) {
+            (self::$onFetchRecording)($meeting);
         }
 
         if (self::$nextRecordingContents === null) {

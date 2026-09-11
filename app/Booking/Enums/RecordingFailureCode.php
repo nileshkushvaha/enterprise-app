@@ -15,6 +15,15 @@ namespace App\Booking\Enums;
  */
 enum RecordingFailureCode: string
 {
+    /**
+     * The booking's meeting was replaced (another provider, or the same
+     * provider with a new remote meeting id) while this recording was
+     * being captured. The uploaded object is kept under its locator and
+     * never published as the new meeting's recording; an operator
+     * decides. Permanent: retrying would publish the wrong lesson.
+     */
+    case MeetingReplacedDuringCapture = 'meeting_replaced_during_capture';
+
     /** The active meeting provider does not (or no longer) offer recording retrieval. */
     case ProviderCapabilityMissing = 'provider_capability_missing';
 
@@ -83,6 +92,7 @@ enum RecordingFailureCode: string
     public function isPermanent(): bool
     {
         return match ($this) {
+            self::MeetingReplacedDuringCapture,
             self::ProviderCapabilityMissing,
             self::SourceExpired,
             self::SourceRejected,
@@ -96,6 +106,7 @@ enum RecordingFailureCode: string
     public function label(): string
     {
         return match ($this) {
+            self::MeetingReplacedDuringCapture => 'Meeting was replaced while its recording was being captured',
             self::ProviderCapabilityMissing => 'Provider cannot supply recordings',
             self::SourceExpired => 'Provider recording no longer available',
             self::SourceNotFound => 'No recording was produced for this lesson',
