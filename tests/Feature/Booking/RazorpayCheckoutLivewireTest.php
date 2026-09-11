@@ -11,6 +11,7 @@ use App\Booking\Enums\BookingPaymentRecordStatus;
 use App\Booking\Enums\BookingPaymentStatus;
 use App\Booking\Enums\BookingStatus;
 use App\Booking\Enums\Weekday;
+use App\Booking\Services\BookingCheckoutCompletionService;
 use App\Livewire\Frontend\Student\BookingDetail;
 use App\Models\Booking;
 use App\Models\BookingPayment;
@@ -282,14 +283,15 @@ class RazorpayCheckoutLivewireTest extends TestCase
         $component->call('verifyPayment', $orderId, 'pay_LW1', $this->checkoutSignature($orderId, 'pay_LW1'))
             ->assertSet('awaitingPaymentConfirmation', true)
             ->assertSee('Confirming your payment');
-        $this->assertNotNull($component->get('lastProviderCheckAt'));
+        $bookingId = $component->get('bookingId');
+        $this->assertNotNull(BookingPayment::query()->where('booking_id', $bookingId)->sole()->last_synced_at, 'the provider was asked at completion');
 
-        // Razorpay now reports paid, but a poll within 20 s only re-reads locally.
+        // Razorpay now reports paid, but a poll inside the re-check window only re-reads locally.
         $this->razorpayReportsPaid($orderId);
         $component->call('checkPaymentStatus')->assertSet('awaitingPaymentConfirmation', true);
 
-        // After the re-check interval the poll asks Razorpay again and settles.
-        $this->travel(21)->seconds();
+        // After the window the poll asks Razorpay again and settles.
+        $this->travel(BookingCheckoutCompletionService::PROVIDER_RECHECK_SECONDS + 1)->seconds();
         $component->call('checkPaymentStatus')
             ->assertSet('awaitingPaymentConfirmation', false)
             ->assertSee('Booking confirmed');
@@ -514,6 +516,64 @@ class RazorpayCheckoutLivewireTest extends TestCase
         $this->assertTrue($booking->refresh()->payment_status->isPayable());
         $this->assertNotSame(BookingStatus::Confirmed, $booking->status);
         $this->assertSame(0, Invoice::query()->count());
+    }
+
+    /** My Bookings uses the same completion service: a captured payment confirms in the callback. */
+    public function test_a_captured_payment_confirms_immediately_from_booking_history(): void
+    {
+        $student = User::factory()->activeStudent()->create(['status' => User::STATUS_ACTIVE]);
+        $this->withBillingCountry($student);
+
+        $booking = app(StudentBookingServiceInterface::class)->book(new StudentBookingData(
+            typeKey: 'paid_one_to_one',
+            studentId: $student->id,
+            teacherId: $this->teacher->id,
+            startsAt: now('UTC')->addDays(4)->setTime(11, 0)->toImmutable(),
+            subject: $this->academic['subject']->name,
+            grade: 10,
+        ));
+
+        $component = Livewire::actingAs($student)
+            ->test(BookingDetail::class, ['bookingId' => $booking->id])
+            ->call('initiatePayment');
+        $orderId = $component->get('paymentOrder')['order_id'];
+        $this->razorpayReportsPaid($orderId);
+
+        $component->call('verifyPayment', $orderId, 'pay_LW3', $this->checkoutSignature($orderId, 'pay_LW3'))
+            ->assertSet('awaitingPaymentConfirmation', false)
+            ->assertDontSee('Confirming your payment')
+            ->assertDontSee('Pay now');
+
+        $booking->refresh();
+        $this->assertSame(BookingPaymentStatus::Paid, $booking->payment_status);
+        $this->assertSame(BookingStatus::Confirmed, $booking->status);
+        $this->assertSame(1, Invoice::query()->count());
+    }
+
+    /** My Bookings shows the confirming state, without a Pay button, while the provider has not captured. */
+    public function test_booking_history_shows_a_confirming_state_while_capture_is_pending(): void
+    {
+        $student = User::factory()->activeStudent()->create(['status' => User::STATUS_ACTIVE]);
+        $this->withBillingCountry($student);
+
+        $booking = app(StudentBookingServiceInterface::class)->book(new StudentBookingData(
+            typeKey: 'paid_one_to_one',
+            studentId: $student->id,
+            teacherId: $this->teacher->id,
+            startsAt: now('UTC')->addDays(4)->setTime(11, 0)->toImmutable(),
+            subject: $this->academic['subject']->name,
+            grade: 10,
+        ));
+
+        $component = Livewire::actingAs($student)
+            ->test(BookingDetail::class, ['bookingId' => $booking->id])
+            ->call('initiatePayment');
+        $orderId = $component->get('paymentOrder')['order_id'];
+
+        $component->call('verifyPayment', $orderId, 'pay_LW4', $this->checkoutSignature($orderId, 'pay_LW4'))
+            ->assertSet('awaitingPaymentConfirmation', true)
+            ->assertSee('Confirming your payment')
+            ->assertDontSee('Pay now');
     }
 
     public function test_student_cannot_pay_for_another_students_booking(): void

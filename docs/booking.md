@@ -847,6 +847,23 @@ paid type booked ──▶ RESERVATION  status=pending, payment=pending,
 cancel a PAID booking → automatic refund (SyncPaymentOnCancellation listener)
 ```
 
+- **Three settlement sources, one settlement path.** Every source ends
+  in `BookingPaymentSettlementService::settle()` (attempt captured →
+  obligation captured → booking confirmed → receipt → notifications):
+  1. **Checkout completion** (`BookingCheckoutCompletionService`, since
+     2026-09-11): when Razorpay Checkout.js reports success, the server
+     verifies the callback signature and that the order is this
+     booking's, then confirms the order over the authenticated API
+     (`status: paid`) and settles — in the same request, so a captured
+     payment shows "Booking confirmed" immediately. The browser's word
+     alone never settles anything; an authorized-but-uncaptured payment
+     leaves the booking payable and the UI polls
+     (`refreshPendingPayment()`, provider re-asked at most every 15 s).
+  2. **Webhook** (below) — the source when the browser never returns.
+  3. **Reconciliation sweep** (`booking-payments:reconcile`, every five
+     minutes, attempts older than
+     `booking_payment_unknown_timeout_minutes`, now 5) — the backstop
+     for both.
 - **Webhook**: `POST /api/webhooks/bookings/payments/{provider}` —
   the provider's `parseWebhook()` verifies authenticity (401 on
   failure) and normalizes to `succeeded|failed|refunded` + reference.

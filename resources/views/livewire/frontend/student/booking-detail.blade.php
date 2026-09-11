@@ -141,7 +141,18 @@
                 </p>
             @endif
 
-            @if($isActive && ($booking->payment_status->value === 'pending' || $booking->payment_status->value === 'failed'))
+            @if($isActive && $awaitingPaymentConfirmation && $booking->payment_status->value === 'pending')
+                {{-- Verified checkout, provider capture pending: poll, never a second Pay button. --}}
+                <div class="mt-5 rounded-xl border border-indigo-500/20 bg-indigo-500/10 px-4 py-3" role="status" aria-live="polite" wire:poll.3s="checkPaymentStatus">
+                    <div class="flex items-start gap-3">
+                        <x-ui.spinner size="sm" class="mt-0.5 shrink-0 text-indigo-600 dark:text-indigo-300" />
+                        <div>
+                            <p class="text-sm font-bold text-fg-strong">Confirming your payment…</p>
+                            <p class="mt-0.5 text-sm leading-6 text-fg-muted">Payment accepted. Waiting for the provider's confirmation — usually a few seconds. Please don't pay again.</p>
+                        </div>
+                    </div>
+                </div>
+            @elseif($isActive && ($booking->payment_status->value === 'pending' || $booking->payment_status->value === 'failed'))
                 <div class="mt-5 rounded-xl border border-indigo-500/20 bg-indigo-500/10 px-4 py-3">
                     <p class="text-sm text-indigo-700 dark:text-indigo-200">Payment is {{ $booking->payment_status->label() }}. Complete payment to confirm this booking.</p>
 

@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Livewire\Frontend\Booking;
 
-use App\Booking\Contracts\BookingPaymentReconciliationServiceInterface;
+use App\Booking\Contracts\BookingCheckoutCompletionServiceInterface;
 use App\Booking\Contracts\BookingPaymentServiceInterface;
 use App\Booking\Contracts\BookingRepositoryInterface;
 use App\Booking\DTOs\RecurrencePatternData;
@@ -23,7 +23,6 @@ use App\Booking\Services\BookingSeriesService;
 use App\Booking\Services\BookingWizardService;
 use App\Booking\Support\FakePaymentSimulator;
 use App\Curriculum\DTOs\AcademicContextData;
-use App\Models\BookingPayment;
 use App\Models\BookingSeries;
 use App\Models\Country;
 use App\Models\EducationSystem;
@@ -237,9 +236,6 @@ final class BookingWizard extends Component
     /** When the confirming state began (ISO-8601), so the view can say "taking longer than usual". */
     public ?string $awaitingPaymentSince = null;
 
-    /** Last time the provider itself was asked about the pending attempt (ISO-8601). */
-    public ?string $lastProviderCheckAt = null;
-
     /**
      * Display-only — never treated as authoritative. Populated by
      * refreshWalletOption() whenever the payment-awaiting phase is
@@ -352,6 +348,8 @@ final class BookingWizard extends Component
 
     private RazorpayPaymentProvider $razorpay;
 
+    private BookingCheckoutCompletionServiceInterface $checkout;
+
     private ?EducationSystem $educationSystemMemo = null;
 
     public function boot(
@@ -359,11 +357,13 @@ final class BookingWizard extends Component
         BookingRepositoryInterface $bookings,
         BookingPaymentServiceInterface $payments,
         RazorpayPaymentProvider $razorpay,
+        BookingCheckoutCompletionServiceInterface $checkout,
     ): void {
         $this->wizard = $wizard;
         $this->bookings = $bookings;
         $this->payments = $payments;
         $this->razorpay = $razorpay;
+        $this->checkout = $checkout;
     }
 
     public function mount(): void
@@ -1665,32 +1665,15 @@ final class BookingWizard extends Component
         try {
             $booking = $this->bookings->findOrFail($this->bookingId);
 
-            // verifyCheckout() proves the signature and that this order
-            // belongs to this booking, and records provider_payment_id on
-            // the attempt. It settles NOTHING, and neither does this
-            // method: the browser is not evidence that money moved.
-            //
-            // This used to call markPaid() here. That confirmed the
-            // booking straight from the callback while leaving the
-            // obligation and attempt uncaptured, so the receipt and
-            // notifications — which resolve a CAPTURED obligation —
-            // silently never fired. A student ended up with a confirmed
-            // lesson, no receipt and no email, and a replayed callback
-            // could confirm a lesson that was never paid for.
-            //
-            // Settlement arrives from the signed payment.captured
-            // webhook, or from the reconciliation sweep if that webhook
-            // is lost. Until then the UI shows a confirming state.
-            $obligation = $this->razorpay->verifyCheckout($booking, $orderId, $paymentId, $signature);
+            // Verify the callback, confirm the order with Razorpay and
+            // settle through the one settlement path — see
+            // BookingCheckoutCompletionService. A captured payment is
+            // confirmed before this method returns; an authorized-but-
+            // uncaptured one (or an unreachable provider) leaves the
+            // booking payable and the confirming state below polls.
+            $booking = $this->checkout->completeRazorpayCheckout($booking, $orderId, $paymentId, $signature);
 
-            // Ask Razorpay now; a captured order settles in this request.
-            $this->settleFromProviderNow($obligation);
-
-            $booking->refresh();
             $this->result = $this->wizard->result($booking);
-
-            // Verified but not yet settled: show "confirming" and poll.
-            // Already settled (a fast webhook beat us here): nothing to wait for.
             $this->awaitingPaymentConfirmation = $booking->payment_status->isPayable();
             $this->awaitingPaymentSince = $this->awaitingPaymentConfirmation ? now()->toIso8601String() : null;
         } catch (InvalidPaymentWebhookException|BookingException $exception) {
@@ -1698,35 +1681,6 @@ final class BookingWizard extends Component
             $this->awaitingPaymentSince = null;
             $this->paymentBanner = $exception->getMessage();
         }
-    }
-
-    /**
-     * The browser's success callback is not evidence that money moved —
-     * but it IS the moment to ask the provider. Reconciliation fetches
-     * the order from Razorpay and, when it reports paid, settles through
-     * the very same path the webhook uses (attempt captured, obligation
-     * captured, booking confirmed, receipt, notifications). So a
-     * captured payment confirms in this request instead of waiting for
-     * a webhook that may be delayed, misconfigured or lost. If the
-     * provider cannot be reached or has not captured yet, nothing is
-     * settled and the confirming state polls; the webhook and the sweep
-     * remain the safety net.
-     */
-    private function settleFromProviderNow(BookingPayment $obligation): void
-    {
-        try {
-            app(BookingPaymentReconciliationServiceInterface::class)->reconcileAttempt($obligation);
-            $this->lastProviderCheckAt = now()->toIso8601String();
-        } catch (\Throwable $e) {
-            report($e);
-        }
-    }
-
-    /** Re-ask the provider on a poll at most every 20 seconds while confirming; local re-reads stay cheap. */
-    private function providerRecheckDue(): bool
-    {
-        return $this->lastProviderCheckAt === null
-            || CarbonImmutable::parse($this->lastProviderCheckAt)->addSeconds(20)->isPast();
     }
 
     /**
@@ -1743,16 +1697,13 @@ final class BookingWizard extends Component
             return;
         }
 
-        $booking = $this->bookings->findOrFail($this->bookingId)->refresh();
+        $booking = $this->bookings->findOrFail($this->bookingId);
 
-        if ($this->awaitingPaymentConfirmation && $booking->payment_status->isPayable() && $this->providerRecheckDue()) {
-            $obligation = BookingPayment::query()->where('booking_id', $booking->id)->latest('created_at')->first();
-
-            if ($obligation !== null) {
-                $this->settleFromProviderNow($obligation);
-                $booking->refresh();
-            }
-        }
+        // While confirming, each poll re-reads locally and re-asks the
+        // provider at most every PROVIDER_RECHECK_SECONDS.
+        $booking = $this->awaitingPaymentConfirmation
+            ? $this->checkout->refreshPendingPayment($booking)
+            : $booking->refresh();
 
         $this->result = $this->wizard->result($booking);
 

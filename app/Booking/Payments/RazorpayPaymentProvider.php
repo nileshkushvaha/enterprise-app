@@ -242,10 +242,13 @@ final class RazorpayPaymentProvider implements PaymentProviderInterface
         // Records WHICH payment the gateway says succeeded, and nothing
         // more. The browser callback is explicitly non-authoritative:
         // it never moves the attempt to Paid, never captures the
-        // obligation, and never confirms the booking — a signed webhook
-        // is the only thing permitted to settle money. Anyone who can
-        // replay a callback would otherwise be able to confirm a lesson
-        // that was never paid for.
+        // obligation, and never confirms the booking. Settlement is
+        // performed by BookingCheckoutCompletionService immediately
+        // after this returns — by asking Razorpay over the authenticated
+        // API and settling through BookingPaymentSettlementService —
+        // or by the signed webhook / reconciliation sweep. Anyone who
+        // can replay a callback would otherwise be able to confirm a
+        // lesson that was never paid for.
         if ($attempt->provider_payment_id === null) {
             $attempt->forceFill(['provider_payment_id' => $paymentId])->save();
         }

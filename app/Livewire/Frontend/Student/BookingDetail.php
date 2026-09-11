@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace App\Livewire\Frontend\Student;
 
 use App\Booking\Contracts\AvailabilityServiceInterface;
+use App\Booking\Contracts\BookingCheckoutCompletionServiceInterface;
 use App\Booking\Contracts\BookingMeetingServiceInterface;
-use App\Booking\Contracts\BookingPaymentReconciliationServiceInterface;
 use App\Booking\Contracts\BookingPaymentServiceInterface;
 use App\Booking\Contracts\BookingRepositoryInterface;
 use App\Booking\Contracts\BookingServiceInterface;
@@ -104,6 +104,8 @@ final class BookingDetail extends Component
 
     private RazorpayPaymentProvider $razorpay;
 
+    private BookingCheckoutCompletionServiceInterface $checkout;
+
     private CancellationRefundPolicy $refundPolicy;
 
     private RescheduleLimitPolicy $reschedulePolicy;
@@ -116,12 +118,14 @@ final class BookingDetail extends Component
         RazorpayPaymentProvider $razorpay,
         CancellationRefundPolicy $refundPolicy,
         RescheduleLimitPolicy $reschedulePolicy,
+        BookingCheckoutCompletionServiceInterface $checkout,
     ): void {
         $this->repository = $repository;
         $this->bookingService = $bookingService;
         $this->availability = $availability;
         $this->payments = $payments;
         $this->razorpay = $razorpay;
+        $this->checkout = $checkout;
         $this->refundPolicy = $refundPolicy;
         $this->reschedulePolicy = $reschedulePolicy;
     }
@@ -424,8 +428,12 @@ final class BookingDetail extends Component
         return (int) $series->student_id === (int) auth()->id() ? $series : null;
     }
 
+    /** Verified checkout awaiting the provider's capture confirmation — the page polls while true. */
+    public bool $awaitingPaymentConfirmation = false;
+
     public function initiatePayment(): void
     {
+        $this->awaitingPaymentConfirmation = false;
         if (! $this->booking) {
             return;
         }
@@ -534,12 +542,18 @@ final class BookingDetail extends Component
 
         Gate::authorize('pay', $this->booking);
 
-        $booking = $this->booking->refresh();
+        $booking = $this->awaitingPaymentConfirmation
+            ? $this->checkout->refreshPendingPayment($this->booking)
+            : $this->booking->refresh();
 
         if ($booking->payment_status->value === 'paid') {
             $this->banner = '';
+            $this->awaitingPaymentConfirmation = false;
         } elseif ($booking->payment_status->value === 'failed') {
             $this->banner = 'Payment failed. Please try again.';
+            $this->awaitingPaymentConfirmation = false;
+        } elseif ($booking->status->isTerminal()) {
+            $this->awaitingPaymentConfirmation = false;
         }
 
         $this->booking = $booking->loadMissing(['type', 'instructor']);
@@ -556,39 +570,16 @@ final class BookingDetail extends Component
         $this->banner = '';
 
         try {
-            // Non-authoritative by design — see BookingWizard::
-            // verifyPayment() for why calling markPaid() here produced
-            // confirmed bookings with no receipt and no notifications.
-            $obligation = $this->razorpay->verifyCheckout($this->booking, $orderId, $paymentId, $signature);
+            // Verify, confirm with Razorpay, settle — see
+            // BookingCheckoutCompletionService. Captured → confirmed now;
+            // otherwise the confirming state below polls.
+            $booking = $this->checkout->completeRazorpayCheckout($this->booking, $orderId, $paymentId, $signature);
 
-            // Ask Razorpay now; a captured order settles in this request
-            // through the same path the webhook uses.
-            $this->settleFromProviderNow($obligation);
-
-            $this->booking = $this->booking->refresh()->loadMissing(['type', 'instructor']);
+            $this->awaitingPaymentConfirmation = $booking->payment_status->isPayable();
+            $this->booking = $booking->loadMissing(['type', 'instructor']);
         } catch (InvalidPaymentWebhookException|BookingException $exception) {
+            $this->awaitingPaymentConfirmation = false;
             $this->banner = $exception->getMessage();
-        }
-    }
-
-    /**
-     * The browser's success callback is not evidence that money moved —
-     * but it IS the moment to ask the provider. Reconciliation fetches
-     * the order from Razorpay and, when it reports paid, settles through
-     * the very same path the webhook uses (attempt captured, obligation
-     * captured, booking confirmed, receipt, notifications). So a
-     * captured payment confirms in this request instead of waiting for
-     * a webhook that may be delayed, misconfigured or lost. If the
-     * provider cannot be reached or has not captured yet, nothing is
-     * settled and the confirming state polls; the webhook and the sweep
-     * remain the safety net.
-     */
-    private function settleFromProviderNow(BookingPayment $obligation): void
-    {
-        try {
-            app(BookingPaymentReconciliationServiceInterface::class)->reconcileAttempt($obligation);
-        } catch (\Throwable $e) {
-            report($e);
         }
     }
 
