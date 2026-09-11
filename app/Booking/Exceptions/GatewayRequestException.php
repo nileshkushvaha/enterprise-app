@@ -15,4 +15,4 @@ use RuntimeException;
  * into a booking_payments row or a log without review, since some
  * SDK error messages can echo back request parameters.
  */
-final class GatewayRequestException extends RuntimeException {}
+class GatewayRequestException extends RuntimeException {}

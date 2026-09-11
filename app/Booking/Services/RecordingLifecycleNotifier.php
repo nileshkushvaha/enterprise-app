@@ -13,6 +13,7 @@ use App\Booking\Enums\RecordingFailureCode;
 use App\Models\Recording;
 use App\Models\User;
 use App\Services\AuditTrailService;
+use Illuminate\Support\Str;
 
 /**
  * Everything a recording lifecycle transition emits outward: the audit
@@ -77,6 +78,30 @@ final class RecordingLifecycleNotifier
             ],
         );
 
+    }
+
+    /** The provider's copy was moved to its recoverable trash after SIRI's copy was verified. */
+    public function sourceRecordingDisposed(Recording $recording): void
+    {
+        $this->audit->logSystem(
+            'recordings',
+            'recording_source_disposed',
+            'Provider copy of the lesson recording moved to the provider trash after verified persistence.',
+            $recording,
+            ['provider' => $recording->provider, 'storage_driver' => $recording->storage_driver],
+        );
+    }
+
+    /** Disposal was attempted and refused; the SIRI copy is unaffected. */
+    public function sourceRecordingDisposalFailed(Recording $recording, string $reason): void
+    {
+        $this->audit->logSystem(
+            'recordings',
+            'recording_source_disposal_failed',
+            'Provider copy of the lesson recording could not be moved to the provider trash.',
+            $recording,
+            ['provider' => $recording->provider, 'reason' => Str::limit($reason, 300)],
+        );
     }
 
     public function recordingFailed(Recording $recording, RecordingFailureCode $code): void

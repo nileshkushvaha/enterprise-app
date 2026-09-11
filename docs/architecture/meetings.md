@@ -55,6 +55,7 @@ per booking):
 | Column | Purpose |
 |---|---|
 | `provider` | `manual` \| `google_meet` \| `zoom` — which `MeetingProviderInterface` created the row |
+| `platform_meeting_host_id` | The platform host (Zoom user) the meeting was created under; null for Google Meet / manual. Reschedules keep a created Zoom meeting on this host. |
 | `provider_meeting_id` / `provider_event_id` | Provider references (Google's conference id / calendar event id; Zoom's numeric meeting id lands in `provider_meeting_id`) |
 | `join_url` | Safe to show to student/instructor once `status = created` |
 | `host_url`, `password` | Hidden by default (`BookingMeeting::$hidden`) — never in the student resource |
@@ -158,8 +159,12 @@ Authorization header.
   booking reference + duration only (never price/wallet/payment ids);
   `start_time`/`duration` from the booking; timezone falls back
   booking → `zoom_default_timezone` → app timezone. Settings:
-  `join_before_host: false`, `waiting_room: true`,
-  `mute_upon_entry: true`, `auto_recording: 'none'`.
+  hostless since Phase 4 — `join_before_host: true`, `jbh_time: 5`,
+  `waiting_room: false`, `use_pmi: false`, `alternative_hosts: ''`,
+  `meeting_authentication: false`, `approval_type: 2`,
+  `mute_upon_entry: true`, `auto_recording: 'cloud'|'none'` (from
+  `RecordingEligibilityResolver`), plus a SIRI-generated `password` on
+  create only. Table and rationale: `docs/meetings.md` §4.
 - **Host account**: `zoom_host_user_id` (or `zoom_host_email`) — the
   platform's Zoom user, not the instructor's; per-instructor Zoom
   accounts are out of scope.
@@ -205,6 +210,7 @@ Authorization header.
 | `google_meet_enabled`, `google_calendar_id`, `google_auth_type`, `google_credentials_json` (encrypted), `google_credentials_configured`, `google_config_status`, `google_last_checked_at` | Google Calendar + Meet configuration and readiness |
 | `zoom_enabled`, `zoom_account_id`, `zoom_client_id`, `zoom_client_secret` (encrypted), `zoom_host_user_id`, `zoom_host_email`, `zoom_default_timezone`, `zoom_config_status`, `zoom_last_checked_at` | Zoom Server-to-Server OAuth configuration and readiness |
 | `student_join_url_visible`, `instructor_join_url_visible` | Visibility switches consumed by `StudentBookingResource` (instructor surface pending — see gaps) |
+| `zoom_host_capacity_enabled`, `zoom_host_capacity_buffer_minutes` | Zoom host capacity reservation (ships off) and its turnaround buffer — `docs/meetings.md` §4a |
 
 `default_provider = 'manual'` is **not** an off switch — it is a real,
 working provider. The platform off switch is `meetings_enabled`.
@@ -239,6 +245,24 @@ first place: `BookingPaymentService::markPaid()`'s `assertReference()`
 requires `payment_status === Pending`; a second delivery finds it
 already `Paid` and is answered `ignored`, never re-confirming the
 booking or re-dispatching `BookingConfirmed`.
+
+### At most one remote create (since 2026-09-11)
+
+The three steps above run under a per-booking advisory lock
+(`BookingRepository::withMeetingCreationLock()`), with the "already
+created?" read repeated inside it. The unique `booking_id` row only ever
+proved one LOCAL row: two callers racing past step 1 would each have
+asked the provider, and the loser's remote meeting would have been
+orphaned. The lock guarantees at most one create request in flight per
+booking and none once a row is Created. What it cannot guarantee is the
+outcome of a request that got no answer: such a create is recorded
+`failed` with `metadata.remote_state_unknown = true` and is
+**reconciled, never blindly retried** — the provider is asked what it
+holds (`ReconcilesAmbiguousMeetings`), exactly one match is adopted,
+and any other answer fails closed until an administrator resolves it
+(`meetings:resolve-ambiguous`). Zoom meetings are also never created
+without a host capacity reservation; the reserved host is passed as
+`MeetingCreationContext::$hostReference`. See `docs/meetings.md` §4a.
 
 ## Failure handling
 

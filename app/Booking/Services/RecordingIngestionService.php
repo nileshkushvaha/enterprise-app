@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Booking\Services;
 
 use App\Booking\Contracts\DiscoversRecordingArtifacts;
+use App\Booking\Contracts\DisposesSourceRecordings;
 use App\Booking\Contracts\MeetingProviderInterface;
 use App\Booking\Contracts\MeetingRecordingProviderInterface;
 use App\Booking\Contracts\RecordingStorage;
@@ -91,7 +92,7 @@ final class RecordingIngestionService
             // before verifying it. Re-verify what is already there
             // instead of transferring the same video a second time.
             if ($resumeLocator !== null) {
-                $this->verifyAndPublish($claimed, $resumeLocator);
+                $this->verifyAndPublish($claimed, $resumeLocator, $provider);
 
                 return;
             }
@@ -111,7 +112,7 @@ final class RecordingIngestionService
                 $this->reportExtraArtifacts($claimed, $discovered);
 
                 $locator = $this->ingestDiscovered($claimed, $provider, $discovered, $staged);
-                $this->verifyAndPublish($claimed->refresh(), $locator);
+                $this->verifyAndPublish($claimed->refresh(), $locator, $provider);
 
                 return;
             }
@@ -127,7 +128,7 @@ final class RecordingIngestionService
             $staged = $result->file;
 
             $locator = $this->store($claimed, $result);
-            $this->verifyAndPublish($claimed->refresh(), $locator);
+            $this->verifyAndPublish($claimed->refresh(), $locator, $provider);
         } catch (RecordingIngestionException $e) {
             $this->settle($claimed, $e->failureCode, $e);
         } catch (RecordingStorageException $e) {
@@ -414,7 +415,7 @@ final class RecordingIngestionService
      * warning, because a truncated recording that students can open
      * is worse than one they can see is missing.
      */
-    private function verifyAndPublish(Recording $recording, RecordingLocator $locator): void
+    private function verifyAndPublish(Recording $recording, RecordingLocator $locator, ?MeetingProviderInterface $provider = null): void
     {
         $storage = $this->storage->forRecording($recording);
 
@@ -434,7 +435,10 @@ final class RecordingIngestionService
                 'failed_at' => null,
                 'transfer_started_at' => null,
                 'available_at' => now(),
-                'expires_at' => now()->addDays(max(1, $this->settings->recording_retention_days)),
+                // Retention runs from when the class was RECORDED (see
+                // Recording::retentionAnchor()), for the admin-configured
+                // number of days — never a literal.
+                'expires_at' => $fresh->retentionExpiryFor($this->settings->recording_retention_days),
             ])->save();
 
             return $fresh;
@@ -442,6 +446,37 @@ final class RecordingIngestionService
 
         if ($published !== null) {
             $this->lifecycle->recordingBecameAvailable($published);
+            $this->disposeSource($published, $provider);
+        }
+    }
+
+    /**
+     * Source disposal happens HERE and nowhere else: strictly after the
+     * SIRI copy was verified against the backend and the row became
+     * Available in this very run — never for a Stored row, never on a
+     * retry that found the row already published. The provider decides
+     * whether the switch is on and what disposal means (Zoom: trash).
+     * Any failure is audited and otherwise ignored: the SIRI copy is
+     * canonical, and a source that lingers is hygiene, not loss.
+     */
+    private function disposeSource(Recording $recording, ?MeetingProviderInterface $provider): void
+    {
+        if (! $provider instanceof DisposesSourceRecordings) {
+            return;
+        }
+
+        try {
+            if ($provider->disposeSourceRecording($recording)) {
+                $this->lifecycle->sourceRecordingDisposed($recording);
+            }
+        } catch (Throwable $e) {
+            Log::warning('Provider source recording could not be disposed of after verified persistence', [
+                'recording_id' => $recording->getKey(),
+                'provider' => $recording->provider,
+                'reason' => $e->getMessage(),
+            ]);
+
+            $this->lifecycle->sourceRecordingDisposalFailed($recording, $e->getMessage());
         }
     }
 

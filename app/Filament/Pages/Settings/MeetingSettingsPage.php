@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace App\Filament\Pages\Settings;
 
 use App\Booking\Enums\GoogleMeetSpaceAccess;
+use App\Booking\Meetings\ZoomMeetingProvider;
 use App\Booking\Services\GoogleCalendarConfigurationService;
 use App\Booking\Services\RecordingAvailabilityResolver;
 use App\Booking\Services\ZoomConfigurationService;
+use App\Booking\Services\ZoomHostCapacityPreflightService;
 use App\Filament\Navigation\Concerns\HasCentralizedNavigation;
 use App\Filament\Navigation\Concerns\HasSettingsSectionBreadcrumb;
 use App\Settings\MeetingSettings;
@@ -113,6 +115,9 @@ class MeetingSettingsPage extends Page
             'zoom_enabled' => $meeting->zoom_enabled,
             'zoom_recording_enabled' => $meeting->zoom_recording_enabled,
             'zoom_recording_webhooks_enabled' => $meeting->zoom_recording_webhooks_enabled,
+            'zoom_recording_trash_source_after_persistence' => $meeting->zoom_recording_trash_source_after_persistence,
+            'zoom_host_capacity_enabled' => $meeting->zoom_host_capacity_enabled,
+            'zoom_host_capacity_buffer_minutes' => $meeting->zoom_host_capacity_buffer_minutes,
             // Secrets are never re-displayed; a blank field keeps the stored value.
             'zoom_webhook_secret' => null,
             'zoom_account_id' => $meeting->zoom_account_id,
@@ -308,6 +313,11 @@ class MeetingSettingsPage extends Page
                             ->label('Host Email')
                             ->email()
                             ->maxLength(255),
+                        Toggle::make('zoom_host_capacity_enabled')
+                            ->label('Reserve Zoom Host Capacity')
+                            ->helperText('Each Zoom-bound booking reserves the platform host for its lesson window at booking time and is refused when the host is already taken. Register the host first (meetings:zoom-hosts:register) and run meetings:zoom-hosts:preflight before turning this on.'),
+                        $this->integerInput('zoom_host_capacity_buffer_minutes', 'Host Turnaround Buffer (minutes)', 0, 120)
+                            ->helperText('Extra minutes kept free on the host before and after each lesson, on top of the join window.'),
                         TextInput::make('zoom_default_timezone')
                             ->label('Default Timezone')
                             ->maxLength(64)
@@ -320,6 +330,9 @@ class MeetingSettingsPage extends Page
                         Toggle::make('zoom_recording_webhooks_enabled')
                             ->label('Accept Zoom Recording Webhooks')
                             ->helperText('Lets Zoom notify us the moment a recording is ready. Off still works, recordings are just picked up later by the scheduled check.'),
+                        Toggle::make('zoom_recording_trash_source_after_persistence')
+                            ->label('Trash Zoom Copy After SIRI Has Verified Its Own')
+                            ->helperText('Once a lesson recording is stored and verified in SIRI storage, move Zoom\'s cloud copy to the account trash (recoverable, never a permanent delete). Off keeps both copies; Zoom\'s own auto-delete then governs the original.'),
                         Placeholder::make('zoom_config_status_display')
                             ->label('Configuration status')
                             ->content(fn (): string => $this->configStatusLabel($this->data['zoom_config_status'] ?? null)),
@@ -379,6 +392,45 @@ class MeetingSettingsPage extends Page
             $data = $this->form->getState();
         } catch (Halt) {
             return;
+        }
+
+        // Zoom host capacity — two gates, both enforced here so the stored
+        // state can never express an unsafe combination:
+        //
+        //   1. Zoom may not be the default provider while new reservations
+        //      are switched off. Acceptance would refuse every Zoom
+        //      booking (fail-closed), so the save is refused instead and
+        //      the administrator is told the safe order of operations.
+        //   2. Reservation may not be switched ON while the preflight has
+        //      findings — a booking accepted before the feature that
+        //      holds no reservation would otherwise be confirmed against
+        //      capacity nobody checked. The same computation the
+        //      preflight command prints is the gate.
+        $current = app(MeetingSettings::class);
+        $capacityOn = (bool) ($data['zoom_host_capacity_enabled'] ?? false);
+
+        if (($data['default_provider'] ?? null) === ZoomMeetingProvider::KEY && ! $capacityOn) {
+            Notification::make()
+                ->title('Meeting settings not saved')
+                ->body('Zoom cannot be the default meeting provider while "Reserve Zoom Host Capacity" is off — every Zoom booking would be refused. Register the host, run meetings:zoom-hosts:preflight, enable capacity reservation, then choose Zoom. To roll back, choose Google Meet first, then switch reservation off.')
+                ->danger()
+                ->send();
+
+            return;
+        }
+
+        if ($capacityOn && ! $current->zoom_host_capacity_enabled) {
+            $report = app(ZoomHostCapacityPreflightService::class)->report();
+
+            if ($report->hasFindings()) {
+                Notification::make()
+                    ->title('Zoom host capacity reservation not enabled')
+                    ->body($report->summary().' Run meetings:zoom-hosts:preflight for the full list; nothing else on this page was saved.')
+                    ->danger()
+                    ->send();
+
+                return;
+            }
         }
 
         // A new (non-blank) Google credential is validated *before* any
@@ -441,10 +493,13 @@ class MeetingSettingsPage extends Page
             // enabled in the UI while doing nothing.
             $settings->zoom_recording_enabled = (bool) ($data['zoom_enabled'] ?? false) && (bool) ($data['zoom_recording_enabled'] ?? false);
             $settings->zoom_recording_webhooks_enabled = $settings->zoom_recording_enabled && (bool) ($data['zoom_recording_webhooks_enabled'] ?? false);
+            $settings->zoom_recording_trash_source_after_persistence = $settings->zoom_recording_enabled && (bool) ($data['zoom_recording_trash_source_after_persistence'] ?? false);
             $settings->zoom_account_id = filled($data['zoom_account_id'] ?? null) ? $data['zoom_account_id'] : null;
             $settings->zoom_client_id = filled($data['zoom_client_id'] ?? null) ? $data['zoom_client_id'] : null;
             $settings->zoom_host_user_id = filled($data['zoom_host_user_id'] ?? null) ? $data['zoom_host_user_id'] : null;
             $settings->zoom_host_email = filled($data['zoom_host_email'] ?? null) ? $data['zoom_host_email'] : null;
+            $settings->zoom_host_capacity_enabled = (bool) ($data['zoom_host_capacity_enabled'] ?? false);
+            $settings->zoom_host_capacity_buffer_minutes = (int) ($data['zoom_host_capacity_buffer_minutes'] ?? 5);
             $settings->zoom_default_timezone = filled($data['zoom_default_timezone'] ?? null) ? $data['zoom_default_timezone'] : null;
 
             // Same blank-preserves rule as the Google credential above.

@@ -101,14 +101,14 @@ Identity has three independent status concepts — do not conflate them:
 |---|---|
 | Purpose | Booking lifecycle, availability, guest/student bookings, teacher assignment, booking types, booking reports. |
 | Paths | `app/Booking`, `app/Models/Booking*.php`, `TeacherAvailability.php`, `TeacherUnavailability.php`, `TeacherSubject.php`, `resources/views/booking`, `app/Livewire/Frontend/Booking`. |
-| Models | `Booking`, `BookingType`, `BookingGuest`, `BookingActivity`, `TeacherAvailability`, `TeacherUnavailability`, `TeacherSubject`, `Holiday`. |
+| Models | `Booking`, `BookingType`, `BookingGuest`, `BookingActivity`, `TeacherAvailability`, `TeacherUnavailability`, `TeacherSubject`, `Holiday`, `PlatformMeetingHost`, `MeetingHostReservation` (Zoom host capacity — `docs/meetings.md` §4a). |
 | Migrations | Booking type, booking, guests, teacher availability/unavailability, subjects, holidays, activities, reservation, analytics, token hashing migrations. |
-| Services/actions | `BookingService`, `GuestBookingService`, `StudentBookingService`, `AvailabilityService`, `TeacherAssignmentService`, `BookingPaymentService`, `BookingAnalyticsService`, `BookingWizardService`, booking actions. |
+| Services/actions | `BookingService`, `GuestBookingService`, `StudentBookingService`, `AvailabilityService`, `TeacherAssignmentService`, `BookingPaymentService`, `BookingAnalyticsService`, `BookingWizardService`, `MeetingHostCapacityService` (+ `MeetingHostReservationRepository`), booking actions. |
 | Filament | `Bookings`, `BookingTypes`, `TeacherAvailability`, `TeacherLeave`, `BookingReports`, booking widgets. |
 | Policies | `BookingPolicy`, `BookingTypePolicy`, `TeacherAvailabilityPolicy`, `TeacherUnavailabilityPolicy`. |
 | Tests | `tests/Feature/Booking/*`, `tests/Feature/Guest/*`, `tests/Unit/Booking/*`, student booking tests. |
 | Reuse notes | All booking changes should enter through booking contracts/services/actions. |
-| Do not duplicate | Do not create another booking wizard, booking table, slot generator, or payment workflow. |
+| Do not duplicate | Do not create another booking wizard, booking table, slot generator, payment workflow, or a second host-capacity/reservation mechanism — extend `platform_meeting_hosts` (one row per licensed host). |
 
 ## Payments
 

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Console\Commands;
 
 use App\Booking\Enums\BookingStatus;
+use App\Booking\Jobs\CaptureLessonRecordingJob;
 use App\Booking\Registry\MeetingProviderRegistry;
 use App\Booking\Services\RecordingService;
 use App\Booking\Services\RecordingStagingArea;
@@ -23,9 +24,24 @@ use Throwable;
  * Three bounded jobs, in order:
  *
  *   1. reclaim rows abandoned mid-transfer by a crashed worker;
- *   2. retry every Pending/Stored recording inside the configured
- *      age and attempt window;
+ *   2. queue a capture for every Pending/Stored recording inside the
+ *      configured age and attempt window;
  *   3. purge staged temp files a crashed run left on disk.
+ *
+ * The sweep never transfers bytes itself. It dispatches the SAME
+ * CaptureLessonRecordingJob the webhook and meeting creation use, onto
+ * the dedicated `recordings` connection/queue, so a multi-gigabyte
+ * download can never run inside the scheduler process (where it would
+ * hold `schedule:run` — and every other scheduled command behind it —
+ * for the length of the transfer, with none of the recordings worker's
+ * timeout or retry_after protections). Every path into a transfer is
+ * therefore one job class, one queue, one worker configuration.
+ *
+ * Duplicate safety is unchanged: the job's row-level claim makes a
+ * sweep dispatch racing a webhook dispatch resolve to one transfer,
+ * and the job's unique lock keeps one queued job per recording while a
+ * worker is down. The attempt budget, retry window and eligibility
+ * filters are applied here, before anything is queued.
  *
  * Bounded on every axis: a date window (never the whole table), an
  * attempt budget, and a batch size, with lazyById() paging. One
@@ -66,7 +82,7 @@ final class CaptureLessonRecordings extends Command
             ->with('bookingMeeting')
             ->lazyById($batchSize);
 
-        $processed = 0;
+        $queued = 0;
 
         foreach ($due as $recording) {
             if (! $registry->has($recording->provider)) {
@@ -74,8 +90,12 @@ final class CaptureLessonRecordings extends Command
             }
 
             try {
-                $recordings->capture($recording, $registry->get($recording->provider));
-                $processed++;
+                // Queued, never captured inline — see the class docblock.
+                // A dispatch the unique lock suppresses (a job for this
+                // recording is already waiting) is still counted: the
+                // recording IS queued, just not twice.
+                CaptureLessonRecordingJob::dispatch($recording->getKey());
+                $queued++;
             } catch (Throwable $e) {
                 $this->error(sprintf('Recording %s: %s', $recording->getKey(), $e->getMessage()));
             }
@@ -84,9 +104,9 @@ final class CaptureLessonRecordings extends Command
         $purged = $staging->purgeStale();
 
         $this->info(sprintf(
-            'Registered %d missing recording(s); processed %d pending recording(s); reclaimed %d stalled transfer(s); purged %d stale staged file(s).',
+            'Registered %d missing recording(s); queued %d pending recording(s); reclaimed %d stalled transfer(s); purged %d stale staged file(s).',
             $registered,
-            $processed,
+            $queued,
             $reclaimed,
             $purged,
         ));

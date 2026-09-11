@@ -6,6 +6,7 @@ namespace App\Booking\Contracts;
 
 use App\Booking\DTOs\MeetingUpdateContext;
 use App\Booking\Enums\MeetingJoinAvailability;
+use App\Booking\Exceptions\BookingException;
 use App\Lessons\Enums\LessonStatus;
 use App\Models\Booking;
 use App\Models\BookingMeeting;
@@ -40,6 +41,26 @@ interface BookingMeetingServiceInterface
 
     /** Admin "Mark Meeting Cancelled". Null if no meeting exists. */
     public function cancelMeeting(Booking $booking): ?BookingMeeting;
+
+    /**
+     * Explicit resolution of an AMBIGUOUS create (remote_state_unknown):
+     * an administrator declares, with a reason, that the provider holds
+     * no meeting for this booking. Clears the flag so the next create
+     * may proceed. Audited.
+     *
+     * @throws BookingException when nothing ambiguous is pending
+     */
+    public function acknowledgeNoRemoteMeeting(Booking $booking, User $admin, string $reason): BookingMeeting;
+
+    /**
+     * Explicit resolution of an AMBIGUOUS create: an administrator has
+     * identified the remote meeting (by provider id) that the unanswered
+     * request created; it is aligned with the booking and adopted as the
+     * booking's meeting. Audited.
+     *
+     * @throws BookingException when the provider cannot adopt or the id cannot be read
+     */
+    public function adoptRemoteMeeting(Booking $booking, string $providerMeetingId, User $admin): BookingMeeting;
 
     /** Whether $booking currently qualifies for meeting creation. */
     public function isEligible(Booking $booking): bool;

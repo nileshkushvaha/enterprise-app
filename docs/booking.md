@@ -905,6 +905,13 @@ Scores are clamped to [0, 1]; ties break on lowest user id.
 - Every slot is exclusive — one booking = one student +
   one instructor + one slot. Any overlap, of any type, always blocks;
   there is no shared-slot/group-capacity mechanism.
+- **Zoom host capacity** (feature-flagged, `docs/meetings.md` §4a):
+  when on, a Zoom-bound booking also reserves the platform Zoom host
+  for its occupied interval inside the same transaction. Because the
+  instructor lock cannot serialize two *different* instructors, the
+  host rows are row-locked first — before the availability re-read —
+  and the reservation count is a locking read. Exhausted capacity
+  throws inside the transaction: no booking, no hold, nothing charged.
 - Booking window limits are admin-tunable via `BookingSettings`
   (`minimum_booking_notice_minutes`, `maximum_advance_booking_days`), enforced by
   `BookingWindowRule`.

@@ -12,6 +12,7 @@ use App\Filament\Pages\Settings\MeetingSettingsPage;
 use App\Filament\Pages\Settings\PlatformFoundationSettingsPage;
 use App\Models\Activity;
 use App\Models\Booking;
+use App\Models\PlatformMeetingHost;
 use App\Models\User;
 use App\Settings\FeatureSettings;
 use App\Settings\MeetingSettings;
@@ -82,7 +83,15 @@ class RecordingFeatureToggleTest extends TestCase
         $settings->zoom_client_id = 'client_abc';
         $settings->zoom_client_secret = Crypt::encryptString(self::ZOOM_SECRET);
         $settings->zoom_host_user_id = 'host-user-1';
+        // Zoom is capacity-governed (docs/meetings.md §4a): a Zoom meeting is never
+        // created without a host reservation, so the fixture registers the host
+        // and switches new reservations on, as production must before using Zoom.
+        $settings->zoom_host_capacity_enabled = true;
         $settings->save();
+        PlatformMeetingHost::query()->updateOrCreate(
+            ['provider' => ZoomMeetingProvider::KEY, 'host_reference' => 'host-user-1'],
+            ['label' => 'Test host', 'capacity' => 1, 'is_active' => true],
+        );
     }
 
     private function bindFakeZoomClient(): ZoomMeetingClient&Mockery\MockInterface

@@ -1,8 +1,24 @@
 # Class Recording — Staging Validation & Production Cutover Runbook
 
-Operator runbook for turning on Google Meet recording acquisition and
-Drive storage. Architecture and troubleshooting live in
-`docs/recordings.md`; this file is the *procedure*.
+Operator runbook for turning on recording acquisition and Google Drive
+storage. Architecture and troubleshooting live in `docs/recordings.md`;
+this file is the *procedure*. Zoom-specific activation (app, webhook,
+account privacy) is in `docs/deployment/zoom-activation.md`; storage,
+retention and access below apply to Zoom recordings too.
+
+## The operating model this runbook installs
+
+| Role | Account | Used for |
+|---|---|---|
+| **Meeting host (primary)** | one licensed **Zoom** user on the platform's Zoom account (`zoom_host_user_id`) | every Zoom lesson is created under this host; cloud recording runs on its licence |
+| **Storage owner + Meet fallback** | one **Google Workspace** user, the platform account (`platform_meeting_account`), impersonated by the service account | owns the private Drive destination for **all** recordings; hosts Google Meet lessons when Meet is the provider |
+| **Recording destination** | that Workspace user's Drive — a Shared Drive if the edition has them, otherwise a folder in the account's My Drive (§5) | both providers' recordings; one pipeline, one `RecordingStorage` |
+| **Retention** | `meeting.recording_retention_days` = **30** | SIRI's stored copy is deleted 30 days after the class was recorded; metadata is kept (`docs/recordings.md` §11a) |
+| **Access** | `RecordingPolicy` | administrators holding `View:Recording`; the lesson's student only when playback is switched on; **instructors never**, by participation or otherwise |
+
+Nothing here grants an instructor access to a recording. Any earlier
+copy of this runbook that said "assigned instructor can download" was
+wrong and has been corrected in §10.
 
 Every step is ordered so that the riskiest change — the domain-wide
 delegation grant, which the **existing** Google Meet booking integration
@@ -146,17 +162,49 @@ meeting creation broken.
 
 ---
 
-## 5. Shared Drive and root folder
+## 5. Drive destination: root folder, Shared Drive if available
+
+**Do not assume the Workspace edition includes Shared Drives.** Check
+first: Workspace admin console → Apps → Google Workspace → Drive and
+Docs → *Sharing settings* → "Shared drive creation"; if the option is
+absent or greyed out, the edition (or the platform account's
+organisational unit) does not have them. The code supports both
+layouts — `GoogleDriveSdkClient` adds the Shared Drive parameters only
+when `recording_drive_shared_drive_id` is set — so pick whichever the
+account actually offers and record the choice in the deployment notes.
+
+**5a. If Shared Drives are available (preferred):**
 
 - [ ] Create an organization-owned **Shared Drive** (e.g. `SIRI Education`)
 - [ ] Create a `Recordings` folder inside it
 - [ ] Grant the impersonated platform account **Content manager** on the
       Shared Drive — nothing wider
-- [ ] **No** public, anyone-with-link, or domain-wide reader access
 - [ ] Copy the folder id from its URL → `recording_drive_root_folder_id`
 - [ ] Copy the Shared Drive id → `recording_drive_shared_drive_id`
 
-Both are ids, not secrets, but there is no reason to circulate them.
+**5b. If they are not:**
+
+- [ ] Signed in as the platform Workspace account, create a `SIRI
+      Recordings` folder at the top of **My Drive**
+- [ ] Copy the folder id → `recording_drive_root_folder_id`
+- [ ] Leave `recording_drive_shared_drive_id` **empty**
+- [ ] Understand the consequence: every stored recording counts against
+      **that one user's** Drive quota, and the folder is owned by the
+      account rather than the organisation. Size the quota from
+      expected lessons × average size × 30 days of retention, and put a
+      quota alert on the account.
+
+**Either way:**
+
+- [ ] **No** public, anyone-with-link, or domain-wide reader access on
+      the folder or the drive. SIRI never creates sharing links; nothing
+      may be shared by hand either.
+- [ ] Both ids are ids, not secrets — but there is no reason to
+      circulate them.
+- [ ] Zoom recordings land in this same folder tree
+      (`<root>/YYYY/MM/`), downloaded from Zoom's cloud and uploaded by
+      the recordings worker. There is no Zoom-specific storage
+      configuration.
 
 ---
 
@@ -201,6 +249,12 @@ stopwaitsecs=3700
       transfer mid-flight
 - [ ] Worker starts, consumes a job, and Supervisor restarts it after a
       manual `kill`
+- [ ] **The worker is mandatory, not a latency optimisation.** Since
+      2026-09-11 the `recordings:capture` sweep *queues*
+      `CaptureLessonRecordingJob` for every due recording instead of
+      transferring inline, so with no worker running nothing is ever
+      ingested — by any path. Monitor the `recordings` queue depth
+      (§13).
 
 Smoke test (safe — the job no-ops on an unknown id):
 
@@ -228,12 +282,22 @@ recording.
 
 ---
 
-## 9. Enable acquisition
+## 9. Enable acquisition and confirm retention
 
+- [ ] `meeting.recording_retention_days` = **30** (the shipped default —
+      confirm it was not changed). Expiry is counted from the recording
+      time, exact to the second; `recordings:expire` runs daily and
+      deletes only SIRI's copy, keeping the row (`docs/recordings.md`
+      §11a). It never deletes the Meet original or a Zoom cloud
+      recording — configure those retentions separately and
+      deliberately (Zoom: Account Settings → Recording → auto-delete;
+      Google: Workspace Drive retention).
 - [ ] `meeting.recording_enabled` = true
-- [ ] `meeting.google_meet_recording_enabled` = true
+- [ ] `meeting.google_meet_recording_enabled` = true (Meet lessons);
+      `meeting.zoom_recording_enabled` per `zoom-activation.md` §7
+      (Zoom lessons)
 
-Both ship OFF so steps 2–3 cannot be skipped.
+The acquisition switches ship OFF so steps 2–3 cannot be skipped.
 
 **Leave `meeting.recording_student_playback_enabled` OFF for now.** It
 is the SRS §12.20 access-policy switch (students watch their own
@@ -292,11 +356,21 @@ Then verify:
 - [ ] Original Meet recording still exists in Drive, permissions unchanged
 - [ ] SIRI's copy is private, correct size and MIME type
 - [ ] `recordings.storage_path` holds **SIRI's copy**, not Meet's original
-- [ ] Authorized student can download via the SIRI route (never a Drive URL)
-- [ ] Assigned instructor can download; unrelated student/instructor denied
-- [ ] Admin with `View:Recording` can download
-- [ ] Student and instructor each received exactly one "recording
-      available" notification, containing no Drive URL or file id
+- [ ] The lesson's student has **no download** (there is no student
+      download route) and, with `recording_student_playback_enabled`
+      still OFF, no watch link either — student playback is validated
+      separately in §11a
+- [ ] The lesson's **instructor is denied** watch and download — an
+      instructor's Recordings navigation shows nothing, the watch URL
+      answers 403 and the admin download route is refused. Participation
+      confers no access; this is by design (SRS §12.20 grants none).
+- [ ] An unrelated student and an unrelated instructor are denied
+- [ ] Admin with `View:Recording` can download via the SIRI route (never
+      a Drive URL); an admin without it is denied
+- [ ] **No participant notification** was sent (none exists by design —
+      `RecordingAccessArchitectureTest`); the `recordings` audit channel
+      holds one `recording_available` entry with no Drive URL or file id
+- [ ] `recordings.expires_at` equals `recorded_at` + 30 days exactly
 - [ ] If fallback ran: staged temp file deleted, disk returned to baseline
 
 ---
@@ -361,12 +435,16 @@ unvalidated.
 ## 11. Replay / idempotency check
 
 ```bash
-php artisan recordings:capture   # run twice
+php artisan recordings:capture   # run twice, back to back
+php artisan queue:work recordings --queue=recordings --once --stop-when-empty
 ```
 
+- [ ] The two sweeps queued at most **one** capture job for the
+      recording (the job is unique per recording); the worker ran it
+      and found nothing to do
 - [ ] Still exactly 1 `recordings` row
 - [ ] Still exactly 1 object in the Drive destination folder
-- [ ] No additional notifications
+- [ ] No additional audit entries beyond the original `recording_available`
 
 ---
 
@@ -383,6 +461,20 @@ Prefer the least invasive: temporarily blank
 
 **Do not** rehearse by breaking the delegation grant — that affects
 meeting creation for every booking.
+
+---
+
+## 12a. Retention rollout for recordings that already exist
+
+Not part of this cutover, and **nothing here is applied automatically**.
+Recordings published before 2026-09-11 carry an `expires_at` counted
+from their *publish* time; new ones count from the *recording* time.
+For most rows the difference is minutes. Before deciding anything, list
+the affected rows read-only (`docs/recordings.md` §11a has the query),
+then decide explicitly whether to re-anchor them. Re-anchoring can only
+shorten a retention that is already running, so it is a one-off,
+reviewed, audited update taken with the list in hand — never a silent
+part of a deploy, and never a deletion command run by hand.
 
 ---
 

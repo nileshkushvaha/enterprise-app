@@ -27,6 +27,9 @@ use RuntimeException;
  */
 final class RecordingStagingArea
 {
+    /** Fixed read size for pump(): bounds peak memory per transfer regardless of file size. */
+    private const int PUMP_CHUNK_BYTES = 1024 * 1024;
+
     public function __construct(
         private readonly ?string $root = null,
     ) {}
@@ -66,16 +69,137 @@ final class RecordingStagingArea
 
         try {
             $writer($handle);
+
+            // A buffered write that fails only at flush/close time (disk
+            // full, quota) would otherwise pass silently and stage a
+            // truncated file as if it were complete.
+            if (@fflush($handle) === false || @fclose($handle) === false) {
+                throw new RecordingIngestionException(
+                    RecordingFailureCode::SourceDownloadFailed,
+                    'Recording staging write could not be completed — the staging disk may be full or unwritable.',
+                );
+            }
         } catch (\Throwable $e) {
-            fclose($handle);
+            if (is_resource($handle)) {
+                @fclose($handle);
+            }
+
             @unlink($path);
 
             throw $e;
         }
 
-        fclose($handle);
-
         return $this->finalize($path, $filename, $mimeType);
+    }
+
+    /**
+     * Copies a provider download into a staging handle chunk by chunk,
+     * enforcing the safety limits WHILE the bytes arrive — the shared
+     * pump every streaming adapter uses, so no provider can bypass it.
+     *
+     *  - the size ceiling is applied to bytes received, so an oversized
+     *    (or hostile, unbounded) source is cut off at the ceiling
+     *    rather than filling the staging disk and being rejected at
+     *    finalize time;
+     *  - every write is checked: a short or failed write (disk full,
+     *    unwritable) aborts instead of staging a truncated file;
+     *  - a read that fails or times out aborts;
+     *  - when the provider declared a length, a stream that ends short
+     *    of it is an incomplete download, not a finished recording.
+     *
+     * @param  resource  $source  the provider read stream
+     * @param  resource  $sink  the staging write handle from stageStream()
+     * @param  int|null  $expectedBytes  the provider's declared Content-Length, when known
+     * @return int bytes copied
+     *
+     * @throws RecordingIngestionException
+     */
+    public function pump($source, $sink, ?int $expectedBytes = null): int
+    {
+        $ceiling = max(1, (int) config('recordings.max_source_bytes'));
+
+        if ($expectedBytes !== null && $expectedBytes > $ceiling) {
+            throw new RecordingIngestionException(
+                RecordingFailureCode::SourceRejected,
+                sprintf('Recording of %d declared bytes exceeds the configured ceiling of %d bytes.', $expectedBytes, $ceiling),
+            );
+        }
+
+        $written = 0;
+
+        while (! feof($source)) {
+            $chunk = @fread($source, self::PUMP_CHUNK_BYTES);
+
+            if ($chunk === false) {
+                throw new RecordingIngestionException(
+                    RecordingFailureCode::SourceDownloadFailed,
+                    'Provider download stream failed mid-transfer.',
+                );
+            }
+
+            if ($chunk === '') {
+                $meta = @stream_get_meta_data($source);
+
+                if (($meta['timed_out'] ?? false) === true) {
+                    throw new RecordingIngestionException(
+                        RecordingFailureCode::SourceDownloadFailed,
+                        'Provider download stream timed out mid-transfer.',
+                    );
+                }
+
+                if (feof($source)) {
+                    break;
+                }
+
+                continue;
+            }
+
+            $written += strlen($chunk);
+
+            if ($written > $ceiling) {
+                throw new RecordingIngestionException(
+                    RecordingFailureCode::SourceRejected,
+                    sprintf('Recording exceeds the configured ceiling of %d bytes; transfer stopped after %d bytes.', $ceiling, $written),
+                );
+            }
+
+            $this->writeFully($sink, $chunk);
+        }
+
+        if ($expectedBytes !== null && $written !== $expectedBytes) {
+            throw new RecordingIngestionException(
+                RecordingFailureCode::SourceDownloadFailed,
+                sprintf('Incomplete recording download: received %d of %d declared bytes.', $written, $expectedBytes),
+            );
+        }
+
+        return $written;
+    }
+
+    /**
+     * fwrite() may write fewer bytes than asked (or none at all on a
+     * full disk) without raising anything — so a write is not done
+     * until every byte of the chunk is on disk.
+     *
+     * @param  resource  $sink
+     */
+    private function writeFully($sink, string $chunk): void
+    {
+        $length = strlen($chunk);
+        $offset = 0;
+
+        while ($offset < $length) {
+            $result = @fwrite($sink, $offset === 0 ? $chunk : substr($chunk, $offset));
+
+            if ($result === false || $result === 0) {
+                throw new RecordingIngestionException(
+                    RecordingFailureCode::SourceDownloadFailed,
+                    'Recording staging write failed — the staging disk may be full or unwritable.',
+                );
+            }
+
+            $offset += $result;
+        }
     }
 
     /**

@@ -92,6 +92,7 @@ final class BookingService implements BookingServiceInterface
         private readonly RescheduleLimitPolicy $reschedulePolicy,
         private readonly StudentLifecycleService $studentLifecycle,
         private readonly PackageEntitlementService $packageEntitlements,
+        private readonly MeetingHostCapacityService $hostCapacity,
     ) {}
 
     public function request(CreateBookingData $data): Booking
@@ -104,6 +105,16 @@ final class BookingService implements BookingServiceInterface
         $booking = $this->bookings->withInstructorLock(
             $data->instructorId,
             fn (): Booking => DB::transaction(function () use ($data, $type): Booking {
+                // The provider this booking is accepted FOR (null unless
+                // Zoom host capacity reservation is on). Pinned so a later
+                // change of the global default cannot re-route an accepted
+                // booking onto a host nobody reserved. Resolved first
+                // because, when it is capacity-governed, the host rows must
+                // be locked BEFORE the re-checks below take gap locks on
+                // bookings — see MeetingHostCapacityService's lock order.
+                $providerIntent = $this->hostCapacity->intendedProvider($data->locationType);
+                $this->hostCapacity->lockPoolFor($providerIntent);
+
                 // Race-safe re-checks: another request may have won the lock first.
                 if ($this->bookings->duplicateExists($data)) {
                     throw DuplicateBookingException::for($data);
@@ -168,6 +179,7 @@ final class BookingService implements BookingServiceInterface
                 };
 
                 $booking = $this->createAction->execute($data, $status, [
+                    'meeting_provider_intent' => $providerIntent,
                     'booking_type_id' => $type->id,
                     'payment_status' => $paymentStatus,
                     'price' => $price->requiresPayment ? $price->payableAmount : null,
@@ -192,6 +204,20 @@ final class BookingService implements BookingServiceInterface
                         $this->requirePackageEntitlement($data),
                         $booking,
                     );
+                }
+
+                // THE capacity reservation boundary. Same transaction as
+                // the booking row and the package unit, after the
+                // instructor's availability passed: a Zoom-bound booking
+                // — demo, paid hold, package-funded, recurring occurrence
+                // alike — claims its host now or does not exist at all.
+                // Exhausted capacity throws MeetingHostCapacityException,
+                // the whole transaction rolls back, nothing is charged and
+                // no other provider is substituted. A pending-payment hold
+                // carries the hold's expiry; it is released when the hold
+                // is cancelled, exactly like the instructor's slot.
+                if ($this->hostCapacity->appliesTo($providerIntent)) {
+                    $this->hostCapacity->reserve($booking, expiresAt: $booking->reserved_until);
                 }
 
                 [$actorType, $actorId] = $this->actorFor($booking);
@@ -221,6 +247,12 @@ final class BookingService implements BookingServiceInterface
 
         $booking = DB::transaction(function () use ($booking, $from): Booking {
             $booking = $this->confirmAction->execute($booking);
+
+            // Payment settled / approval granted: the host reservation
+            // taken at acceptance loses its hold expiry. Rechecked here
+            // (a booking that somehow has none is reserved now if there
+            // is room); never throws — see MeetingHostCapacityService.
+            $this->hostCapacity->confirmReservation($booking);
 
             [$actorType, $actorId] = $this->actorFor($booking);
             $this->bookings->logActivity($booking, BookingActivityAction::Confirmed, $actorType, $actorId, $from, BookingStatus::Confirmed);
@@ -273,6 +305,10 @@ final class BookingService implements BookingServiceInterface
                 // (student, instructor, admin, Filament) inherits it.
                 $this->assertPackageEntitlementCoversReschedule($booking, $endsAt);
 
+                // Host rows before the availability re-read — same lock
+                // order as request(), for the same deadlock reason.
+                $this->hostCapacity->lockPoolFor($booking->meeting_provider_intent);
+
                 $this->availability->ensureAvailable(
                     $booking->instructor_id,
                     $data->startsAt,
@@ -280,6 +316,12 @@ final class BookingService implements BookingServiceInterface
                     ignoreBookingId: $booking->id,
                     bufferMinutes: $booking->type->buffer_minutes,
                 );
+
+                // Host capacity for the NEW interval is acquired before the
+                // old reservation is let go, inside this same transaction:
+                // a slot the host cannot take throws here, the transaction
+                // rolls back, and the booking keeps its time AND its host.
+                $this->hostCapacity->move($booking, $data->startsAt, $endsAt);
 
                 $booking = $this->rescheduleAction->execute($booking, $data);
 
@@ -324,6 +366,15 @@ final class BookingService implements BookingServiceInterface
 
         $booking = DB::transaction(function () use ($booking, $data, $from, &$decision): Booking {
             $booking = $this->cancelAction->execute($booking, $data);
+
+            // The host is free again the moment the booking stops
+            // standing — the same transaction, so a concurrent booking
+            // for that hour sees the capacity exactly when it sees the
+            // slot. Idempotent: a duplicate cancel finds nothing active.
+            $this->hostCapacity->release(
+                $booking,
+                $data->expired ? MeetingHostCapacityService::RELEASE_HOLD_EXPIRED : MeetingHostCapacityService::RELEASE_CANCELLED,
+            );
 
             // Freeze the refund-eligibility decision here, inside the same
             // transaction as the status transition, using the
@@ -375,6 +426,10 @@ final class BookingService implements BookingServiceInterface
 
         $booking = DB::transaction(function () use ($booking, $outcome, $action, $from): Booking {
             $booking = $this->completeAction->execute($booking, $outcome);
+
+            // The lesson is over; its interval has passed, but release
+            // anyway so history says why the row stopped being active.
+            $this->hostCapacity->release($booking, MeetingHostCapacityService::RELEASE_FINISHED);
 
             [$actorType, $actorId] = $this->actorFor($booking);
             $this->bookings->logActivity($booking, $action, $actorType, $actorId, $from, $outcome);

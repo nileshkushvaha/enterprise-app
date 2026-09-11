@@ -8,6 +8,7 @@ use App\Booking\Contracts\BookingMeetingServiceInterface;
 use App\Booking\Contracts\BookingRepositoryInterface;
 use App\Booking\Contracts\EndsActiveMeetings;
 use App\Booking\Contracts\MeetingProviderInterface;
+use App\Booking\Contracts\ReconcilesAmbiguousMeetings;
 use App\Booking\DTOs\MeetingCreationContext;
 use App\Booking\DTOs\MeetingCreationResult;
 use App\Booking\DTOs\MeetingUpdateContext;
@@ -20,7 +21,9 @@ use App\Booking\Enums\MeetingJoinAvailability;
 use App\Booking\Enums\MeetingStatus;
 use App\Booking\Events\MeetingCreated;
 use App\Booking\Events\MeetingUpdated;
+use App\Booking\Exceptions\AmbiguousMeetingCreationException;
 use App\Booking\Exceptions\BookingException;
+use App\Booking\Exceptions\MeetingHostCapacityException;
 use App\Booking\Jobs\CaptureLessonRecordingJob;
 use App\Booking\Meetings\ManualMeetingProvider;
 use App\Exceptions\Student\StudentActionNotAvailableException;
@@ -35,6 +38,7 @@ use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
 use Throwable;
 
@@ -63,6 +67,26 @@ use Throwable;
  */
 final class BookingMeetingService implements BookingMeetingServiceInterface
 {
+    /** booking_meetings.metadata flag: a create left the remote state unknown. */
+    public const string META_REMOTE_STATE_UNKNOWN = 'remote_state_unknown';
+
+    /** booking_meetings.metadata: what the last reconciliation query established. */
+    public const string META_RECONCILIATION = 'reconciliation';
+
+    /** booking_meetings.metadata: how an administrator resolved the ambiguity. */
+    public const string META_AMBIGUITY_RESOLUTION = 'ambiguity_resolution';
+
+    /**
+     * booking_meetings.metadata: append-only record of everything that
+     * happened to an ambiguous create — the unanswered request, every
+     * reconciliation query and what it established, and the final
+     * resolution (who, why, when). Survives every later write to the row.
+     */
+    public const string META_AMBIGUITY_HISTORY = 'ambiguity_history';
+
+    /** How far a remote meeting's start may sit from the booking before an adoption with no agenda reference is refused. */
+    private const int ADOPTION_TIME_TOLERANCE_HOURS = 24;
+
     public function __construct(
         private readonly BookingRepositoryInterface $bookings,
         private readonly MeetingProviderResolver $providers,
@@ -70,10 +94,13 @@ final class BookingMeetingService implements BookingMeetingServiceInterface
         private readonly AuditTrailService $audit,
         private readonly StudentLifecycleService $studentLifecycle,
         private readonly RecordingService $recordings,
+        private readonly MeetingHostCapacityService $hostCapacity,
     ) {}
 
     public function createMeeting(Booking $booking, ?string $providerKey = null): ?BookingMeeting
     {
+        // Cheap pre-checks outside the lock; the locked re-read below is
+        // what actually decides.
         $existing = $this->findForBooking($booking);
 
         if ($existing?->status === MeetingStatus::Created) {
@@ -84,10 +111,35 @@ final class BookingMeetingService implements BookingMeetingServiceInterface
             return $existing;
         }
 
-        $key = $providerKey ?? $this->settings->default_provider;
+        // One remote create per booking, ever. The unique local row only
+        // proves one ROW exists; two callers (a redelivered listener and
+        // an admin retry, say) racing past the read above would each ask
+        // the provider for a meeting. The lock serializes them so the
+        // second re-reads a Created row and stops.
+        return $this->bookings->withMeetingCreationLock(
+            $booking->id,
+            fn (): ?BookingMeeting => $this->createMeetingLocked($booking->fresh(['meeting']), $providerKey),
+        );
+    }
+
+    private function createMeetingLocked(Booking $booking, ?string $providerKey): ?BookingMeeting
+    {
+        $existing = $this->findForBooking($booking);
+
+        if ($existing?->status === MeetingStatus::Created) {
+            return $existing;
+        }
+
+        // Explicit admin choice > the provider the booking was ACCEPTED
+        // for (meeting_provider_intent, pinned when capacity reservation
+        // is on) > today's global default. The intent is what stops a
+        // later default-provider change from routing an accepted booking
+        // onto a Zoom host nobody reserved — or away from one it holds.
+        $pinned = $providerKey ?? $booking->meeting_provider_intent;
+        $key = $pinned ?? $this->settings->default_provider;
 
         try {
-            $provider = $providerKey !== null ? $this->providers->resolve($key) : $this->providers->current();
+            $provider = $pinned !== null ? $this->providers->resolve($key) : $this->providers->current();
         } catch (BookingException $e) {
             if (! $this->settings->meetings_enabled && $providerKey === null) {
                 // Deliberate platform-wide off switch on the automatic path — no failure noise.
@@ -101,8 +153,44 @@ final class BookingMeetingService implements BookingMeetingServiceInterface
         $previousJoinUrl = $existing?->join_url;
 
         $meeting = DB::transaction(function () use ($booking, $existing, $provider): BookingMeeting {
+            $context = new MeetingCreationContext(requestedBy: Auth::id());
+            $hostId = null;
+
+            // A capacity-governed provider never gets a meeting without a
+            // reservation. Normally the booking reserved at acceptance and
+            // this only reads it back; a booking accepted before the
+            // feature (or a manual admin choice of Zoom) reserves here,
+            // and is refused clearly — recorded as a failed meeting, never
+            // a silent switch — when no host has room. A meeting that
+            // already exists is pinned to the host it lives on.
+            if ($this->hostCapacity->appliesTo($provider->key())) {
+                try {
+                    $reservation = $this->hostCapacity->ensureReserved(
+                        $booking,
+                        requiredHostId: $existing?->provider === $provider->key() ? $existing->platform_meeting_host_id : null,
+                    );
+                } catch (MeetingHostCapacityException $e) {
+                    return $this->persistFailure($booking, $provider->key(), $e->getMessage());
+                }
+
+                $hostId = $reservation->platform_meeting_host_id;
+                $context = new MeetingCreationContext(
+                    requestedBy: $context->requestedBy,
+                    hostReference: $reservation->host->host_reference,
+                );
+            }
+
             try {
-                $context = new MeetingCreationContext(requestedBy: Auth::id());
+                // A previous attempt left the remote state UNKNOWN. Ask the
+                // provider what it holds. Exactly one remote meeting for
+                // this booking is adopted; ANYTHING else fails closed and
+                // waits for an operator (meetings:resolve-ambiguous) —
+                // "no match" does not prove the original create failed,
+                // and several matches cannot be chosen between.
+                if ($this->remoteStateUnknown($existing, $provider->key())) {
+                    return $this->reconcileAmbiguous($booking, $existing, $provider, $context, $hostId);
+                }
+
                 // Same-provider retry updates the provider-side resource;
                 // a cross-provider retry (e.g. Google failed → admin picks
                 // Zoom) must create fresh — the old row's provider ids
@@ -110,11 +198,25 @@ final class BookingMeetingService implements BookingMeetingServiceInterface
                 $result = $existing !== null && $existing->provider === $provider->key()
                     ? $provider->updateMeeting($existing, $context->toUpdateContext())
                     : $provider->createMeeting($booking, $context);
+            } catch (AmbiguousMeetingCreationException $e) {
+                // Zoom MAY hold a meeting we have no id for. Recorded as
+                // such: automatic paths do not re-run for a Failed row, and
+                // the next explicit attempt reconciles (above) before it
+                // creates. Never a blind retry, never a silent duplicate.
+                return $this->persistFailure(
+                    $booking,
+                    $provider->key(),
+                    $e->getMessage(),
+                    $this->withAmbiguityEvent($existing, [self::META_REMOTE_STATE_UNKNOWN => true], ['event' => 'ambiguous_create', 'reason' => Str::limit($e->getMessage(), 300)]),
+                    $hostId,
+                );
             } catch (Throwable $e) {
-                return $this->persistFailure($booking, $provider->key(), $e->getMessage());
+                return $this->persistFailure($booking, $provider->key(), $e->getMessage(), null, $hostId);
             }
 
-            return $this->persistResult($booking, $result);
+            // A create that follows a resolved ambiguity keeps the story of
+            // how it got here; the provider's own metadata never replaces it.
+            return $this->persistResult($booking, $result, $hostId, $this->carriedAmbiguityRecord($existing));
         });
 
         $this->dispatchTransitionEvents($booking, $meeting, $previousStatus, $previousJoinUrl);
@@ -124,6 +226,352 @@ final class BookingMeetingService implements BookingMeetingServiceInterface
         }
 
         return $meeting;
+    }
+
+    private function remoteStateUnknown(?BookingMeeting $existing, string $providerKey): bool
+    {
+        return $existing !== null
+            && $existing->provider === $providerKey
+            && ($existing->metadata[self::META_REMOTE_STATE_UNKNOWN] ?? false) === true;
+    }
+
+    /**
+     * What the per-booking lock guarantees and what it cannot:
+     *
+     *   GUARANTEED (local): SIRI issues at most one create request per
+     *   booking at a time, and once a row is Created no further create
+     *   is ever issued.
+     *
+     *   NOT GUARANTEED (remote): whether a create request that received
+     *   no answer reached Zoom. That is exactly the ambiguous state, and
+     *   it is resolved by evidence, never by assumption.
+     *
+     * Only `found` (one remote meeting carrying this booking's reference)
+     * is evidence enough to act on automatically. `none` and
+     * `inconclusive` keep remote_state_unknown, record what was seen, and
+     * return a failed row; the automatic paths never re-run for a failed
+     * row, and repeated explicit attempts repeat only the query.
+     */
+    private function reconcileAmbiguous(
+        Booking $booking,
+        BookingMeeting $existing,
+        MeetingProviderInterface $provider,
+        MeetingCreationContext $context,
+        ?string $hostId,
+    ): BookingMeeting {
+        if (! $provider instanceof ReconcilesAmbiguousMeetings) {
+            return $this->persistFailure(
+                $booking,
+                $provider->key(),
+                'A previous attempt left the remote meeting state unknown and this provider cannot be queried; resolve it manually with meetings:resolve-ambiguous.',
+                $this->withAmbiguityEvent($existing, [self::META_REMOTE_STATE_UNKNOWN => true], ['event' => 'reconciliation_unavailable']),
+                $hostId,
+            );
+        }
+
+        $reconciliation = $provider->findExistingMeeting($booking, $context);
+        $queryEvent = [
+            'event' => 'reconciliation',
+            'status' => $reconciliation->status,
+            'exhaustive' => $reconciliation->exhaustive,
+            'candidate_ids' => $reconciliation->candidateIds,
+        ];
+
+        if ($reconciliation->isFound()) {
+            $candidate = (string) $reconciliation->singleCandidate();
+
+            // The reference in the agenda is unique to this booking, but a
+            // local row may still already own that id (a race with an
+            // admin adoption, a copied id). Never two bookings, one meeting.
+            $this->assertNotOwnedByAnotherBooking($booking, $provider->key(), $candidate);
+
+            $result = $provider->adoptExistingMeeting($booking, $candidate, $context);
+            $meeting = $this->persistResult(
+                $booking,
+                $result,
+                $hostId,
+                $this->withAmbiguityEvent($existing, [], $queryEvent, ['event' => 'adopted', 'by' => 'reconciliation', 'provider_meeting_id' => $candidate]),
+            );
+
+            $this->audit->logSystem(
+                'bookings',
+                'meeting_adopted_after_ambiguity',
+                sprintf('Booking %s: the remote meeting created by an earlier unanswered request was found and adopted.', $booking->reference),
+                $booking,
+                ['provider' => $provider->key(), 'provider_meeting_id' => $result->providerMeetingId],
+            );
+
+            return $meeting;
+        }
+
+        return $this->persistFailure(
+            $booking,
+            $provider->key(),
+            sprintf('Remote meeting state still unknown after reconciliation: %s Resolve with meetings:resolve-ambiguous.', $reconciliation->reason),
+            $this->withAmbiguityEvent($existing, [
+                self::META_REMOTE_STATE_UNKNOWN => true,
+                self::META_RECONCILIATION => [
+                    'status' => $reconciliation->status,
+                    'exhaustive' => $reconciliation->exhaustive,
+                    'candidate_ids' => $reconciliation->candidateIds,
+                    'checked_at' => now()->toIso8601String(),
+                ],
+            ], $queryEvent),
+            $hostId,
+        );
+    }
+
+    /**
+     * Metadata for the next write, carrying the row's append-only
+     * ambiguity history forward plus the new event(s), each stamped.
+     *
+     * @param  array<string, mixed>  $metadata
+     * @param  array<string, mixed>  ...$events
+     * @return array<string, mixed>
+     */
+    private function withAmbiguityEvent(?BookingMeeting $existing, array $metadata, array ...$events): array
+    {
+        $history = $existing?->metadata[self::META_AMBIGUITY_HISTORY] ?? [];
+
+        foreach ($events as $event) {
+            $history[] = ['at' => now()->toIso8601String(), ...$event];
+        }
+
+        $metadata[self::META_AMBIGUITY_HISTORY] = array_values($history);
+
+        return $metadata;
+    }
+
+    /**
+     * The append-only ambiguity record on an existing row, to be merged
+     * into whatever is written next so no later write can erase it.
+     *
+     * @return array<string, mixed>
+     */
+    private function carriedAmbiguityRecord(?BookingMeeting $existing): array
+    {
+        $metadata = $existing?->metadata ?? [];
+        $carried = [];
+
+        foreach ([self::META_AMBIGUITY_HISTORY, self::META_AMBIGUITY_RESOLUTION] as $key) {
+            if (isset($metadata[$key])) {
+                $carried[$key] = $metadata[$key];
+            }
+        }
+
+        return $carried;
+    }
+
+    /** @throws BookingException when another local booking already owns this remote meeting */
+    private function assertNotOwnedByAnotherBooking(Booking $booking, string $providerKey, string $providerMeetingId): void
+    {
+        $owner = BookingMeeting::query()
+            ->where('provider', $providerKey)
+            ->where('provider_meeting_id', $providerMeetingId)
+            ->where('booking_id', '!=', $booking->id)
+            ->first();
+
+        if ($owner !== null) {
+            throw new BookingException(sprintf(
+                'Remote meeting %s already belongs to booking %s and cannot be adopted for %s.',
+                $providerMeetingId,
+                $owner->booking?->reference ?? $owner->booking_id,
+                $booking->reference,
+            ));
+        }
+    }
+
+    // ── Explicit resolution of an ambiguous create ────────────────────
+
+    public function acknowledgeNoRemoteMeeting(Booking $booking, User $admin, string $reason): BookingMeeting
+    {
+        Gate::forUser($admin)->authorize('update', $booking);
+
+        $reason = trim($reason);
+
+        if ($reason === '') {
+            throw new BookingException('A reason is required to declare that no remote meeting exists.');
+        }
+
+        return $this->bookings->withMeetingCreationLock($booking->id, function () use ($booking, $admin, $reason): BookingMeeting {
+            $existing = $this->findForBooking($booking);
+
+            if ($existing === null || ($existing->metadata[self::META_REMOTE_STATE_UNKNOWN] ?? false) !== true) {
+                throw new BookingException(sprintf('Booking %s has no unresolved ambiguous meeting creation.', $booking->reference));
+            }
+
+            // Everything already recorded stays (the unanswered create, each
+            // reconciliation and what it saw); the declaration is appended.
+            $resolution = [
+                'outcome' => 'no_remote_meeting',
+                'by' => $admin->id,
+                'reason' => Str::limit($reason, 500),
+                'at' => now()->toIso8601String(),
+            ];
+            $metadata = $this->withAmbiguityEvent($existing, $existing->metadata ?? [], ['event' => 'resolved_no_remote_meeting', 'by' => $admin->id, 'reason' => $resolution['reason']]);
+            $metadata[self::META_REMOTE_STATE_UNKNOWN] = false;
+            $metadata[self::META_AMBIGUITY_RESOLUTION] = $resolution;
+
+            $existing->forceFill(['metadata' => $metadata, 'updated_by' => $admin->id])->save();
+
+            $this->audit->logSystem(
+                'bookings',
+                'meeting_ambiguity_acknowledged',
+                sprintf('Booking %s: an administrator confirmed no remote meeting exists for the earlier unanswered create; a new create may proceed.', $booking->reference),
+                $booking,
+                ['provider' => $existing->provider, 'admin_id' => $admin->id, 'reason' => Str::limit($reason, 500)],
+            );
+
+            return $existing;
+        });
+    }
+
+    public function adoptRemoteMeeting(Booking $booking, string $providerMeetingId, User $admin): BookingMeeting
+    {
+        Gate::forUser($admin)->authorize('update', $booking);
+
+        $providerMeetingId = trim($providerMeetingId);
+
+        if ($providerMeetingId === '') {
+            throw new BookingException('A provider meeting id is required.');
+        }
+
+        return $this->bookings->withMeetingCreationLock($booking->id, function () use ($booking, $providerMeetingId, $admin): BookingMeeting {
+            $existing = $this->findForBooking($booking);
+
+            if ($existing === null || $existing->status === MeetingStatus::Created) {
+                throw new BookingException(sprintf('Booking %s has no failed meeting to resolve.', $booking->reference));
+            }
+
+            $provider = $this->providers->resolve($existing->provider);
+
+            if (! $provider instanceof ReconcilesAmbiguousMeetings) {
+                throw new BookingException(sprintf('Provider "%s" cannot adopt an existing remote meeting.', $existing->provider));
+            }
+
+            $previousJoinUrl = $existing->join_url;
+
+            $meeting = DB::transaction(function () use ($booking, $existing, $provider, $providerMeetingId, $admin): BookingMeeting {
+                $context = new MeetingCreationContext(requestedBy: $admin->id);
+                $hostId = null;
+                $hostReference = null;
+
+                if ($this->hostCapacity->appliesTo($provider->key())) {
+                    $reservation = $this->hostCapacity->ensureReserved($booking, requiredHostId: $existing->platform_meeting_host_id);
+                    $hostId = $reservation->platform_meeting_host_id;
+                    $hostReference = $reservation->host->host_reference;
+                    $context = new MeetingCreationContext(requestedBy: $admin->id, hostReference: $hostReference);
+                }
+
+                // An administrator's id is a claim, not proof. Before a
+                // single byte is written locally or remotely the meeting is
+                // READ and checked: it exists; it runs under the platform
+                // host this booking is reserved on; no other local booking
+                // owns it; its agenda does not name a different booking;
+                // and its start time is not wildly elsewhere when the
+                // agenda carries no reference at all.
+                $evidence = $this->verifyAdoptable($booking, $provider, $providerMeetingId, $context, $hostReference);
+
+                $result = $provider->adoptExistingMeeting($booking, $providerMeetingId, $context);
+                $meeting = $this->persistResult(
+                    $booking,
+                    $result,
+                    $hostId,
+                    $this->withAmbiguityEvent($existing, [], ['event' => 'adopted', 'by' => $admin->id, 'provider_meeting_id' => $providerMeetingId, 'evidence' => $evidence]),
+                );
+
+                $this->audit->logSystem(
+                    'bookings',
+                    'meeting_adopted_by_admin',
+                    sprintf('Booking %s: an administrator identified remote meeting %s as this booking\'s meeting; it was verified and adopted.', $booking->reference, $providerMeetingId),
+                    $booking,
+                    ['provider' => $provider->key(), 'provider_meeting_id' => $providerMeetingId, 'admin_id' => $admin->id, 'evidence' => $evidence],
+                );
+
+                return $meeting;
+            });
+
+            $this->dispatchTransitionEvents($booking, $meeting, $existing->status, $previousJoinUrl);
+
+            if ($meeting->status === MeetingStatus::Created) {
+                $this->registerRecordingIfEligible($booking, $meeting, $provider);
+            }
+
+            return $meeting;
+        });
+    }
+
+    /**
+     * The checks an operator-supplied meeting id must pass before
+     * adoption. Returns the evidence recorded with the adoption.
+     *
+     * @return array<string, mixed>
+     *
+     * @throws BookingException when any check fails
+     */
+    private function verifyAdoptable(
+        Booking $booking,
+        ReconcilesAmbiguousMeetings $provider,
+        string $providerMeetingId,
+        MeetingCreationContext $context,
+        ?string $hostReference,
+    ): array {
+        $identity = $provider->describeExistingMeeting($providerMeetingId, $context);
+
+        if ($identity === null) {
+            throw new BookingException(sprintf('Remote meeting %s does not exist at the provider.', $providerMeetingId));
+        }
+
+        $expectedHost = $hostReference ?? ($this->settings->zoom_host_user_id ?? $this->settings->zoom_host_email);
+
+        if ($expectedHost === null || $expectedHost === '') {
+            throw new BookingException('No platform host is configured to check the meeting against.');
+        }
+
+        if ($identity->hostId === null && $identity->hostEmail === null) {
+            throw new BookingException(sprintf('Remote meeting %s reports no host; it cannot be verified as a platform meeting.', $providerMeetingId));
+        }
+
+        if (! $identity->isHostedBy($expectedHost)) {
+            throw new BookingException(sprintf(
+                'Remote meeting %s is not hosted by the platform host (%s); it belongs to another user or account.',
+                $providerMeetingId,
+                $expectedHost,
+            ));
+        }
+
+        $this->assertNotOwnedByAnotherBooking($booking, $provider->key(), $providerMeetingId);
+
+        $referenceInAgenda = $identity->bookingReferenceInAgenda();
+
+        if ($referenceInAgenda !== null && $referenceInAgenda !== $booking->reference) {
+            throw new BookingException(sprintf(
+                'Remote meeting %s was created for booking %s, not %s.',
+                $providerMeetingId,
+                $referenceInAgenda,
+                $booking->reference,
+            ));
+        }
+
+        if ($referenceInAgenda === null && $identity->startsAt !== null) {
+            $driftHours = abs($identity->startsAt->diffInHours($booking->starts_at->utc(), false));
+
+            if ($driftHours > self::ADOPTION_TIME_TOLERANCE_HOURS) {
+                throw new BookingException(sprintf(
+                    'Remote meeting %s carries no booking reference and starts %s, more than %d hours from this lesson; it cannot be adopted.',
+                    $providerMeetingId,
+                    $identity->startsAt->toIso8601String(),
+                    self::ADOPTION_TIME_TOLERANCE_HOURS,
+                ));
+            }
+        }
+
+        return [
+            'host_matched' => $expectedHost,
+            'agenda_reference' => $referenceInAgenda,
+            'remote_starts_at' => $identity->startsAt?->toIso8601String(),
+            'booking_starts_at' => $booking->starts_at->utc()->toIso8601String(),
+        ];
     }
 
     /**
@@ -508,7 +956,11 @@ final class BookingMeetingService implements BookingMeetingServiceInterface
         }
     }
 
-    private function persistResult(Booking $booking, MeetingCreationResult $result): BookingMeeting
+    /**
+     * @param  array<string, mixed>  $extraMetadata  merged over the provider's result metadata —
+     *                                               used to carry the ambiguity history across an adoption
+     */
+    private function persistResult(Booking $booking, MeetingCreationResult $result, ?string $hostId = null, array $extraMetadata = []): BookingMeeting
     {
         $failureReason = $result->status === MeetingStatus::Failed
             ? 'Meeting provider reported a conference creation failure.'
@@ -516,6 +968,7 @@ final class BookingMeetingService implements BookingMeetingServiceInterface
 
         $meeting = $this->upsert($booking, [
             'provider' => $result->provider,
+            ...($hostId !== null ? ['platform_meeting_host_id' => $hostId] : []),
             // Kept even on failure: Google's async conference can fail on
             // an event that was inserted successfully — the retry path
             // must update that event, not insert a duplicate.
@@ -529,7 +982,7 @@ final class BookingMeetingService implements BookingMeetingServiceInterface
             'timezone' => $result->timezone,
             'status' => $result->status,
             'failure_reason' => $failureReason,
-            'metadata' => $result->metadata,
+            'metadata' => [...$result->metadata, ...$extraMetadata],
         ]);
 
         $this->syncLegacyBookingColumns($booking, $meeting);
@@ -597,12 +1050,19 @@ final class BookingMeetingService implements BookingMeetingServiceInterface
         return $meeting;
     }
 
-    private function persistFailure(Booking $booking, string $providerKey, string $reason): BookingMeeting
+    /**
+     * @param  array<string, mixed>|null  $metadata  null replaces nothing; an array REPLACES the row's metadata
+     *                                               (so a definite failure after an ambiguous one clears the flag
+     *                                               by passing [] and an ambiguous one sets it)
+     */
+    private function persistFailure(Booking $booking, string $providerKey, string $reason, ?array $metadata = null, ?string $hostId = null): BookingMeeting
     {
         $meeting = $this->upsert($booking, [
             'provider' => $providerKey,
             'status' => MeetingStatus::Failed,
             'failure_reason' => Str::limit($reason, 500),
+            ...($metadata !== null ? ['metadata' => $metadata] : []),
+            ...($hostId !== null ? ['platform_meeting_host_id' => $hostId] : []),
         ]);
 
         $this->audit->logSystem(

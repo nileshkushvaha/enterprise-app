@@ -207,4 +207,10 @@ interface BookingRepositoryInterface
      * @throws BookingException when the lock cannot be acquired
      */
     public function withInstructorLock(int $instructorId, Closure $callback): mixed;
+
+    /**
+     * Serialize meeting creation for one booking (advisory lock keyed on
+     * the booking id). See BookingRepository::withMeetingCreationLock().
+     */
+    public function withMeetingCreationLock(string $bookingId, Closure $callback): mixed;
 }

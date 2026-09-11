@@ -295,6 +295,36 @@ final class ZoomRecordingWebhookTest extends TestCase
         $this->postJson(route('api.meetings.recordings.webhook', ['provider' => 'google_meet']), [])->assertNotFound();
     }
 
+    // ── Account ownership ─────────────────────────────────────────────
+
+    /**
+     * A correctly signed event that names a DIFFERENT Zoom account is
+     * contradictory and is refused, not correlated: a meeting id alone is
+     * never enough to trust an event with.
+     */
+    public function test_an_event_for_another_zoom_account_is_refused_even_when_correctly_signed(): void
+    {
+        Queue::fake();
+        $this->zoomLesson();
+        $payload = $this->recordingCompletedPayload();
+        $payload['payload']['account_id'] = 'someone-elses-account';
+
+        $this->sendWebhook($payload)->assertStatus(422)->assertJson(['message' => 'Malformed webhook payload.']);
+
+        $this->assertSame(0, RecordingProviderEvent::query()->count());
+        Queue::assertNotPushed(CaptureLessonRecordingJob::class);
+    }
+
+    public function test_an_event_for_the_configured_zoom_account_is_accepted(): void
+    {
+        Queue::fake();
+        $this->zoomLesson();
+        $payload = $this->recordingCompletedPayload();
+        $payload['payload']['account_id'] = 'acct-1';
+
+        $this->sendWebhook($payload)->assertOk()->assertJson(['status' => 'accepted']);
+    }
+
     // ── Endpoint ownership challenge ──────────────────────────────────
 
     /**

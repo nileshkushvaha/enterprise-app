@@ -26,12 +26,17 @@ use Throwable;
  *
  *  - STREAMED, never buffered. Fixed 1 MB chunks into a staged file, so
  *    a long class never occupies PHP memory. The size ceiling is
- *    enforced by RecordingStagingArea as bytes arrive, not trusted from
- *    a provider-declared Content-Length.
+ *    enforced by RecordingStagingArea::pump() as bytes arrive — never
+ *    trusted from a provider-declared Content-Length, which is used
+ *    only to refuse early and to detect a download that ended short.
  *  - NO ARBITRARY URLs. The download URL comes from Zoom's own API for
- *    this lesson's own meeting, and ZoomApiClient re-validates that the
- *    host is Zoom before opening a connection. Nothing user- or
- *    database-controlled can steer it.
+ *    this lesson's own meeting, and ZoomApiClient validates that the
+ *    host is an approved Zoom/CDN host — for the initial URL and for
+ *    every redirect hop — before opening a connection or sending the
+ *    bearer token. Nothing user- or database-controlled can steer it.
+ *  - CLEAN ON FAILURE. A refused hop, an oversized source, a short or
+ *    failed write and an incomplete read all abort, and the staged
+ *    .part file is removed by the staging area on every failure path.
  *  - NO TOKEN LEAKAGE. The short-lived download credential is used
  *    inside the client and never persisted, returned, or logged.
  */
@@ -63,27 +68,17 @@ final class ZoomRecordingStager
         $mimeType = $discovered->mimeType ?? 'video/mp4';
 
         try {
-            $stream = $this->client->openRecordingStream($downloadUrl, $downloadToken);
+            $download = $this->client->openRecordingStream($downloadUrl, $downloadToken);
         } catch (GatewayRequestException $e) {
             throw $this->translate($e);
         }
 
         try {
             return $this->staging->stageStream(
-                function ($handle) use ($stream): void {
-                    while (! feof($stream)) {
-                        $chunk = fread($stream, 1024 * 1024);
-
-                        if ($chunk === false) {
-                            throw new RecordingIngestionException(
-                                RecordingFailureCode::SourceDownloadFailed,
-                                'Zoom recording download stream failed mid-transfer.',
-                            );
-                        }
-
-                        fwrite($handle, $chunk);
-                    }
-                },
+                // The shared pump enforces the size ceiling as bytes
+                // arrive, checks every write, and treats a stream that
+                // ends short of the declared length as incomplete.
+                fn ($handle) => $this->staging->pump($download->stream, $handle, $download->expectedBytes),
                 sprintf('zoom-recording.%s', RecordingStagingArea::extensionFor($mimeType, 'recording.mp4')),
                 $mimeType,
             );
@@ -96,9 +91,7 @@ final class ZoomRecordingStager
                 previous: $e,
             );
         } finally {
-            if (is_resource($stream)) {
-                fclose($stream);
-            }
+            $download->close();
         }
     }
 
@@ -112,7 +105,10 @@ final class ZoomRecordingStager
         $message = strtolower($e->getMessage());
 
         $code = match (true) {
-            str_contains($message, 'non-zoom host') => RecordingFailureCode::SourceRejected,
+            // A refused destination or an oversized declared length is a
+            // property of the source, not a transient condition.
+            str_contains($message, 'non-zoom host'),
+            str_contains($message, 'size ceiling') => RecordingFailureCode::SourceRejected,
             str_contains($message, 'http 401'),
             str_contains($message, 'http 403') => RecordingFailureCode::SourceAccessDenied,
             str_contains($message, 'http 404'),

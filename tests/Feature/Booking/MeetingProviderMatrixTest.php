@@ -14,6 +14,7 @@ use App\Booking\Meetings\ManualMeetingProvider;
 use App\Booking\Meetings\ZoomMeetingProvider;
 use App\Booking\Services\MeetingProviderResolver;
 use App\Models\BookingMeeting;
+use App\Models\PlatformMeetingHost;
 use App\Settings\MeetingSettings;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Crypt;
@@ -65,8 +66,16 @@ final class MeetingProviderMatrixTest extends TestCase
         $settings->zoom_client_id = 'client-1';
         $settings->zoom_client_secret = Crypt::encryptString('shhh');
         $settings->zoom_host_user_id = 'host-1';
+        // Zoom is capacity-governed (docs/meetings.md §4a): a Zoom meeting is never
+        // created without a host reservation, so the fixture registers the host
+        // and switches new reservations on, as production must before using Zoom.
+        $settings->zoom_host_capacity_enabled = true;
         $settings->zoom_recording_enabled = $recording;
         $settings->save();
+        PlatformMeetingHost::query()->updateOrCreate(
+            ['provider' => ZoomMeetingProvider::KEY, 'host_reference' => 'host-1'],
+            ['label' => 'Test host', 'capacity' => 1, 'is_active' => true],
+        );
     }
 
     private function google(): GoogleCalendarMeetProvider
