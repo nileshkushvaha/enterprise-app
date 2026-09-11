@@ -18,6 +18,7 @@ use App\Booking\Enums\BookingActor;
 use App\Booking\Enums\BookingCheckoutState;
 use App\Booking\Enums\BookingPaymentStatus;
 use App\Booking\Enums\BookingStatus;
+use App\Booking\Enums\MeetingJoinAvailability;
 use App\Booking\Enums\RecordingPlaybackState;
 use App\Booking\Enums\RecurrenceEndCondition;
 use App\Booking\Enums\SeriesChangeScope;
@@ -797,6 +798,10 @@ final class BookingDetail extends Component
                 && app(BookingMeetingServiceInterface::class)->studentJoinUrlFor($this->booking, auth()->user()) !== null
                     ? app(BookingMeetingServiceInterface::class)->joinLinkFor($this->booking)
                     : null,
+            // The one join decision, plus the window edges it was made
+            // from, so the page can say "opens at" / "closes at" without
+            // recomputing the rule. Polled while the window is live.
+            ...$this->joinState(),
             // Same discipline for the recording: the blade renders only
             // the state RecordingPlaybackAccessResolver releases for the
             // authenticated viewer (playback setting, ownership, lifecycle,
@@ -813,6 +818,38 @@ final class BookingDetail extends Component
                     ->stateFor($this->booking->loadMissing('recording'), auth()->user())
                 : RecordingPlaybackState::Hidden,
         ]);
+    }
+
+    /**
+     * @return array{joinAvailability: MeetingJoinAvailability, joinOpensAt: ?CarbonImmutable, joinClosesAt: ?CarbonImmutable, pollJoinState: bool, awaitingCompletion: bool}
+     */
+    private function joinState(): array
+    {
+        $none = ['joinAvailability' => MeetingJoinAvailability::Unavailable, 'joinOpensAt' => null, 'joinClosesAt' => null, 'pollJoinState' => false, 'awaitingCompletion' => false];
+
+        if ($this->booking === null || auth()->user() === null) {
+            return $none;
+        }
+
+        $meetings = app(BookingMeetingServiceInterface::class);
+        $meeting = $this->booking->meeting;
+        $confirmed = $this->booking->status === BookingStatus::Confirmed;
+        $closesAt = $meeting !== null ? $meetings->joinWindowEndsAt($meeting) : null;
+
+        return [
+            'joinAvailability' => $confirmed ? $meetings->participantJoinAvailabilityFor($this->booking, auth()->user()) : MeetingJoinAvailability::Unavailable,
+            'joinOpensAt' => $meeting !== null ? $meetings->joinWindowStartsAt($meeting) : null,
+            'joinClosesAt' => $closesAt,
+            // Re-render on a timer only while the answer can still change
+            // on its own: from an hour before the window opens until it
+            // has closed. Server-side enforcement is untouched.
+            'pollJoinState' => $confirmed && $closesAt !== null && now()->lt($closesAt->addMinute())
+                && ($meeting?->starts_at === null || now()->gt($meetings->joinWindowStartsAt($meeting)?->subHour() ?? now()->addYear())),
+            // Ended, not yet marked complete: nothing about the recording
+            // can be said until the lesson outcome is finalised.
+            'awaitingCompletion' => $confirmed && $this->booking->hasEnded()
+                && ! (bool) $this->booking->lesson?->hasFinalizedOutcome(),
+        ];
     }
 
     private function loadRescheduleSlots(): void

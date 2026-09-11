@@ -9,8 +9,14 @@
             <x-ui.alert type="error" class="mb-4">{{ $banner }}</x-ui.alert>
         @endif
 
-        {{-- Summary header: the answers a student opens this page for —
-             which session, when, with whom, and what state it is in. --}}
+        @php
+            $viewerTz = \App\Support\Timezone\ViewerDateTime::timezoneFor();
+            $joinLive = $isActive && $booking->status->value === 'confirmed';
+            $joinOpen = $joinLive && $joinAvailability === \App\Booking\Enums\MeetingJoinAvailability::Available && $joinUrl;
+        @endphp
+
+        {{-- Summary: which session, when (once, as a full range in the viewer's
+             timezone), what state it is in, and the single join action. --}}
         <x-account.card class="mb-4">
             <div class="flex flex-wrap items-start justify-between gap-4">
                 <div class="min-w-0">
@@ -21,8 +27,9 @@
                             <x-ui.badge :color="$booking->payment_status->color()">{{ $booking->payment_status->label() }}</x-ui.badge>
                         @endif
                     </div>
-                    <p class="mt-1.5 text-sm text-fg-muted">
-                        {{ viewer_datetime_labelled($booking->starts_at) }}
+                    <p class="mt-1.5 text-sm font-semibold text-fg-strong">
+                        {{ viewer_datetime($booking->starts_at, 'D, j M Y') }} · {{ viewer_time($booking->starts_at) }}–{{ viewer_time($booking->ends_at) }}
+                        <span class="font-normal text-fg-muted">({{ $viewerTz }})</span>
                     </p>
                     <p class="mt-1 text-xs text-fg-faint">Reference {{ $booking->reference }}</p>
                 </div>
@@ -35,12 +42,30 @@
                 @endif
             </div>
 
-            {{-- $joinUrl comes exclusively from BookingMeetingService::studentJoinUrlFor(); this blade never reads meeting->join_url directly. --}}
-            @if($booking->status->value === 'confirmed' && $joinUrl)
-                <div class="mt-5 flex flex-wrap items-center gap-3 border-t border-edge pt-4">
-                    <x-ui.button :href="$joinUrl" target="_blank" rel="noopener" size="sm">Join the lesson</x-ui.button>
-                    @if($booking->meeting?->password)
-                        <p class="text-xs text-fg-muted">Passcode: <span class="font-semibold text-fg-strong">{{ $booking->meeting->password }}</span></p>
+            {{-- Join state. $joinAvailability and $joinUrl come exclusively from
+                 BookingMeetingService (participantJoinAvailabilityFor /
+                 studentJoinUrlFor); this blade never reads meeting->join_url.
+                 Polled while the window can still change on its own. --}}
+            @if($joinLive)
+                <div class="mt-4 border-t border-edge pt-4" @if($pollJoinState) wire:poll.60s @endif data-join-state="{{ $joinAvailability->value }}">
+                    @if($joinOpen)
+                        <div class="flex flex-wrap items-center gap-3">
+                            <x-ui.button :href="$joinUrl" target="_blank" rel="noopener" size="sm">Join the lesson</x-ui.button>
+                            @if($booking->meeting?->password)
+                                <p class="text-xs text-fg-muted">Passcode <span class="font-semibold text-fg-strong">{{ $booking->meeting->password }}</span></p>
+                            @endif
+                        </div>
+                        @if($booking->hasEnded() && $joinClosesAt)
+                            <p class="mt-2 text-sm text-fg-muted">Scheduled time ended. Joining closes at {{ viewer_time($joinClosesAt) }}.</p>
+                        @elseif($booking->hasStarted())
+                            <p class="mt-2 text-sm text-fg-muted">This lesson is in progress.</p>
+                        @endif
+                    @elseif($joinAvailability === \App\Booking\Enums\MeetingJoinAvailability::TooEarly && $joinOpensAt)
+                        <p class="text-sm text-fg-muted">Joining opens at {{ viewer_datetime($joinOpensAt, 'D, j M · g:i A') }}.</p>
+                    @elseif($joinAvailability === \App\Booking\Enums\MeetingJoinAvailability::NotReady && ! $booking->hasEnded())
+                        <p class="text-sm text-fg-muted">The meeting link is being prepared.</p>
+                    @elseif($booking->hasEnded() && $joinClosesAt)
+                        <p class="text-sm text-fg-muted">Joining closed at {{ viewer_time($joinClosesAt) }}.</p>
                     @endif
                 </div>
             @endif
@@ -48,18 +73,14 @@
 
         <x-account.card title="Session details">
             <dl class="grid grid-cols-1 gap-x-6 gap-y-4 text-sm sm:grid-cols-2">
-                <div>
-                    <dt class="text-[11px] font-bold uppercase tracking-wide text-fg-faint">When</dt>
-                    <dd class="mt-1 font-semibold text-fg-strong">{{ viewer_datetime_labelled($booking->starts_at) }}</dd>
-                </div>
-                <div>
-                    {{-- TZ-4: provenance, not the viewer's clock. The "When"
-                         line above already carries the viewer's own timezone
-                         label; this records which timezone the booking was
-                         originally made in (see Booking's class docblock). --}}
-                    <dt class="text-[11px] font-bold uppercase tracking-wide text-fg-faint">Booked in</dt>
-                    <dd class="mt-1 font-semibold text-fg-strong">{{ $booking->timezone }}</dd>
-                </div>
+                @if($booking->timezone && $booking->timezone !== $viewerTz)
+                    {{-- TZ-4: provenance. The header shows the viewer's clock;
+                         this records the timezone the booking was made in. --}}
+                    <div>
+                        <dt class="text-[11px] font-bold uppercase tracking-wide text-fg-faint">Booked in</dt>
+                        <dd class="mt-1 font-semibold text-fg-strong">{{ $booking->timezone }}</dd>
+                    </div>
+                @endif
                 <div>
                     <dt class="text-[11px] font-bold uppercase tracking-wide text-fg-faint">Instructor</dt>
                     <dd class="mt-1 font-semibold">
@@ -88,19 +109,6 @@
                         </dd>
                     </div>
                 @endif
-                @if($booking->status->value === 'confirmed')
-                    <div>
-                        <dt class="text-[11px] font-bold uppercase tracking-wide text-fg-faint">Meeting</dt>
-                        @if($joinUrl)
-                            <dd class="mt-1"><a href="{{ $joinUrl }}" target="_blank" rel="noopener" class="font-semibold text-indigo-600 underline underline-offset-2 dark:text-indigo-300">Join link</a></dd>
-                            @if($booking->meeting?->password)
-                                <dd class="mt-1 text-xs text-fg-muted">Passcode: {{ $booking->meeting->password }}</dd>
-                            @endif
-                        @else
-                            <dd class="mt-1 text-sm text-fg-muted">Meeting link is being prepared.</dd>
-                        @endif
-                    </div>
-                @endif
                 {{-- $recordingState comes exclusively from RecordingPlaybackAccessResolver::stateFor(); the recording row is used here only as the route key, never inspected. --}}
                 @if($recordingState->isVisible())
                     <div class="sm:col-span-2">
@@ -112,6 +120,12 @@
                             @endif
                         </dd>
                         <dd class="mt-1 text-xs text-fg-muted">{{ $recordingState->description() }}</dd>
+                    </div>
+                @elseif($awaitingCompletion)
+                    <div class="sm:col-span-2">
+                        <dt class="text-[11px] font-bold uppercase tracking-wide text-fg-faint">Recording</dt>
+                        <dd class="mt-1"><x-ui.badge color="slate">Awaiting completion</x-ui.badge></dd>
+                        <dd class="mt-1 text-xs text-fg-muted">If this lesson was recorded, the recording appears here once the lesson is marked complete.</dd>
                     </div>
                 @endif
             </dl>
@@ -129,9 +143,7 @@
                 @endif
             @endif
 
-            @if($booking->payment_status->value === 'paid')
-                <p class="mt-5 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-600 dark:text-emerald-300">Paid</p>
-            @elseif($booking->payment_status->value === 'refunded')
+            @if($booking->payment_status->value === 'refunded')
                 <p class="mt-5 rounded-xl border border-slate-500/20 bg-slate-500/10 px-4 py-3 text-sm text-fg-muted">
                     @if($this->paymentWasCreditedToWallet())
                         Payment received after this booking's slot was released — the amount was credited to your wallet.
@@ -212,13 +224,13 @@
             @endif
 
             @if($isActive && $booking->hasStarted())
-                <div class="mt-6 rounded-xl border border-edge bg-surface-raised px-4 py-3 text-sm text-fg-muted" data-lesson-started-notice>
+                <p class="mt-6 border-t border-edge pt-4 text-xs text-fg-muted" data-lesson-started-notice>
                     @if($booking->hasEnded())
-                        This lesson has ended. It will be marked as completed automatically, and rescheduling or cancelling is no longer available.
+                        This lesson has ended. Rescheduling and cancelling are no longer available.
                     @else
-                        This lesson is in progress. Rescheduling or cancelling is no longer available.
+                        This lesson is in progress. Rescheduling and cancelling are no longer available.
                     @endif
-                </div>
+                </p>
             @elseif($isActive)
                 <div class="mt-6 flex flex-wrap gap-3 border-t border-edge pt-5">
                     @if($rescheduleAllowance === null || $rescheduleAllowance['allowed'])

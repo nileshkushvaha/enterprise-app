@@ -310,4 +310,86 @@ class MeetingSettingsPageTest extends TestCase
         $this->assertFalse(app(MeetingSettings::class)->meetings_enabled);
         $this->assertNull($this->latestMeetingSettingsUpdate());
     }
+
+    // ── Layout and derived readouts ───────────────────────────────────
+
+    public function test_the_page_groups_controls_and_uses_the_short_labels(): void
+    {
+        $this->actingAs($this->superAdmin())
+            ->get(MeetingSettingsPage::getUrl())
+            ->assertOk()
+            ->assertSee('General')
+            ->assertSee('Joining')
+            ->assertSee('Recording & Playback')
+            ->assertSee('Recording Storage')
+            ->assertSee('Google Meet')
+            ->assertSee('Enable meetings')
+            ->assertSee('Record new lessons')
+            ->assertSee('Student playback')
+            ->assertSee('Join domain')
+            ->assertSee('Allow joining before start (minutes)')
+            ->assertSee('Allow joining after end (minutes)')
+            ->assertSee('Google Meet and Zoom alike')
+            ->assertDontSee('Visible Before')
+            ->assertDontSee('Visible After');
+    }
+
+    public function test_the_join_window_example_follows_the_saved_values_and_names_the_timezone(): void
+    {
+        $settings = app(MeetingSettings::class);
+        $settings->meeting_link_visible_before_minutes = 15;
+        $settings->meeting_link_visible_after_minutes = 15;
+        $settings->save();
+
+        $component = Livewire::actingAs($this->superAdmin())->test(MeetingSettingsPage::class);
+
+        $component->assertSee('For a 7–8 PM lesson, joining is available from 6:45 PM to 8:15 PM (');
+
+        $component->fillForm(['meeting_link_visible_before_minutes' => 30, 'meeting_link_visible_after_minutes' => 0])
+            ->assertSee('from 6:30 PM to 8:00 PM (');
+    }
+
+    public function test_the_auto_close_helper_names_only_providers_that_can_end_a_meeting(): void
+    {
+        $this->actingAs($this->superAdmin())
+            ->get(MeetingSettingsPage::getUrl())
+            ->assertSee('Supported by Google Meet.')
+            ->assertDontSee('Supported by Google Meet and Zoom');
+    }
+
+    public function test_recording_storage_warns_when_drive_is_selected_but_not_usable(): void
+    {
+        config(['recordings.storage_driver' => 'google_drive']);
+
+        $settings = app(MeetingSettings::class);
+        $settings->recording_drive_root_folder_id = null;
+        $settings->google_credentials_configured = false;
+        $settings->save();
+
+        $this->actingAs($this->superAdmin())
+            ->get(MeetingSettingsPage::getUrl())
+            ->assertSee('Recordings cannot be stored')
+            ->assertSee('the Drive folder ID')
+            ->assertSee('a stored Google service account key')
+            ->assertSee('does not cover storage');
+
+        $settings->recording_drive_root_folder_id = 'folder-123';
+        $settings->google_credentials_configured = true;
+        $settings->save();
+
+        $this->actingAs($this->superAdmin())
+            ->get(MeetingSettingsPage::getUrl())
+            ->assertSee('Google Drive storage is configured')
+            ->assertDontSee('Recordings cannot be stored');
+    }
+
+    public function test_recording_storage_warning_is_silent_when_drive_is_not_the_backend(): void
+    {
+        config(['recordings.storage_driver' => 'filesystem']);
+
+        $this->actingAs($this->superAdmin())
+            ->get(MeetingSettingsPage::getUrl())
+            ->assertSee('Local filesystem (development only)')
+            ->assertDontSee('Recordings cannot be stored');
+    }
 }

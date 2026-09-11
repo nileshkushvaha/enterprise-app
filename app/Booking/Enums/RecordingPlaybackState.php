@@ -51,10 +51,10 @@ enum RecordingPlaybackState: string
     {
         return match ($this) {
             self::Hidden => '',
-            self::Processing => 'Your lesson recording is being prepared. It usually appears within an hour of the lesson ending.',
-            self::Available => 'Watch this lesson again from your account.',
-            self::Unavailable => 'A recording of this lesson is not available. Contact support if you believe this is an error.',
-            self::Expired => 'Recordings are kept for a limited time after the lesson, and this one has now been removed.',
+            self::Processing => 'The recording is being prepared and will appear here when it is ready.',
+            self::Available => 'Watch this lesson again any time while it is kept.',
+            self::Unavailable => 'No recording is available for this lesson. Contact support if you think that is wrong.',
+            self::Expired => 'Recordings are kept for a limited time, and this one has been removed.',
         };
     }
 

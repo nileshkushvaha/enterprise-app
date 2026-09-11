@@ -919,6 +919,11 @@ final class BookingMeetingService implements BookingMeetingServiceInterface
         return $this->windowEndsAt($meeting->ends_at ?? $meeting->booking?->ends_at);
     }
 
+    public function joinWindowStartsAt(BookingMeeting $meeting): ?CarbonImmutable
+    {
+        return $this->windowStartsAt($meeting->starts_at ?? $meeting->booking?->starts_at);
+    }
+
     /**
      * Shuts a finished lesson's meeting down at the provider.
      *

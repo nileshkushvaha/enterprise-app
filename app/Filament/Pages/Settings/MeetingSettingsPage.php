@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\Filament\Pages\Settings;
 
+use App\Booking\Contracts\EndsActiveMeetings;
 use App\Booking\Enums\GoogleMeetSpaceAccess;
 use App\Booking\Meetings\ZoomMeetingProvider;
+use App\Booking\Registry\MeetingProviderRegistry;
 use App\Booking\Services\GoogleCalendarConfigurationService;
 use App\Booking\Services\MeetingJoinHandoffService;
 use App\Booking\Services\RecordingAvailabilityResolver;
@@ -13,6 +15,7 @@ use App\Booking\Services\ZoomConfigurationService;
 use App\Booking\Services\ZoomHostCapacityPreflightService;
 use App\Filament\Navigation\Concerns\HasCentralizedNavigation;
 use App\Filament\Navigation\Concerns\HasSettingsSectionBreadcrumb;
+use App\Filament\Support\AdminDayRange;
 use App\Settings\MeetingSettings;
 use BackedEnum;
 use Closure;
@@ -35,6 +38,7 @@ use Filament\Support\Icons\Heroicon;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Crypt;
+use Illuminate\Support\HtmlString;
 use InvalidArgumentException;
 use JsonException;
 use Throwable;
@@ -77,7 +81,7 @@ class MeetingSettingsPage extends Page
 
     public function getSubheading(): string|Htmlable|null
     {
-        return 'How lesson meetings are created, joined, recorded, and which provider runs them.';
+        return 'How lessons get a meeting, when participants can join, and how recordings are kept.';
     }
 
     public function mount(): void
@@ -171,10 +175,10 @@ class MeetingSettingsPage extends Page
     public function form(Schema $schema): Schema
     {
         return $schema->components([
-            $this->meetingsSection(),
-            $this->joinLinksSection(),
-            $this->meetingCreationSection(),
+            $this->generalSection(),
+            $this->joiningSection(),
             $this->recordingSection(),
+            $this->recordingStorageSection(),
             $this->googleMeetSection(),
             $this->zoomSection(),
         ]);
@@ -182,59 +186,64 @@ class MeetingSettingsPage extends Page
 
     // ── Sections ──────────────────────────────────────────────────────
 
-    private function meetingsSection(): Section
+    private function generalSection(): Section
     {
-        return Section::make('Meetings')
-            ->description('Turn lesson meetings on and choose the provider that creates them.')
+        return Section::make('General')
+            ->description('Turn lesson meetings on, choose the provider, and decide when meetings are created.')
             ->columnSpanFull()
             ->schema([
                 Grid::make(2)->schema([
                     Toggle::make('meetings_enabled')
-                        ->label('Enable Meetings')
-                        ->helperText('Turn off to stop creating meeting links for any lesson.'),
+                        ->label('Enable meetings')
+                        ->helperText('Off stops creating meeting links for every lesson.'),
                     Select::make('default_provider')
-                        ->label('Default Provider')
-                        ->options([
-                            'manual' => 'Manual',
-                            'google_meet' => 'Google Meet',
-                            'zoom' => 'Zoom',
-                        ])
+                        ->label('Default provider')
+                        ->options(['manual' => 'Manual', 'google_meet' => 'Google Meet', 'zoom' => 'Zoom'])
                         ->required()
                         ->native(false)
-                        ->helperText('Used for automatically created meetings. It must be set up below.'),
+                        ->helperText('Used for automatically created meetings. Set it up below first.'),
+                    Toggle::make('create_after_demo_booking_confirmation')
+                        ->label('Auto-create for free demos')
+                        ->helperText('Create the meeting when a free demo is confirmed.'),
+                    Toggle::make('create_after_paid_booking_confirmation')
+                        ->label('Auto-create for paid lessons')
+                        ->helperText('Create the meeting when payment is confirmed. Off means an admin creates it.'),
                     Toggle::make('manual_provider_enabled')
-                        ->label('Allow Manual Links')
-                        ->helperText('Lets an admin paste a meeting link on a booking.'),
+                        ->label('Allow manual links')
+                        ->helperText('An admin can paste a meeting link on a booking.'),
                     TextInput::make('platform_meeting_account')
-                        ->label('Platform Meeting Account')
+                        ->label('Platform meeting account')
                         ->maxLength(255)
                         ->helperText('For reference only.'),
                 ]),
             ]);
     }
 
-    private function joinLinksSection(): Section
+    private function joiningSection(): Section
     {
-        return Section::make('Join Links')
-            ->description('When participants can join, and where the join link points.')
+        return Section::make('Joining')
+            ->description('When participants can join, who sees the link, and where it points.')
             ->columnSpanFull()
             ->schema([
                 Grid::make(2)->schema([
-                    $this->integerInput('meeting_link_visible_before_minutes', 'Open Before Start (minutes)', 0, 10080)
-                        ->helperText('How early the join link appears.'),
-                    $this->integerInput('meeting_link_visible_after_minutes', 'Open After End (minutes)', 0, 10080)
-                        ->helperText('How long the link stays available after the lesson ends.'),
+                    $this->integerInput('meeting_link_visible_before_minutes', 'Allow joining before start (minutes)', 0, 10080)
+                        ->live(debounce: 400)
+                        ->helperText('Participants can join this many minutes before the scheduled start.'),
+                    $this->integerInput('meeting_link_visible_after_minutes', 'Allow joining after end (minutes)', 0, 10080)
+                        ->live(debounce: 400)
+                        ->helperText('Joining closes this many minutes after the scheduled end.'),
+                    Placeholder::make('join_window_example')
+                        ->label('Example')
+                        ->columnSpanFull()
+                        ->content(fn (): string => $this->joinWindowExample()),
                     Toggle::make('student_join_url_visible')
-                        ->label('Students Can Join')
-                        ->helperText('Off hides the join link from students entirely.'),
+                        ->label('Students can join')
+                        ->helperText('Off hides the join link from students.'),
                     Toggle::make('instructor_join_url_visible')
-                        ->label('Instructors Can Join')
-                        ->helperText('Off hides the join link from instructors entirely.'),
-                    Toggle::make('meeting_auto_close_enabled')
-                        ->label('Close Meetings When the Window Ends')
-                        ->helperText('Ends the provider meeting so a class or recording cannot run on. Google Meet only.'),
+                        ->label('Instructors can join')
+                        ->helperText('Off hides the join link from instructors.'),
                     TextInput::make('participant_join_base_url')
-                        ->label('Join Link Domain')
+                        ->label('Join domain')
                         ->placeholder('https://meet.sirieducation.com')
                         ->maxLength(255)
                         ->rule(fn (): Closure => function (string $attribute, mixed $value, Closure $fail): void {
@@ -242,49 +251,79 @@ class MeetingSettingsPage extends Page
                                 $fail('Enter an HTTPS address with only a host, for example https://meet.sirieducation.com.');
                             }
                         })
-                        ->helperText('HTTPS address that join links use. Leave empty to use the main site.'),
+                        ->helperText('HTTPS address join links use. Leave empty to use the main site.'),
+                    Toggle::make('meeting_auto_close_enabled')
+                        ->label('Close the meeting when joining closes')
+                        ->helperText($this->autoCloseHelper()),
                 ]),
-            ]);
-    }
-
-    private function meetingCreationSection(): Section
-    {
-        return Section::make('Automatic Creation')
-            ->description('When a booking is confirmed, create its meeting without an admin.')
-            ->columnSpanFull()
-            ->schema([
-                Grid::make(2)->schema([
-                    Toggle::make('create_after_demo_booking_confirmation')
-                        ->label('Free Demos')
-                        ->helperText('Create the meeting as soon as a free demo is confirmed.'),
-                    Toggle::make('create_after_paid_booking_confirmation')
-                        ->label('Paid Lessons')
-                        ->helperText('Create the meeting as soon as payment is confirmed. Off means an admin creates it.'),
-                ]),
+                Section::make('Related controls that are not this window')
+                    ->collapsible()
+                    ->collapsed()
+                    ->schema([
+                        Placeholder::make('join_window_related')
+                            ->hiddenLabel()
+                            ->content(new HtmlString(implode('<br>', [
+                                '<strong>Joining window</strong> (above) — when the join link works for participants.',
+                                '<strong>Close the meeting</strong> — ends the provider meeting when the window closes, for providers that support it. Independent of the link.',
+                                '<strong>Recording capture delay</strong> — how long after the scheduled end SIRI first looks for a recording. Set in Recording, not here.',
+                                '<strong>Lesson completion</strong> — the lesson outcome is finalised by its own lifecycle; joining and recording never change it.',
+                            ]))),
+                    ]),
             ]);
     }
 
     private function recordingSection(): Section
     {
-        return Section::make('Recording')
-            ->description('Whether lessons are recorded, how long recordings are kept, and who can watch them.')
+        return Section::make('Recording & Playback')
+            ->description('Whether new lessons are recorded, how long recordings are kept, and who can watch.')
             ->columnSpanFull()
             ->schema([
                 Grid::make(2)->schema([
                     Toggle::make('meeting_recording_enabled')
-                        ->label('Record Lessons')
-                        ->helperText('Also requires the Recording feature in Platform Foundation.'),
+                        ->label('Record new lessons')
+                        ->helperText('Also requires the Recording feature in Platform Foundation and a provider that can record.'),
                     Placeholder::make('effective_recording_availability_display')
-                        ->label('Recording Right Now')
+                        ->label('Recording right now')
                         ->content(fn (): string => ($this->data['effective_recording_availability'] ?? null) === 'Available'
                             ? 'Available — new lessons are recorded'
                             : 'Unavailable — new lessons are not recorded')
                         ->helperText('The result of both switches, as saved.'),
-                    $this->integerInput('recording_retention_days', 'Keep Recordings For (days)', 0, 3650)
+                    $this->integerInput('recording_retention_days', 'Keep recordings for (days)', 0, 3650)
                         ->helperText('Recordings are removed after this many days.'),
                     Toggle::make('recording_student_playback_enabled')
-                        ->label('Students Can Watch Recordings')
-                        ->helperText('Off hides every recording from students. Single recordings can still be withheld from the Recordings screen.'),
+                        ->label('Student playback')
+                        ->helperText('Off hides every recording from students. Single recordings can still be withheld on the Recordings screen.'),
+                ]),
+            ]);
+    }
+
+    private function recordingStorageSection(): Section
+    {
+        return Section::make('Recording Storage')
+            ->description('Where SIRI keeps its own copy of every recording — Google Meet and Zoom alike. The provider\'s copy is never the stored one.')
+            ->columnSpanFull()
+            ->schema([
+                Placeholder::make('recording_storage_status')
+                    ->hiddenLabel()
+                    ->columnSpanFull()
+                    ->content(fn (): HtmlString => $this->recordingStorageStatus()),
+                Grid::make(2)->schema([
+                    Placeholder::make('recording_storage_driver_display')
+                        ->label('Storage backend')
+                        ->content(fn (): string => $this->storageDriverLabel())
+                        ->helperText('Set by deployment (RECORDING_STORAGE_DRIVER), not on this page.'),
+                    Placeholder::make('recording_storage_credentials_display')
+                        ->label('Google credentials for Drive')
+                        ->content(fn (): string => $this->yesNo($this->data['google_credentials_configured'] ?? null))
+                        ->helperText('The same service account key as Google Meet, saved in that section.'),
+                    TextInput::make('recording_drive_root_folder_id')
+                        ->label('Drive folder ID')
+                        ->maxLength(255)
+                        ->helperText('Folder that holds recording copies, from the folder URL. Required when storage is Google Drive.'),
+                    TextInput::make('recording_drive_shared_drive_id')
+                        ->label('Shared Drive ID')
+                        ->maxLength(255)
+                        ->helperText('Only if the folder is in a Shared Drive.'),
                 ]),
             ]);
     }
@@ -292,61 +331,60 @@ class MeetingSettingsPage extends Page
     private function googleMeetSection(): Section
     {
         return Section::make('Google Meet')
-            ->description('Service account used to create Meet links and fetch recordings from Drive.')
+            ->description('Service account used to create Meet links and fetch Meet recordings.')
             ->columnSpanFull()
             ->schema([
                 Grid::make(2)->schema([
                     Toggle::make('google_meet_enabled')->label('Enable Google Meet'),
                     Toggle::make('google_meet_recording_enabled')
-                        ->label('Fetch Meet Recordings')
+                        ->label('Fetch Meet recordings')
                         ->helperText('Needs the Meet and Drive read scopes on the service account.'),
                     Select::make('google_meet_space_access')
-                        ->label('Who Can Join a Meet')
+                        ->label('Who can join a Meet')
                         ->options(GoogleMeetSpaceAccess::options())
                         ->required()
                         ->native(false)
-                        ->helperText('Google records only while the host is present. "Host admits participants" keeps the whole lesson on the recording. Applies to new lessons.'),
+                        ->helperText('Google records only while the host is present. Applies to new lessons.'),
                     Select::make('google_auth_type')
                         ->label('Authentication')
-                        ->options([
-                            'service_account' => 'Service Account',
-                            'oauth_user' => 'OAuth User (coming later)',
-                        ])
+                        ->options(['service_account' => 'Service Account', 'oauth_user' => 'OAuth User (coming later)'])
                         // The provider only treats a service account as
                         // configured; letting an admin pick OAuth would stop
                         // Meet creation without saying why.
                         ->disableOptionWhen(fn (string $value): bool => $value === 'oauth_user')
                         ->required()
                         ->native(false),
-                    TextInput::make('google_calendar_id')
-                        ->label('Calendar ID')
-                        ->maxLength(255),
-                    TextInput::make('recording_drive_root_folder_id')
-                        ->label('Recordings Folder ID')
-                        ->maxLength(255)
-                        ->helperText('Drive folder that stores recording copies, from the folder URL. Required for recording.'),
-                    TextInput::make('recording_drive_shared_drive_id')
-                        ->label('Shared Drive ID')
-                        ->maxLength(255)
-                        ->helperText('Only if the folder is in a Shared Drive.'),
+                    TextInput::make('google_calendar_id')->label('Calendar ID')->maxLength(255),
                     Placeholder::make('google_credentials_configured_display')
-                        ->label('Credentials Stored')
+                        ->label('Credentials stored')
                         ->content(fn (): string => $this->yesNo($this->data['google_credentials_configured'] ?? null)),
                     Placeholder::make('google_config_status_display')
-                        ->label('Setup Status')
-                        ->content(fn (): string => $this->configStatusLabel($this->data['google_config_status'] ?? null)),
+                        ->label('Meeting setup status')
+                        ->content(fn (): string => $this->configStatusLabel($this->data['google_config_status'] ?? null))
+                        ->helperText('Checks meeting credentials only, not recording storage.'),
                     Placeholder::make('google_last_checked_at_display')
-                        ->label('Last Checked')
+                        ->label('Last checked')
                         ->content(fn (): string => $this->timestampLabel($this->data['google_last_checked_at'] ?? null)),
-                    Placeholder::make('google_credentials_updated_at_display')
-                        ->label('Credentials Last Replaced')
-                        ->content(fn (): string => $this->timestampLabel($this->data['google_credentials_updated_at'] ?? null)),
                 ]),
                 Textarea::make('google_credentials_json')
-                    ->label('Service Account JSON')
+                    ->label('Service account JSON')
                     ->rows(4)
                     ->columnSpanFull()
-                    ->helperText('Paste a new key to replace the stored one. Leave blank to keep it.'),
+                    ->helperText('Paste a new key to replace the stored one. Leave blank to keep it. Last replaced: '.$this->timestampLabel($this->data['google_credentials_updated_at'] ?? null).'.'),
+                Section::make('Setup guidance')
+                    ->collapsible()
+                    ->collapsed()
+                    ->schema([
+                        Placeholder::make('google_setup_guidance')
+                            ->hiddenLabel()
+                            ->content(new HtmlString(implode('<br>', [
+                                '1. Create a Google Workspace service account with domain-wide delegation and paste its JSON key above.',
+                                '2. Grant it the Calendar scope for Meet links and the Meet/Drive read scopes for recordings.',
+                                '3. Share the recordings Drive folder (Recording Storage) with the service account.',
+                                '4. Use <em>Check Google Setup</em>; "Ready" confirms meeting credentials, not storage.',
+                                'See docs/deployment/recording-cutover.md and docs/deployment/google-account-activation.md.',
+                            ]))),
+                    ]),
             ]);
     }
 
@@ -358,53 +396,133 @@ class MeetingSettingsPage extends Page
             ->schema([
                 Grid::make(2)->schema([
                     Toggle::make('zoom_enabled')->label('Enable Zoom'),
-                    TextInput::make('zoom_default_timezone')
-                        ->label('Default Timezone')
-                        ->maxLength(64)
-                        ->placeholder('Asia/Kolkata'),
+                    TextInput::make('zoom_default_timezone')->label('Default timezone')->maxLength(64)->placeholder('Asia/Kolkata'),
                     TextInput::make('zoom_account_id')->label('Account ID')->maxLength(255),
                     TextInput::make('zoom_client_id')->label('Client ID')->maxLength(255),
                     TextInput::make('zoom_client_secret')
-                        ->label('Client Secret')
+                        ->label('Client secret')
                         ->password()
                         ->maxLength(255)
                         ->helperText('Leave blank to keep the stored secret.'),
                     TextInput::make('zoom_webhook_secret')
-                        ->label('Webhook Secret Token')
+                        ->label('Webhook secret token')
                         ->password()
                         ->maxLength(255)
                         ->helperText('From the Zoom app\'s Event Subscriptions page. Leave blank to keep it.'),
                     TextInput::make('zoom_host_user_id')
-                        ->label('Host User ID')
+                        ->label('Host user ID')
                         ->maxLength(255)
-                        ->helperText('Zoom user that meetings are scheduled under. Takes precedence over Host Email.'),
-                    TextInput::make('zoom_host_email')
-                        ->label('Host Email')
-                        ->email()
-                        ->maxLength(255),
+                        ->helperText('Zoom user that meetings are scheduled under. Takes precedence over host email.'),
+                    TextInput::make('zoom_host_email')->label('Host email')->email()->maxLength(255),
                     Toggle::make('zoom_host_capacity_enabled')
-                        ->label('Reserve Host Capacity')
+                        ->label('Reserve host capacity')
                         ->helperText('Each Zoom booking reserves the host for its lesson window and is refused when the host is taken. Register the host and run the preflight first.'),
-                    $this->integerInput('zoom_host_capacity_buffer_minutes', 'Host Buffer (minutes)', 0, 120)
+                    $this->integerInput('zoom_host_capacity_buffer_minutes', 'Host buffer (minutes)', 0, 120)
                         ->helperText('Extra time kept free on the host before and after each lesson.'),
                     Toggle::make('zoom_recording_enabled')
-                        ->label('Fetch Zoom Recordings')
-                        ->helperText('Needs a licensed Zoom account with cloud recording.'),
+                        ->label('Fetch Zoom recordings')
+                        ->helperText('Needs a licensed Zoom account with cloud recording. Copies are stored in Recording Storage above.'),
                     Toggle::make('zoom_recording_webhooks_enabled')
-                        ->label('Accept Recording Webhooks')
+                        ->label('Accept recording webhooks')
                         ->helperText('Zoom notifies SIRI when a recording is ready. Off relies on the scheduled check.'),
                     Toggle::make('zoom_recording_trash_source_after_persistence')
-                        ->label('Trash Zoom Copy After Verification')
+                        ->label('Trash Zoom copy after verification')
                         ->columnSpanFull()
                         ->helperText('Moves Zoom\'s copy to its recoverable trash once SIRI has stored and verified its own. Off keeps both copies.'),
                     Placeholder::make('zoom_config_status_display')
-                        ->label('Setup Status')
-                        ->content(fn (): string => $this->configStatusLabel($this->data['zoom_config_status'] ?? null)),
+                        ->label('Meeting setup status')
+                        ->content(fn (): string => $this->configStatusLabel($this->data['zoom_config_status'] ?? null))
+                        ->helperText('Checks meeting credentials only, not recording storage.'),
                     Placeholder::make('zoom_last_checked_at_display')
-                        ->label('Last Checked')
+                        ->label('Last checked')
                         ->content(fn (): string => $this->timestampLabel($this->data['zoom_last_checked_at'] ?? null)),
                 ]),
+                Section::make('Setup guidance')
+                    ->collapsible()
+                    ->collapsed()
+                    ->schema([
+                        Placeholder::make('zoom_setup_guidance')
+                            ->hiddenLabel()
+                            ->content(new HtmlString(implode('<br>', [
+                                '1. Create a Server-to-Server OAuth app on the Zoom marketplace and paste its account, client ID and secret.',
+                                '2. Grant the meeting and cloud-recording scopes listed in docs/deployment/zoom-activation.md.',
+                                '3. Register the platform host (meetings:zoom-hosts:register), run meetings:zoom-hosts:preflight, then turn on <em>Reserve host capacity</em>.',
+                                '4. Add the recording webhook (docs) and paste its secret token; use <em>Check Zoom Setup</em>.',
+                                'Zoom recordings are copied into Recording Storage; without a working Drive folder they cannot be kept.',
+                            ]))),
+                    ]),
             ]);
+    }
+
+    // ── Derived readouts ──────────────────────────────────────────────
+
+    /** "For a 7–8 PM lesson, joining is available from 6:45–8:15 PM (Asia/Kolkata)." from the live form values. */
+    private function joinWindowExample(): string
+    {
+        $before = max(0, (int) ($this->data['meeting_link_visible_before_minutes'] ?? 0));
+        $after = max(0, (int) ($this->data['meeting_link_visible_after_minutes'] ?? 0));
+        $timezone = AdminDayRange::viewerLabel();
+
+        $start = Carbon::today($timezone)->setTime(19, 0);
+        $end = $start->copy()->addHour();
+
+        return sprintf(
+            'For a 7–8 PM lesson, joining is available from %s to %s (%s).',
+            $start->copy()->subMinutes($before)->format('g:i A'),
+            $end->copy()->addMinutes($after)->format('g:i A'),
+            $timezone,
+        );
+    }
+
+    /** Which providers actually support ending the meeting — derived, not asserted. */
+    private function autoCloseHelper(): string
+    {
+        $registry = app(MeetingProviderRegistry::class);
+        $supporting = array_values(array_filter(
+            ['google_meet' => 'Google Meet', 'zoom' => 'Zoom'],
+            fn (string $label, string $key): bool => $registry->has($key) && $registry->get($key) instanceof EndsActiveMeetings,
+            ARRAY_FILTER_USE_BOTH,
+        ));
+
+        return $supporting === []
+            ? 'No configured provider can end a meeting; this setting currently does nothing.'
+            : sprintf('Ends the provider meeting so a class or recording cannot run on. Supported by %s.', implode(' and ', $supporting));
+    }
+
+    private function storageDriverLabel(): string
+    {
+        return match ((string) config('recordings.storage_driver')) {
+            'google_drive' => 'Google Drive',
+            'filesystem' => 'Local filesystem (development only)',
+            default => (string) config('recordings.storage_driver'),
+        };
+    }
+
+    /** A warning when Drive is the backend but cannot work. Never inferred from a provider's "Ready". */
+    private function recordingStorageStatus(): HtmlString
+    {
+        if ((string) config('recordings.storage_driver') !== 'google_drive') {
+            return new HtmlString('');
+        }
+
+        $missing = [];
+
+        if (blank($this->data['recording_drive_root_folder_id'] ?? null)) {
+            $missing[] = 'the Drive folder ID';
+        }
+
+        if (! filter_var($this->data['google_credentials_configured'] ?? null, FILTER_VALIDATE_BOOLEAN)) {
+            $missing[] = 'a stored Google service account key';
+        }
+
+        if ($missing === []) {
+            return new HtmlString('<span class="text-success-600 dark:text-success-400">Google Drive storage is configured for Google Meet and Zoom recordings.</span>');
+        }
+
+        return new HtmlString(sprintf(
+            '<span class="text-danger-600 dark:text-danger-400"><strong>Recordings cannot be stored:</strong> Google Drive is the storage backend but %s is missing. Every capture fails until this is fixed. A provider\'s "Ready" status does not cover storage.</span>',
+            implode(' and ', $missing),
+        ));
     }
 
     // ── Read-only labels ──────────────────────────────────────────────

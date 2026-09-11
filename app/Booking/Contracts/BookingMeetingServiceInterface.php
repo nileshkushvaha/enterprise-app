@@ -134,6 +134,9 @@ interface BookingMeetingServiceInterface
      */
     public function joinWindowEndsAt(BookingMeeting $meeting): ?CarbonImmutable;
 
+    /** The instant the join window opens: the scheduled start minus MeetingSettings::meeting_link_visible_before_minutes. */
+    public function joinWindowStartsAt(BookingMeeting $meeting): ?CarbonImmutable;
+
     /**
      * Ends a finished lesson's meeting at the provider once its join
      * window has passed, so a class (and any automatic recording) cannot
