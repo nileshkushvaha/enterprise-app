@@ -243,7 +243,7 @@ class AdminNavigationRegistryTest extends TestCase
 
         $this->assertNotSame($operations->label, $settings->label);
         $this->assertSame('Review Operations', $operations->label);
-        $this->assertSame('Review & Quality Configuration', $settings->label);
+        $this->assertSame('Reviews & Quality', $settings->label);
         $this->assertSame('Quality & Compliance', $operations->group);
         $this->assertSame('Settings', $settings->group);
     }

@@ -63,7 +63,7 @@ final class CheckZoomCredentials extends Command
         $this->components->twoColumnDetail('OAuth token acquired', $ok ? '<fg=green>yes</>' : '<fg=red>NO</>');
 
         if (! $ok) {
-            $this->components->error('Zoom refused the Server-to-Server OAuth credentials. Check Account ID, Client ID and Client Secret in Meeting Settings; the app must be activated in the Zoom Marketplace.');
+            $this->components->error('Zoom refused the Server-to-Server OAuth credentials. Check Account ID, Client ID and Client Secret in Settings → Meetings; the app must be activated in the Zoom Marketplace.');
 
             return self::FAILURE;
         }

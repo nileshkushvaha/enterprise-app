@@ -42,7 +42,7 @@ class PaymentGatewayPage extends PaymentSettingsPage
 
     public function getTitle(): string|Htmlable
     {
-        return 'Payment Gateway Settings';
+        return 'Payment Gateways';
     }
 
     public function getSubheading(): ?string

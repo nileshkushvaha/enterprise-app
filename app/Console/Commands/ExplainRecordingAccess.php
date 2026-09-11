@@ -61,12 +61,12 @@ final class ExplainRecordingAccess extends Command
         $note = fn (string $gate, bool $ok, string $detail): array => [$ok ? 'OPEN' : 'CLOSED', $gate, $detail];
 
         // 1. platform switches
-        $rows[] = $note('Students Can Watch Their Recordings (Meeting Settings)', $meetings->recording_student_playback_enabled,
+        $rows[] = $note('Students Can Watch Their Recordings (Settings → Meetings)', $meetings->recording_student_playback_enabled,
             $meetings->recording_student_playback_enabled ? 'on' : 'OFF — nothing about recordings is shown to any student');
 
         $country = $student ? $countries->forStudent($student) : null;
         $featureOn = $countryFeatures->isEnabled(CountryFeature::RecordingAvailability, $country);
-        $rows[] = $note('Recording feature flag for the student\'s country (Platform Foundation → Recording)', $featureOn,
+        $rows[] = $note('Recording feature flag for the student\'s country (Settings → Platform → Recording)', $featureOn,
             sprintf('features.recording_enabled=%s, country=%s', $features->recording_enabled ? 'on' : 'off', $country?->name ?? 'unknown'));
 
         // 2. viewer

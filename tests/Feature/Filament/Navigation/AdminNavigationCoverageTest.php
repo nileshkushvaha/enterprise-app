@@ -181,8 +181,8 @@ class AdminNavigationCoverageTest extends TestCase
             'Review Tags' => 'Quality & Compliance',
             'Compliance Flags' => 'Quality & Compliance',
             'Reporting Hub' => 'Analytics',
-            'Review & Quality Configuration' => 'Settings',
-            'Meeting Settings' => 'Settings',
+            'Reviews & Quality' => 'Settings',
+            'Meetings' => 'Settings',
             'Countries' => 'Reference Data',
             'Roles' => 'Access Control',
             'Activity Log' => 'System',
@@ -266,9 +266,9 @@ class AdminNavigationCoverageTest extends TestCase
     public static function relocatedSettingsSlugProvider(): array
     {
         return [
-            'Meeting Settings (Platform → Settings/Platform)' => ['/admin/settings/meetings'],
+            'Meetings (Platform → Settings/Platform)' => ['/admin/settings/meetings'],
             'RazorpayX Payout Settings (Platform → Finance/Finance Configuration)' => ['/admin/settings/razorpayx-payout'],
-            'Review & Quality Configuration (Platform → Settings/Quality)' => ['/admin/settings/reviews-quality'],
+            'Reviews & Quality (Platform → Settings/Quality)' => ['/admin/settings/reviews-quality'],
             'Instructor Earnings Rules (Platform → Finance)' => ['/admin/settings/instructor-earnings'],
             'Homework Reminders (Platform → Content & Communication)' => ['/admin/settings/homework-reminders'],
             'Demo Conversion Incentive (Platform → Growth)' => ['/admin/settings/demo-conversion-incentive'],

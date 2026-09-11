@@ -71,12 +71,12 @@ class ReviewQualitySettingsPage extends Page
 
     public static function getLabel(): string
     {
-        return 'Reviews & Quality Settings';
+        return 'Reviews & Quality';
     }
 
     public function getTitle(): string|Htmlable
     {
-        return 'Reviews & Quality Settings';
+        return 'Reviews & Quality';
     }
 
     public function getSubheading(): string|Htmlable|null

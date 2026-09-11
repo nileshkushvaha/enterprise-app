@@ -50,12 +50,12 @@ class GeneralSettingsPage extends Page
 
     public static function getLabel(): string
     {
-        return 'General Settings';
+        return 'General';
     }
 
     public function getTitle(): string|Htmlable
     {
-        return 'General Settings';
+        return 'General';
     }
 
     public function getSubheading(): string|Htmlable|null

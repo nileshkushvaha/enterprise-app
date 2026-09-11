@@ -148,7 +148,7 @@ class AuditPlatformConfigTest extends TestCase
 
         $finding = $findings->first(fn (ConfigAuditFinding $f): bool => $f->message === 'Razorpay booking payment webhook secret is missing.');
         $this->assertNotNull($finding);
-        $this->assertSame('Admin → Settings → Payment Gateway Settings → Razorpay → Webhook secrets.', $finding->fix);
+        $this->assertSame('Admin → Settings → Payment Gateways → Razorpay → Webhook secrets.', $finding->fix);
     }
 
     /** The wallet endpoint is only required once the wallet feature is on. */

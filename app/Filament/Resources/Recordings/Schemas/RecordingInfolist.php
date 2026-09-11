@@ -109,7 +109,7 @@ class RecordingInfolist
                     ]),
                 ]),
             Section::make('Student access')
-                ->description('Whether the lesson\'s student may watch this recording once it is available. Independent of ingestion: a recording can be withheld before it exists. Governed by the platform playback setting (Settings → Meeting Settings) and this per-recording override.')
+                ->description('Whether the lesson\'s student may watch this recording once it is available. Independent of ingestion: a recording can be withheld before it exists. Governed by the platform playback setting (Settings → Meetings) and this per-recording override.')
                 ->schema([
                     Grid::make(3)->schema([
                         TextEntry::make('student_access')

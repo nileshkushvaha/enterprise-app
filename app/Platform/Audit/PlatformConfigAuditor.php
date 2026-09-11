@@ -70,7 +70,7 @@ final class PlatformConfigAuditor
         $section = 'Payments';
         $out = [];
 
-        $page = 'Admin → Settings → Payment Gateway Settings';
+        $page = 'Admin → Settings → Payment Gateways';
 
         if (! $this->gateways->payments_enabled) {
             $out[] = ConfigAuditFinding::warn($section, 'Payments are disabled platform-wide.', "{$page} → Provider Routing.");
@@ -160,7 +160,7 @@ final class PlatformConfigAuditor
             if (($this->gateways->razorpay_enabled ?? false) && ! ($this->gateways->stripe_enabled ?? false)
                 && strtoupper($currency->code) !== 'INR'
                 && (! ($this->gateways->razorpay_international_enabled ?? false) || ! $international->contains(strtoupper($currency->code)))) {
-                $out[] = ConfigAuditFinding::fail($section, "{$country->name} bills in {$currency->code}, but Razorpay is the only provider and international payments are not enabled for {$currency->code}.", 'Admin → Settings → Payment Gateway Settings → Razorpay → International Collection, or enable Stripe.');
+                $out[] = ConfigAuditFinding::fail($section, "{$country->name} bills in {$currency->code}, but Razorpay is the only provider and international payments are not enabled for {$currency->code}.", 'Admin → Settings → Payment Gateways → Razorpay → International Collection, or enable Stripe.');
             }
         }
 
@@ -328,20 +328,20 @@ final class PlatformConfigAuditor
         $out = [];
 
         if (! $this->meetings->meetings_enabled) {
-            $out[] = ConfigAuditFinding::fail($section, 'Meetings are disabled — no lesson gets a join link.', 'Meeting Settings → Meetings Enabled.');
+            $out[] = ConfigAuditFinding::fail($section, 'Meetings are disabled — no lesson gets a join link.', 'Meetings → Meetings Enabled.');
         } else {
             try {
                 $provider = $this->meetingProviders->current();
 
                 if (! $provider->isConfigured()) {
-                    $out[] = ConfigAuditFinding::fail($section, sprintf('Default meeting provider "%s" is not configured — bookings show "Meeting link is being prepared" forever.', $this->meetings->default_provider), 'Meeting Settings → configure the provider credentials or pick another default provider.');
+                    $out[] = ConfigAuditFinding::fail($section, sprintf('Default meeting provider "%s" is not configured — bookings show "Meeting link is being prepared" forever.', $this->meetings->default_provider), 'Meetings → configure the provider credentials or pick another default provider.');
                 }
             } catch (Throwable $e) {
-                $out[] = ConfigAuditFinding::fail($section, sprintf('Default meeting provider "%s" cannot be resolved: %s', $this->meetings->default_provider, $e->getMessage()), 'Meeting Settings → Default provider.');
+                $out[] = ConfigAuditFinding::fail($section, sprintf('Default meeting provider "%s" cannot be resolved: %s', $this->meetings->default_provider, $e->getMessage()), 'Meetings → Default provider.');
             }
 
             if (! $this->meetings->create_after_paid_booking_confirmation) {
-                $out[] = ConfigAuditFinding::warn($section, 'Meetings are not created automatically after a PAID booking is confirmed.', 'Meeting Settings → Create after paid booking confirmation.');
+                $out[] = ConfigAuditFinding::warn($section, 'Meetings are not created automatically after a PAID booking is confirmed.', 'Meetings → Create after paid booking confirmation.');
             }
         }
 
@@ -351,19 +351,19 @@ final class PlatformConfigAuditor
         $playback = $this->meetings->recording_student_playback_enabled;
 
         if ($capture && ! $capability) {
-            $out[] = ConfigAuditFinding::fail($section, 'Sessions are recorded by default, but the platform Recording feature flag is OFF — students can never see any recording.', 'Platform Foundation → Recording (feature flag).');
+            $out[] = ConfigAuditFinding::fail($section, 'Sessions are recorded by default, but the platform Recording feature flag is OFF — students can never see any recording.', 'Platform → Recording (feature flag).');
         }
 
         if ($capture && $capability && ! $playback) {
-            $out[] = ConfigAuditFinding::fail($section, 'Recordings are captured and the feature is on, but "Students Can Watch Their Recordings" is OFF — recordings exist that no student can open.', 'Meeting Settings → Students Can Watch Their Recordings.');
+            $out[] = ConfigAuditFinding::fail($section, 'Recordings are captured and the feature is on, but "Students Can Watch Their Recordings" is OFF — recordings exist that no student can open.', 'Meetings → Students Can Watch Their Recordings.');
         }
 
         if ($playback && ! $capture) {
-            $out[] = ConfigAuditFinding::warn($section, 'Student playback is on but sessions are not recorded by default — nothing will be there to watch.', 'Meeting Settings → Record Sessions by Default.');
+            $out[] = ConfigAuditFinding::warn($section, 'Student playback is on but sessions are not recorded by default — nothing will be there to watch.', 'Meetings → Record Sessions by Default.');
         }
 
         if ($this->lessons->auto_complete_grace_minutes >= 720) {
-            $out[] = ConfigAuditFinding::warn($section, sprintf('Auto-completion delay is %d minutes (%.0f h): finished lessons stay Confirmed, and their recordings hidden, for that long.', $this->lessons->auto_complete_grace_minutes, $this->lessons->auto_complete_grace_minutes / 60), 'Platform Foundation → Auto-completion Delay (e.g. 120).');
+            $out[] = ConfigAuditFinding::warn($section, sprintf('Auto-completion delay is %d minutes (%.0f h): finished lessons stay Confirmed, and their recordings hidden, for that long.', $this->lessons->auto_complete_grace_minutes, $this->lessons->auto_complete_grace_minutes / 60), 'Platform → Auto-completion Delay (e.g. 120).');
         }
 
         if ($out === []) {

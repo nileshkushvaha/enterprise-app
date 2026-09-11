@@ -118,7 +118,7 @@ php artisan migrate:rollback --path=database/settings --step=1 --force   # ✎ r
 php artisan optimize:clear && php artisan optimize
 ```
 
-Or set the previous values in Admin → Settings → Meeting Settings
-(Joining) and Admin → Settings → Platform Foundation (Auto-completion
+Or set the previous values in Admin → Settings → Meetings
+(Joining) and Admin → Settings → Platform (Auto-completion
 Delay). The scheduler cadence needs a code revert. Lessons completed
 in the meantime stay completed — nothing is bulk-reopened.

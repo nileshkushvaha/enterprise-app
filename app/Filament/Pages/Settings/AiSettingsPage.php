@@ -68,7 +68,7 @@ class AiSettingsPage extends Page
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedSparkles;
 
-    protected static ?string $navigationLabel = 'AI Platform';
+    protected static ?string $navigationLabel = 'AI';
 
     protected static string|\UnitEnum|null $navigationGroup = 'Settings';
 
@@ -79,12 +79,12 @@ class AiSettingsPage extends Page
 
     public static function getLabel(): string
     {
-        return 'AI Platform Settings';
+        return 'AI';
     }
 
     public function getTitle(): string|Htmlable
     {
-        return 'AI Platform Settings';
+        return 'AI';
     }
 
     public function getSubheading(): string|Htmlable|null

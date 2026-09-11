@@ -51,12 +51,12 @@ class WalletSettingsPage extends Page
 
     public static function getLabel(): string
     {
-        return 'Wallet Settings';
+        return 'Wallet';
     }
 
     public function getTitle(): string|Htmlable
     {
-        return 'Wallet Settings';
+        return 'Wallet';
     }
 
     public function getSubheading(): string|Htmlable|null
@@ -64,7 +64,7 @@ class WalletSettingsPage extends Page
         $enabled = app(FeatureSettings::class)->wallet_enabled;
 
         return 'Recharge limits and the low-balance alert, per currency. Leave a field blank to switch that rule off for the currency.'
-            .($enabled ? '' : ' The Wallet module is currently switched off under Platform Foundation → Feature Flags.');
+            .($enabled ? '' : ' The Wallet module is currently switched off under Platform → Feature Flags.');
     }
 
     public function mount(): void

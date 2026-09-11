@@ -37,7 +37,7 @@ class MeetingSettingsPageTest extends TestCase
         $this->actingAs($this->superAdmin())
             ->get('/admin/settings/meetings')
             ->assertOk()
-            ->assertSee('Meeting Settings');
+            ->assertSee('Meetings');
     }
 
     public function test_meeting_settings_page_denies_users_without_settings_access(): void

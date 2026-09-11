@@ -36,7 +36,7 @@ class PlatformFoundationSettingsPage extends Page
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedAdjustmentsHorizontal;
 
-    protected static ?string $navigationLabel = 'Platform Foundation';
+    protected static ?string $navigationLabel = 'Platform';
 
     protected static string|\UnitEnum|null $navigationGroup = 'Platform';
 
@@ -49,17 +49,17 @@ class PlatformFoundationSettingsPage extends Page
 
     public static function getLabel(): string
     {
-        return 'Platform Foundation Settings';
+        return 'Platform';
     }
 
     public function getTitle(): string|Htmlable
     {
-        return 'Platform Foundation Settings';
+        return 'Platform';
     }
 
     public function getSubheading(): string|Htmlable|null
     {
-        return 'Prepare booking, instructor, localization, and feature flag defaults. Wallet limits live under Wallet Settings. Referral reward rules live in Referral Campaigns; meeting providers live under Meeting Settings.';
+        return 'Prepare booking, instructor, localization, and feature flag defaults. Wallet limits live under Wallet. Referral reward rules live in Referral Campaigns; meeting providers live under Meetings.';
     }
 
     public function mount(): void

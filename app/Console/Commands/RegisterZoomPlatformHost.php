@@ -11,7 +11,7 @@ use Illuminate\Console\Command;
 
 /**
  * Registers (or updates) the platform's Zoom host in the capacity pool
- * from the identity already configured in Meeting Settings — the one
+ * from the identity already configured in Settings → Meetings — the one
  * deliberate operator step before `zoom_host_capacity_enabled` may be
  * switched on. Idempotent: re-running updates label/capacity/active on
  * the same row. Never touches credentials or any setting.
@@ -34,7 +34,7 @@ final class RegisterZoomPlatformHost extends Command
         $reference = trim((string) ($this->option('host') ?: ($settings->zoom_host_user_id ?? $settings->zoom_host_email ?? '')));
 
         if ($reference === '') {
-            $this->error('No Zoom host identity: pass --host or configure Host User ID / Host Email in Meeting Settings.');
+            $this->error('No Zoom host identity: pass --host or configure Host User ID / Host Email in Settings → Meetings.');
 
             return self::FAILURE;
         }
@@ -64,7 +64,7 @@ final class RegisterZoomPlatformHost extends Command
             $host->capacity,
             $host->is_active ? 'active' : 'inactive',
         ));
-        $this->line('Capacity reservation itself is governed by Meeting Settings → Reserve Zoom Host Capacity (ships off). Run meetings:zoom-hosts:preflight before enabling it.');
+        $this->line('Capacity reservation itself is governed by Settings → Meetings → Reserve Zoom Host Capacity (ships off). Run meetings:zoom-hosts:preflight before enabling it.');
 
         return self::SUCCESS;
     }

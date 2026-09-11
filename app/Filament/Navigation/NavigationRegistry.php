@@ -561,7 +561,7 @@ final class NavigationRegistry
             ),
             PaymentGatewayPage::class => new NavigationDestination(
                 id: 'settings.payment-gateways',
-                label: 'Payment Gateway Settings',
+                label: 'Payment Gateways',
                 group: 'Settings',
                 subgroup: null,
                 sort: 16,
@@ -1070,7 +1070,7 @@ final class NavigationRegistry
             ),
             PlatformFoundationSettingsPage::class => new NavigationDestination(
                 id: 'settings.platform.platform-foundation',
-                label: 'Platform Foundation',
+                label: 'Platform',
                 group: 'Settings',
                 subgroup: 'Platform',
                 sort: 2,
@@ -1100,14 +1100,14 @@ final class NavigationRegistry
             // the meeting and payout provider pages above.
             AiSettingsPage::class => new NavigationDestination(
                 id: 'settings.platform.ai',
-                label: 'AI Platform',
+                label: 'AI',
                 group: 'Settings',
                 subgroup: 'Platform',
                 sort: 5,
             ),
             MeetingSettingsPage::class => new NavigationDestination(
                 id: 'settings.platform.meeting-settings',
-                label: 'Meeting Settings',
+                label: 'Meetings',
                 group: 'Settings',
                 subgroup: 'Platform',
                 sort: 3,
@@ -1197,7 +1197,7 @@ final class NavigationRegistry
             // labeled per explicit user decision.
             ReviewQualitySettingsPage::class => new NavigationDestination(
                 id: 'settings.quality.review-quality-configuration',
-                label: 'Review & Quality Configuration',
+                label: 'Reviews & Quality',
                 group: 'Settings',
                 subgroup: 'Platform',
                 sort: 4,

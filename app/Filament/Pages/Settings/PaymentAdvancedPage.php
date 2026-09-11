@@ -55,7 +55,7 @@ class PaymentAdvancedPage extends PaymentSettingsPage
         return array_filter([
             BackAction::make(
                 PaymentGatewayPage::canAccess() ? PaymentGatewayPage::getUrl() : null,
-                'Back to Payment Gateway Settings',
+                'Back to Payment Gateways',
             ),
         ]);
     }

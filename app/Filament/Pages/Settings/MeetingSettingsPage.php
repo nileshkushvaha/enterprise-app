@@ -71,12 +71,12 @@ class MeetingSettingsPage extends Page
 
     public static function getLabel(): string
     {
-        return 'Meeting Settings';
+        return 'Meetings';
     }
 
     public function getTitle(): string|Htmlable
     {
-        return 'Meeting Settings';
+        return 'Meetings';
     }
 
     public function getSubheading(): string|Htmlable|null
@@ -151,7 +151,7 @@ class MeetingSettingsPage extends Page
                 ->footer([
                     ActionsComponent::make([
                         Action::make('save')
-                            ->label('Save Meeting Settings')
+                            ->label('Save changes')
                             ->submit('save')
                             ->keyBindings(['mod+s']),
                         Action::make('test_google_configuration')
@@ -281,7 +281,7 @@ class MeetingSettingsPage extends Page
                 Grid::make(2)->schema([
                     Toggle::make('meeting_recording_enabled')
                         ->label('Record new lessons')
-                        ->helperText('Also requires the Recording feature in Platform Foundation and a provider that can record.'),
+                        ->helperText('Also requires the Recording feature in Platform and a provider that can record.'),
                     Placeholder::make('effective_recording_availability_display')
                         ->label('Recording right now')
                         ->content(fn (): string => ($this->data['effective_recording_availability'] ?? null) === 'Available'

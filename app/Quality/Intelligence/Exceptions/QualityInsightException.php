@@ -27,9 +27,9 @@ final class QualityInsightException extends RuntimeException
     public static function aiUnavailable(AiFailureCode $code): self
     {
         return new self(match ($code) {
-            AiFailureCode::FeatureDisabled => 'AI quality insights are turned off. Enable them in Settings → AI Platform.',
-            AiFailureCode::NotConfigured => 'The AI provider is not configured. Add credentials in Settings → AI Platform.',
-            AiFailureCode::BudgetExceeded => 'The AI spend limit has been reached. Raise it in Settings → AI Platform to continue.',
+            AiFailureCode::FeatureDisabled => 'AI quality insights are turned off. Enable them in Settings → AI.',
+            AiFailureCode::NotConfigured => 'The AI provider is not configured. Add credentials in Settings → AI.',
+            AiFailureCode::BudgetExceeded => 'The AI spend limit has been reached. Raise it in Settings → AI to continue.',
             default => 'AI is currently unavailable. Please try again later.',
         });
     }
