@@ -6,31 +6,37 @@ namespace App\Http\Middleware;
 
 use App\Booking\Services\MeetingJoinHandoffService;
 use App\Models\Booking;
+use App\Models\User;
 use Closure;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
- * Stands in for `auth` on the public join route (/join/{booking}); the
- * route deliberately does not also list `auth`, whose priority would
- * otherwise put it first.
+ * Stands in for `auth` on the public join route (/join/{booking}) and
+ * decides WHO is asking to join, without ever signing anyone in:
  *
- *  1. A request carrying ?handoff=<token> redeems it: the user it was
- *     issued to is signed in on THIS host and redirected to the same
- *     URL without the token, so it never lingers in history or a
- *     referrer. An invalid token is simply dropped.
- *  2. A guest on a host other than APP_URL's is sent to the main host's
- *     handoff endpoint, where their existing session (or the login page,
- *     with intended URL) issues a token and sends them back.
- *  3. A guest on the main host goes to login with this URL as the
- *     intended destination — exactly what `auth` does, never a loop.
+ *  1. ?handoff=<token> is redeemed exactly once, only on the configured
+ *     HTTPS meeting origin, for this booking. Success stores a
+ *     booking-scoped JOIN GRANT in this host's session — not a web
+ *     login — and the browser is redirected to the same URL without
+ *     the token. A token is never applied over a different signed-in
+ *     user: an existing identity is kept and the token is discarded.
+ *  2. The viewer is the signed-in user (main host), else the grant's
+ *     user (meeting host). The controller receives it as a request
+ *     attribute and authorizes against it.
+ *  3. A guest on the meeting host is sent to the main host's handoff;
+ *     a guest on the main host goes to login with the intended URL,
+ *     exactly as `auth` does.
  *
  * Nothing here grants access to a meeting: the gateway's participant,
- * lifecycle, status and join-window checks still run afterwards.
+ * account, lifecycle, status and join-window checks still run.
  */
 final class ConsumeMeetingJoinHandoff
 {
+    public const string VIEWER_ATTRIBUTE = 'meeting_join_viewer';
+
     public function __construct(
         private readonly MeetingJoinHandoffService $handoff,
     ) {}
@@ -47,7 +53,11 @@ final class ConsumeMeetingJoinHandoff
             return $this->redeem($request, $booking);
         }
 
-        if (Auth::guard('web')->check()) {
+        $viewer = Auth::guard('web')->user() ?? $this->handoff->grantedUser($request->session(), $booking);
+
+        if ($viewer instanceof User) {
+            $request->attributes->set(self::VIEWER_ATTRIBUTE, $viewer);
+
             return $next($request);
         }
 
@@ -56,17 +66,24 @@ final class ConsumeMeetingJoinHandoff
             : redirect()->to($this->handoff->mainHostHandoffUrl($booking));
     }
 
-    private function redeem(Request $request, Booking $booking): Response
+    private function redeem(Request $request, Booking $booking): RedirectResponse
     {
-        $user = $this->handoff->redeem((string) $request->query(MeetingJoinHandoffService::QUERY_PARAMETER), $booking);
+        $token = (string) $request->query(MeetingJoinHandoffService::QUERY_PARAMETER);
+        $user = $this->handoff->redeem($token, $booking, $request);
+        $signedIn = Auth::guard('web')->user();
 
-        if ($user !== null) {
-            Auth::guard('web')->login($user);
+        // Never replace an identity that is already present on this host.
+        if ($user !== null && ($signedIn === null || $signedIn->is($user))) {
             $request->session()->regenerate();
+            $this->handoff->grant($request->session(), $user, $booking);
         }
 
-        // Same URL, token removed — whether or not it was accepted.
-        return redirect()->to($request->url());
+        // Same URL, token removed — whether or not it was accepted. The
+        // token was in this request's URL, so this response must not be
+        // cached and must not leak the URL onward as a referrer.
+        return redirect()->to($request->url())
+            ->header('Cache-Control', 'no-store')
+            ->header('Referrer-Policy', 'no-referrer');
     }
 
     /** Route-model binding runs later in the stack, so the parameter may still be the raw id. */

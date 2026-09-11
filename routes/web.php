@@ -241,18 +241,15 @@ Route::name('auth.')->middleware('auth')->group(function (): void {
 // and checks as dashboard.meetings.join, reachable on the participant
 // host (meet.sirieducation.com) as well as the main one.
 // ConsumeMeetingJoinHandoff stands in for `auth` here: it redeems a
-// handoff token, sends a guest on another host to the main host's
-// handoff instead of a second login, and sends a guest on the main host
-// to login with the intended URL, exactly as `auth` would.
+// handoff token into a booking-scoped grant, sends a guest on the
+// meeting host to the main host's handoff, and sends a guest on the
+// main host to login with the intended URL, exactly as `auth` would.
+// Deliberately no account middleware here: on the meeting host the
+// viewer holds a booking-scoped join grant, not a session login, and
+// the gateway enforces account status, lifecycle and participation
+// itself. Dashboard and account routes on that host still see a guest.
 Route::get('/join/{booking}', MeetingJoinController::class)
-    ->middleware([
-        ConsumeMeetingJoinHandoff::class,
-        'email.verify.if.required',
-        EnsureAccountIsActive::class,
-        'password.change.required',
-        'frontend.portal',
-        EnsureSupportedFrontendPortalAudience::class,
-    ])
+    ->middleware(ConsumeMeetingJoinHandoff::class)
     ->name('meetings.join');
 
 Route::prefix('dashboard')->name('dashboard.')->middleware([

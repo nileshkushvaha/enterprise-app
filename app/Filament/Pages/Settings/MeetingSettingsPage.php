@@ -7,6 +7,7 @@ namespace App\Filament\Pages\Settings;
 use App\Booking\Enums\GoogleMeetSpaceAccess;
 use App\Booking\Meetings\ZoomMeetingProvider;
 use App\Booking\Services\GoogleCalendarConfigurationService;
+use App\Booking\Services\MeetingJoinHandoffService;
 use App\Booking\Services\RecordingAvailabilityResolver;
 use App\Booking\Services\ZoomConfigurationService;
 use App\Booking\Services\ZoomHostCapacityPreflightService;
@@ -14,6 +15,7 @@ use App\Filament\Navigation\Concerns\HasCentralizedNavigation;
 use App\Filament\Navigation\Concerns\HasSettingsSectionBreadcrumb;
 use App\Settings\MeetingSettings;
 use BackedEnum;
+use Closure;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
@@ -223,11 +225,15 @@ class MeetingSettingsPage extends Page
                             ->helperText('Off: instructors never see the link, even inside the visibility window.'),
                         TextInput::make('participant_join_base_url')
                             ->label('Join Link Domain')
-                            ->url()
                             ->placeholder('https://meet.sirieducation.com')
                             ->maxLength(255)
                             ->columnSpanFull()
-                            ->helperText('Join links are generated on this address, for example https://meet.sirieducation.com/join/…. Leave empty to use the main site. The address must point at this application.'),
+                            ->rule(fn (): Closure => function (string $attribute, mixed $value, Closure $fail): void {
+                                if (filled($value) && MeetingJoinHandoffService::normalizeOrigin((string) $value) === null) {
+                                    $fail('Enter an HTTPS address with only a host, for example https://meet.sirieducation.com — no path, query, or credentials.');
+                                }
+                            })
+                            ->helperText('Join links are generated on this HTTPS address, for example https://meet.sirieducation.com/join/…. Leave empty to use the main site. The address must point at this application.'),
                     ]),
                 ]),
 
@@ -477,7 +483,7 @@ class MeetingSettingsPage extends Page
             $settings->create_after_paid_booking_confirmation = (bool) ($data['create_after_paid_booking_confirmation'] ?? false);
             $settings->student_join_url_visible = (bool) ($data['student_join_url_visible'] ?? false);
             $settings->instructor_join_url_visible = (bool) ($data['instructor_join_url_visible'] ?? false);
-            $settings->participant_join_base_url = filled($data['participant_join_base_url'] ?? null) ? rtrim(trim((string) $data['participant_join_base_url']), '/') : null;
+            $settings->participant_join_base_url = MeetingJoinHandoffService::normalizeOrigin($data['participant_join_base_url'] ?? null);
 
             $settings->google_meet_enabled = (bool) ($data['google_meet_enabled'] ?? false);
             $settings->google_meet_recording_enabled = (bool) ($data['google_meet_recording_enabled'] ?? false);

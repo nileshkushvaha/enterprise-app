@@ -1040,10 +1040,13 @@ final class BookingMeetingService implements BookingMeetingServiceInterface
         // A dedicated participant host (meet.sirieducation.com) when one is
         // configured; the same gateway, same checks, different address.
         // APP_URL is untouched, and the main-host link keeps working.
-        $base = trim((string) $this->settings->participant_join_base_url);
+        // Only a validated bare HTTPS origin is ever used; an unusable
+        // stored value falls back to the main host rather than to a
+        // broken link.
+        $origin = MeetingJoinHandoffService::normalizeOrigin($this->settings->participant_join_base_url);
 
-        if ($base !== '') {
-            return rtrim($base, '/').'/join/'.$booking->getKey();
+        if ($origin !== null) {
+            return $origin.'/join/'.$booking->getKey();
         }
 
         return route('dashboard.meetings.join', $booking);
@@ -1051,6 +1054,13 @@ final class BookingMeetingService implements BookingMeetingServiceInterface
 
     public function participantJoinUrlFor(Booking $booking, User $viewer): ?string
     {
+        // The meeting-host route has no account middleware in front of it
+        // (a join grant is not a login), so account status is enforced
+        // here for both roles — the same rule EnsureAccountIsActive applies.
+        if (! $viewer->isActive()) {
+            return null;
+        }
+
         if ($viewer->id === $booking->student_id) {
             return $this->studentJoinUrlFor($booking, $viewer);
         }
@@ -1064,6 +1074,10 @@ final class BookingMeetingService implements BookingMeetingServiceInterface
 
     public function participantJoinAvailabilityFor(Booking $booking, User $viewer): MeetingJoinAvailability
     {
+        if (! $viewer->isActive()) {
+            return MeetingJoinAvailability::Unavailable;
+        }
+
         if ($viewer->id === $booking->student_id) {
             try {
                 $this->studentLifecycle->assertEligibleForStudentAction($viewer);

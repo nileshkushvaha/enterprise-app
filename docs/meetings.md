@@ -708,23 +708,35 @@ the account is suspended. Google Meet bookings take the same path.
 `MeetingJoinGatewayTest` covers the matrix.
 
 **Dedicated participant host.** `MeetingSettings::participant_join_base_url`
-(Admin → Settings → Meetings → "Join Link Domain", e.g.
-`https://meet.sirieducation.com`) makes `joinLinkFor()` generate
-`<base>/join/{booking}` instead of the main-host route. `APP_URL` is not
+(Admin → Settings → Meetings → "Join Link Domain") must be a bare HTTPS
+origin such as `https://meet.sirieducation.com` — no path, query,
+fragment or credentials; anything else is rejected on save and an
+unusable stored value falls back to the main host. When set,
+`joinLinkFor()` generates `<origin>/join/{booking}`. `APP_URL` is not
 changed and links already sent on the main host keep working; both
-paths run the same controller and checks. The session cookie is
-host-only (`SESSION_DOMAIN` unset), so a participant signed in on the
-main site is a guest on the join host: `ConsumeMeetingJoinHandoff` sends
-that guest to the main host's `/dashboard/meetings/{booking}/handoff`,
-which — behind the normal dashboard middleware, so login with intended
-URL applies — issues a random, single-use, 60-second token bound to the
-user and booking (`MeetingJoinHandoffService`, cache-backed), audits
-`meeting_join_handoff_issued`, and redirects back to the join host with
-`?handoff=`. The join host redeems it, opens its own session for that
-user, drops the token from the URL and then applies every gateway rule
-as usual; the token grants nothing else. A guest on the main host goes
-to login, never into a loop. See `docs/deployment/meeting-join-domain.md`
-for the server side.
+paths run the same controller and checks.
+
+The session cookie is host-only (`SESSION_DOMAIN` unset), so a
+participant signed in on the main site is a guest on the meeting host.
+`ConsumeMeetingJoinHandoff` sends that guest to the main host's
+`/dashboard/meetings/{booking}/handoff` (served only on the main host,
+behind the normal dashboard middleware, so login with intended URL
+applies). That endpoint issues a random token bound to the user, the
+booking and the meeting origin, valid 60 s, audited as
+`meeting_join_handoff_issued`, and redirects back with `?handoff=`. The
+meeting host redeems it **exactly once across all web nodes** — the
+redemption marker is an atomic `Cache::add()` on the shared store, so
+two nodes cannot both accept the same token — and only over HTTPS on
+the configured origin. Redemption does **not** sign the user in: it
+stores a booking-scoped **join grant** in the meeting host's session
+(10 minutes) that only `/join/{booking}` for that booking honours;
+dashboard and account routes on that host still see a guest, and a
+token is never applied over a different user already signed in there.
+The gateway then applies every rule as usual, including account status.
+Responses that carry the token are `Cache-Control: no-store` and
+`Referrer-Policy: no-referrer`; see `docs/deployment/meeting-join-domain.md`
+for access-log redaction, since the redirect to a clean URL does not
+remove the token from the original request line in server logs.
 
 **One window, two enforcement points.**
 `BookingMeetingService::joinAvailabilityFor()` decides what SIRI hands

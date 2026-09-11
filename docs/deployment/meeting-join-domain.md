@@ -10,16 +10,45 @@ meeting, and Zoom's own domain is still where the meeting runs.
 
 | Item | Value |
 |---|---|
-| Setting | Admin → Settings → Meetings → **Join Link Domain** = `https://meet.sirieducation.com` |
+| Setting | Admin → Settings → Meetings → **Join Link Domain** = `https://meet.sirieducation.com` (bare HTTPS origin; a path, query, port other than the real one, or credentials is rejected) |
 | Settings migration | `2026_09_11_100200_add_participant_join_base_url_setting` (`php artisan migrate --path=database/settings --force`) |
 | `APP_URL` | unchanged (`https://sirieducation.com`) — the main host issues the sign-in handoff |
 | `SESSION_DOMAIN` | unchanged (unset, host-only cookie). Do **not** widen it to `.sirieducation.com`; the handoff exists so that is unnecessary |
 | `SESSION_SECURE_COOKIE` | `true` in production (both hosts are HTTPS) |
-| Cache | the handoff token lives in the default cache store for 60 s; the store must be shared by every web node (database or Redis, not `file`/`array` on a multi-node deployment) |
+| Cache | the handoff token and its single-use marker live in the default cache store; the marker is written with an atomic `add`, which is only exactly-once when every web node shares the store (database or Redis — never `file` or `array` on a multi-node deployment) |
 | Route cache | rebuild after deploy (`route:cache`); `/join/{booking}` and `/dashboard/meetings/{booking}/handoff` are new |
 
 Links already sent on the main host (`/dashboard/meetings/{booking}/join`)
 keep working.
+
+## Access-log redaction (required)
+
+The first request to the meeting host carries `?handoff=<token>` in its
+request line. The application answers `Cache-Control: no-store` and
+`Referrer-Policy: no-referrer` and redirects to the clean URL, but the
+original line is still written to the web server's access log unless it
+is redacted. The token is single-use and expires in 60 s, so a logged
+token is not reusable, but it must still not be retained. In nginx:
+
+```nginx
+map $request $request_redacted {
+    ~^(?<pre>.*[?&]handoff=)[^&\s]+(?<post>.*)$  "${pre}REDACTED${post}";
+    default                                        $request;
+}
+
+log_format redacted '$remote_addr - $remote_user [$time_local] "$request_redacted" '
+                    '$status $body_bytes_sent "$http_referer" "$http_user_agent"';
+
+server {
+    server_name meet.sirieducation.com;
+    access_log /var/log/nginx/meet.access.log redacted;
+    ...
+}
+```
+
+Apply the same `log_format` to any proxy in front of the meeting host,
+and confirm no upstream (CDN, WAF, APM) records full request URLs for
+this host. The application never logs the token.
 
 ## Sign-in across the two hosts
 
@@ -28,11 +57,16 @@ browser → https://meet.sirieducation.com/join/{id}          (no cookie here)
        ← 302 https://sirieducation.com/dashboard/meetings/{id}/handoff
 browser → main host (existing session; or login, then back here)
        ← 302 https://meet.sirieducation.com/join/{id}?handoff=<token>   token: random, 60 s, single use, bound to user+booking
-browser → join host redeems, opens its own session, drops the token
-       ← 302 https://meet.sirieducation.com/join/{id}
-browser → gateway checks (participant, lifecycle, status, window)
+browser → meeting host redeems it ONCE (atomic across nodes), only over HTTPS on this origin,
+          stores a booking-scoped join grant in its own session (not a login), drops the token
+       ← 302 https://meet.sirieducation.com/join/{id}        (no-store, no-referrer)
+browser → gateway checks (participant, account, lifecycle, status, window)
        ← 302 provider participant join URL   (never the host URL)
 ```
+
+The grant lets that user through `/join/{id}` for that booking only,
+for 10 minutes. `/dashboard/...` and account routes on the meeting host
+remain guest routes; nobody is signed in there.
 
 ## DNS
 

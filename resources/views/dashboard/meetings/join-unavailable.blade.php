@@ -26,7 +26,7 @@
     <h1 class="mt-2 text-xl font-bold text-fg-strong">{{ $title }}</h1>
     <p class="mt-2 text-sm leading-6 text-fg-muted">{{ $message }}</p>
     @if($isParticipant && $booking->starts_at)
-        <p class="mt-3 text-sm text-fg-muted">Scheduled for {{ $booking->starts_at->timezone(auth()->user()?->profile?->timezone ?? config('app.timezone'))->format('D, M j Y \a\t H:i') }}.</p>
+        <p class="mt-3 text-sm text-fg-muted">Scheduled for {{ $booking->starts_at->timezone(($viewerTimezone ?? config('app.timezone')))->format('D, M j Y \a\t H:i') }}.</p>
     @endif
     <div class="mt-5 flex flex-wrap gap-3">
         <x-ui.button :href="route('dashboard')" size="sm" variant="secondary">Back to dashboard</x-ui.button>
