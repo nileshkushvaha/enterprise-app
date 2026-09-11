@@ -163,10 +163,13 @@ class BookingsTable
                     )),
 
                 Action::make('cancel')
+                    ->label('Cancel Lesson')
                     ->icon('heroicon-m-x-circle')
                     ->color('danger')
                     ->authorize(fn (Booking $record): bool => auth()->user()?->can('cancel', $record) ?? false)
                     ->visible(fn (Booking $record): bool => $record->status->canTransitionTo(BookingStatus::Cancelled))
+                    ->modalHeading('Cancel this lesson?')
+                    ->modalDescription('Frees the instructor\'s time slot and any reserved meeting host, cancels the video meeting, and applies the refund policy. The student and instructor are notified.')
                     ->form([
                         Textarea::make('reason')->maxLength(500),
                     ])
@@ -370,16 +373,24 @@ class BookingsTable
                         self::notifyMeetingOutcome($meeting);
                     }),
 
+                // Cancels the VIDEO MEETING only. The lesson stays booked, so
+                // the instructor's slot and any reserved meeting host stay
+                // taken — that is what lets the meeting be re-created (on
+                // the same or another provider) for the same lesson. To free
+                // the slot, cancel the lesson with the action above.
                 Action::make('cancel_meeting')
-                    ->label('Mark Meeting Cancelled')
-                    ->icon('heroicon-m-x-circle')
-                    ->color('danger')
+                    ->label('Cancel Video Meeting Only')
+                    ->icon('heroicon-m-video-camera-slash')
+                    ->color('warning')
                     ->requiresConfirmation()
+                    ->modalHeading('Cancel the video meeting only?')
+                    ->modalDescription('Removes the meeting link at the provider. The lesson stays booked: the instructor\'s slot remains reserved and no refund is issued. Use "Cancel Lesson" to free the slot.')
+                    ->modalSubmitActionLabel('Cancel video meeting')
                     ->authorize(fn (Booking $record): bool => auth()->user()?->can('manageMeeting', $record) ?? false)
                     ->visible(fn (Booking $record): bool => $record->meeting !== null && $record->meeting->status !== MeetingStatus::Cancelled)
                     ->action(function (Booking $record): void {
                         app(BookingMeetingServiceInterface::class)->cancelMeeting($record);
-                        Notification::make()->title('Meeting marked cancelled')->success()->send();
+                        Notification::make()->title('Video meeting cancelled')->body('The lesson is still booked and its slot is still reserved.')->success()->send();
                     }),
             ])
             ->bulkActions([

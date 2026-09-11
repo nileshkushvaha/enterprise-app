@@ -80,6 +80,49 @@ final class RecordingLifecycleNotifier
 
     }
 
+    /**
+     * The meeting was replaced on another provider before anything had
+     * been captured, and the row now names the meeting's provider.
+     */
+    public function recordingProviderRealigned(Recording $recording, string $previousProvider, ?User $admin = null): void
+    {
+        $properties = [
+            'previous_provider' => $previousProvider,
+            'provider' => $recording->provider,
+            'booking_meeting_id' => $recording->booking_meeting_id,
+        ];
+        $description = sprintf('Lesson recording re-pointed from %s to %s after the meeting was replaced.', $previousProvider, $recording->provider);
+
+        if ($admin !== null) {
+            $this->audit->logUser($admin, 'recordings', 'recording_provider_realigned', $description, $recording, $properties);
+
+            return;
+        }
+
+        $this->audit->logSystem('recordings', 'recording_provider_realigned', $description, $recording, $properties);
+    }
+
+    /**
+     * The meeting moved to another provider but the row already holds
+     * an in-flight or stored transfer, so it was deliberately left alone.
+     * An operator decides; nothing is relabelled or deleted.
+     */
+    public function recordingProviderMismatchRetained(Recording $recording, ?string $meetingProvider, string $reason): void
+    {
+        $this->audit->logSystem(
+            'recordings',
+            'recording_provider_mismatch_retained',
+            'Lesson recording kept on its original provider after the meeting was replaced.',
+            $recording,
+            [
+                'provider' => $recording->provider,
+                'meeting_provider' => $meetingProvider,
+                'status' => $recording->status->value,
+                'reason' => $reason,
+            ],
+        );
+    }
+
     /** The provider's copy was moved to its recoverable trash after SIRI's copy was verified. */
     public function sourceRecordingDisposed(Recording $recording): void
     {

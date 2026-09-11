@@ -13,6 +13,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Log;
 
 /**
  * The ONLY place a class recording is transferred. Nothing about the
@@ -85,6 +86,30 @@ final class CaptureLessonRecordingJob implements ShouldBeUnique, ShouldQueue
 
         if ($recording === null) {
             return;
+        }
+
+        // A job queued before the booking's meeting was replaced on
+        // another provider still points at the OLD provider. Re-point
+        // the row when nothing was captured; otherwise leave it for an
+        // operator — never ask one provider for another's recording.
+        $meetingProvider = $recording->bookingMeeting?->provider;
+
+        if ($meetingProvider !== null && $meetingProvider !== $recording->provider) {
+            $outcome = $recordings->reconcileProvider($recording, audit: false);
+
+            if (! $outcome->aligned()) {
+                Log::warning('Recording capture skipped: provider does not match the meeting', [
+                    'recording_id' => $recording->getKey(),
+                    'recording_provider' => $recording->provider,
+                    'meeting_provider' => $meetingProvider,
+                    'status' => $recording->status->value,
+                    'reason' => $outcome->reason,
+                ]);
+
+                return;
+            }
+
+            $recording = $outcome->recording;
         }
 
         if (! $registry->has($recording->provider)) {

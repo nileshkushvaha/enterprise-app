@@ -288,6 +288,23 @@ final class RecordingIngestionService
                 return null;
             }
 
+            // Defence in depth for a replaced meeting: the adapter asked
+            // to fetch must be the provider the row names. A row that
+            // disagrees with its MEETING is re-pointed (or protected) by
+            // RecordingService::reconcileProvider() before the job ever
+            // gets here; this catches any caller that bypassed that and
+            // would otherwise ask one provider for another's recording.
+            // Nothing is claimed and no attempt is spent.
+            if ($provider->key() !== $fresh->provider) {
+                Log::warning('Recording ingestion refused: adapter does not match the recording provider', [
+                    'recording_id' => $fresh->getKey(),
+                    'recording_provider' => $fresh->provider,
+                    'adapter' => $provider->key(),
+                ]);
+
+                return null;
+            }
+
             if (! $provider instanceof MeetingRecordingProviderInterface || ! $provider->supportsRecording()) {
                 $this->fail($fresh, RecordingFailureCode::ProviderCapabilityMissing);
 

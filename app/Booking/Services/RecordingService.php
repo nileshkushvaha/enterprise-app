@@ -6,6 +6,7 @@ namespace App\Booking\Services;
 
 use App\Booking\Contracts\MeetingProviderInterface;
 use App\Booking\DTOs\RecordingLocator;
+use App\Booking\DTOs\RecordingProviderReconciliation;
 use App\Booking\Enums\BookingStatus;
 use App\Booking\Enums\MeetingStatus;
 use App\Booking\Enums\RecordingStatus;
@@ -90,7 +91,15 @@ final class RecordingService
         $existing = Recording::query()->where('idempotency_key', $idempotencyKey)->first();
 
         if ($existing !== null) {
-            return $existing;
+            // The booking's single meeting row is reused when a cancelled
+            // meeting is replaced on another provider. The recording is
+            // keyed on that row, so it can still name the OLD provider —
+            // and the capture job selects its adapter from the recording.
+            // Re-point it when nothing was captured; keep it when a
+            // transfer is in flight or stored (audited either way).
+            return $existing->provider === $provider->key()
+                ? $existing
+                : $this->reconcileProvider($existing, audit: true)->recording;
         }
 
         try {
@@ -122,6 +131,79 @@ final class RecordingService
         $this->lifecycle->recordingRegistered($recording);
 
         return $recording;
+    }
+
+    /**
+     * Brings a recording row into agreement with the provider of the
+     * meeting it belongs to, after that meeting was replaced.
+     *
+     * Re-points the row ONLY when nothing has been captured under the
+     * old provider: status Pending or Failed, no storage locator, and
+     * the meeting itself is live (Created) on the new provider. The
+     * attempt budget restarts because the old attempts asked the wrong
+     * provider. A row that is Transferring, Stored, Available or Expired
+     * — or that already holds a locator — is never relabelled, never
+     * cleared, never deleted: an operator decides.
+     *
+     * Row-locked and idempotent, so the registration path, a stale
+     * queued capture job and the recovery command can all call it for
+     * the same row and converge on one outcome.
+     */
+    public function reconcileProvider(Recording $recording, bool $audit = true, ?User $admin = null): RecordingProviderReconciliation
+    {
+        $outcome = DB::transaction(function () use ($recording): RecordingProviderReconciliation {
+            /** @var Recording $fresh */
+            $fresh = Recording::query()->whereKey($recording->getKey())->lockForUpdate()->with('bookingMeeting')->firstOrFail();
+            $meeting = $fresh->bookingMeeting;
+            $meetingProvider = $meeting?->provider;
+
+            if ($meeting === null) {
+                return new RecordingProviderReconciliation(RecordingProviderReconciliation::PROTECTED, $fresh, null, reason: 'The recording has no meeting row.');
+            }
+
+            if ($meetingProvider === $fresh->provider) {
+                return new RecordingProviderReconciliation(RecordingProviderReconciliation::ALIGNED, $fresh, $meetingProvider);
+            }
+
+            if ($meeting->status !== MeetingStatus::Created) {
+                return new RecordingProviderReconciliation(RecordingProviderReconciliation::PROTECTED, $fresh, $meetingProvider, reason: sprintf('The meeting is %s, not created; nothing to re-point at.', $meeting->status->value));
+            }
+
+            $nothingCaptured = in_array($fresh->status, [RecordingStatus::Pending, RecordingStatus::Failed], true)
+                && $fresh->storage_path === null;
+
+            if (! $nothingCaptured) {
+                return new RecordingProviderReconciliation(RecordingProviderReconciliation::PROTECTED, $fresh, $meetingProvider, reason: sprintf(
+                    'The recording is %s%s under %s; an in-flight or stored transfer is never relabelled.',
+                    $fresh->status->value,
+                    $fresh->storage_path !== null ? ' with a storage locator' : '',
+                    $fresh->provider,
+                ));
+            }
+
+            $previous = (string) $fresh->provider;
+
+            $fresh->fill([
+                'provider' => $meetingProvider,
+                // The old provider's identifiers mean nothing to the new one.
+                'provider_reference' => null,
+                'status' => RecordingStatus::Pending,
+                'capture_attempts' => 0,
+                'failure_code' => null,
+                'failed_at' => null,
+                'transfer_started_at' => null,
+            ])->save();
+
+            return new RecordingProviderReconciliation(RecordingProviderReconciliation::REALIGNED, $fresh, $meetingProvider, $previous);
+        });
+
+        if ($outcome->decision === RecordingProviderReconciliation::REALIGNED) {
+            $this->lifecycle->recordingProviderRealigned($outcome->recording, (string) $outcome->previousProvider, $admin);
+        } elseif ($audit && $outcome->decision === RecordingProviderReconciliation::PROTECTED) {
+            $this->lifecycle->recordingProviderMismatchRetained($outcome->recording, $outcome->meetingProvider, (string) $outcome->reason);
+        }
+
+        return $outcome;
     }
 
     /**

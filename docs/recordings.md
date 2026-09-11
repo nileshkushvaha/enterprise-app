@@ -614,6 +614,38 @@ canonical row, one stored object, and one notification per participant.
 | Retry after a partial upload | row is `stored`, so the retry re-verifies rather than re-uploads |
 | Admin manual retry | only a `failed` row transitions, under a row lock |
 
+### Replacing a meeting on another provider
+
+A booking has one `booking_meetings` row, and it is reused when a
+cancelled meeting is re-created — possibly on another provider (a
+cancelled Google Meet replaced by Zoom, 11 Sep 2026). The recording row
+is keyed on that meeting id, so after the replacement it can still name
+the old provider, and the capture job selects its adapter from the
+recording.
+
+`RecordingService::reconcileProvider()` closes that gap, row-locked and
+idempotent, and is called from three places: registration on the
+replaced meeting, `CaptureLessonRecordingJob` before it picks an
+adapter (so a job queued before the switch captures from the right
+provider), and the operator command below.
+
+| Row state | Outcome |
+|---|---|
+| `pending` or `failed` with **no storage locator**, meeting `created` on the new provider | **re-pointed**: provider = meeting's, status `pending`, attempts 0, old provider reference cleared. Audit `recording_provider_realigned`. |
+| `transferring`, `stored`, `available`, `expired`, or any row with a locator | **protected** — never relabelled, cleared or deleted. Audit `recording_provider_mismatch_retained`; an operator decides. |
+| meeting not `created` | protected — nothing to re-point at. |
+
+`RecordingIngestionService::claim()` additionally refuses to claim a
+row when the adapter it was handed is not the row's provider, without
+spending an attempt.
+
+Operator recovery for one row:
+
+```bash
+php artisan recordings:reconcile-provider <recording id>                       # read-only preview
+php artisan recordings:reconcile-provider <recording id> --execute --admin=<user>  # apply, audited
+```
+
 None of this relies on in-memory state or on queue-level uniqueness.
 `RecordingIdempotencyTest` runs the full realistic sequence — dispatch,
 replay, redelivery, two sweeps — and asserts one object.

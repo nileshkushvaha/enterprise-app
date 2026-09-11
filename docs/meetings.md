@@ -446,6 +446,22 @@ for the loser.
   transaction as the status change (`cancelled`, `hold_expired`,
   `finished`). Idempotent — a replayed event finds nothing active.
 
+### Cancelling the video meeting is not cancelling the lesson
+
+Two different actions, two different effects:
+
+| Action | Booking | Instructor slot | Zoom host reservation | Refund / notifications |
+|---|---|---|---|---|
+| **Cancel Lesson** (Admin → Bookings → Cancel Lesson; `BookingService::cancel()`) | `cancelled` | freed — `Booking::scopeOverlapping()` only counts pending/confirmed | released (`cancelled`), same transaction | refund policy, `BookingCancelled` listeners, meeting cancelled at the provider |
+| **Cancel Video Meeting Only** (`BookingMeetingService::cancelMeeting()`) | unchanged (`confirmed`) | **still reserved** | **still held** | none — the lesson is still on |
+
+"After cancelling the 6 PM meeting the instructor still shows as
+occupied" is therefore correct: only the link was cancelled. Cancel the
+lesson to free the slot. Cancelling only the meeting exists so the
+meeting can be re-created for the same lesson — on the same or another
+provider (§4a, `Pin Meeting Provider`) — without ever freeing the slot
+in between. `CancellationFreesInstructorSlotTest` proves both.
+
 ### Meeting creation — at most one remote create
 
 `BookingMeetingService::createMeeting()` now runs under a per-booking
