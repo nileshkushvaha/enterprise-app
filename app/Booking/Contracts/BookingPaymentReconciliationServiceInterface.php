@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Booking\Contracts;
 
 use App\Booking\Enums\BookingPaymentReconciliationIssueType;
+use App\Booking\Enums\BookingPaymentReconciliationOutcome;
 use App\Booking\Enums\BookingPaymentReconciliationSeverity;
 use App\Models\BookingPayment;
 use App\Models\BookingPaymentReconciliationIssue;
@@ -27,6 +28,18 @@ interface BookingPaymentReconciliationServiceInterface
 
     /** On-demand single-attempt reconciliation (the Filament "Reconcile Now" / "Retry verification" action). */
     public function reconcileAttempt(BookingPayment $payment): BookingPayment;
+
+    /**
+     * One reconciliation pass, reporting what it established. Asks the
+     * provider about the open attempt and settles through the canonical
+     * settlement bridge when it confirms capture; finishes a local
+     * settlement an earlier pass left incomplete; records an incident
+     * when the provider is unreachable. Never charges, never marks a
+     * booking paid on anything but provider evidence.
+     *
+     * @param  string  $source  callback|poll|reconciliation|admin_retry — audit metadata only
+     */
+    public function reconcileNow(BookingPayment $payment, string $source = 'reconciliation'): BookingPaymentReconciliationOutcome;
 
     /** Idempotent: an existing open issue of the same type is updated, not duplicated. */
     public function raiseIssue(

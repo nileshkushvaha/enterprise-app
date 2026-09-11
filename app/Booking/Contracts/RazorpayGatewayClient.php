@@ -44,4 +44,16 @@ interface RazorpayGatewayClient
      * @throws GatewayRequestException
      */
     public function fetchOrder(string $keyId, string $keySecret, string $orderId): array;
+
+    /**
+     * Fetches ONE payment by the id Checkout.js handed back. The order
+     * only ever says created/attempted/paid; the payment says
+     * authorized/captured/failed/refunded and carries the captured
+     * amount — the entity that actually answers "is the money ours?".
+     *
+     * @return array<string, mixed>
+     *
+     * @throws GatewayRequestException
+     */
+    public function fetchPayment(string $keyId, string $keySecret, string $paymentId): array;
 }

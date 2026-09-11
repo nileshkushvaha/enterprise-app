@@ -44,4 +44,12 @@ final class RazorpayConcurrencyFakeClient implements RazorpayGatewayClient
             'status' => 'paid',
         ];
     }
+
+    public function fetchPayment(string $keyId, string $keySecret, string $paymentId): array
+    {
+        return [
+            'id' => $paymentId,
+            'status' => 'captured',
+        ];
+    }
 }

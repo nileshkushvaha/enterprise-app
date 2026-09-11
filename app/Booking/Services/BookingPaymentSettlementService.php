@@ -67,10 +67,16 @@ final class BookingPaymentSettlementService
      * provider retrying. Throws only when settlement was supposed to
      * happen and could not — precisely the case where a retry is wanted.
      *
+     * @param  string|null  $source  which authenticated route produced the proof
+     *                               (callback|poll|webhook|reconciliation|admin_retry); audit
+     *                               metadata only, never a rule input
+     *
      * @throws BookingException when a legitimate settlement fails and must be retried
      */
-    public function settle(Payment $payment, VerifiedPaymentEvent $event): bool
+    public function settle(Payment $payment, VerifiedPaymentEvent $event, ?string $source = null): bool
     {
+        $source ??= $event->source;
+
         if ($payment->payable_type !== BookingPayment::PAYABLE_TYPE) {
             return false;
         }
@@ -119,10 +125,53 @@ final class BookingPaymentSettlementService
         // The attempt is marked Paid first, inside its own transaction,
         // so the ledger is truthful about provider money even if the
         // Booking-side settlement then fails. That failure becomes an
-        // operator incident rather than a lost payment.
+        // operator incident rather than a lost payment — and it is
+        // repairable: completeLocalSettlement() below is re-entered by
+        // the reconciliation pass for exactly that state.
         $this->payments->transition($payment, PaymentStatus::Paid, [
             'provider_payment_id' => $event->providerPaymentId,
         ]);
+
+        return $this->completeLocalSettlement($payment, $source);
+    }
+
+    /**
+     * The Booking half of settlement, for an attempt whose provider money
+     * is ALREADY recorded as Paid: obligation captured, booking paid and
+     * confirmed, receipt and notifications.
+     *
+     * Called by settle() immediately after the attempt transition, and
+     * again by reconciliation when an earlier call failed midway and
+     * left `payments.status = paid` beside `bookings.payment_status =
+     * pending`. Idempotent by construction — markPaid() locks the
+     * booking row and refuses one that is no longer Pending, which is
+     * how a second entrant learns the first one won — so re-running it
+     * is always safe and never a second financial effect.
+     *
+     * Returns true when THIS call settled the booking, false when there
+     * was nothing left to do.
+     *
+     * @throws BookingException when local settlement failed and must be retried
+     */
+    public function completeLocalSettlement(Payment $payment, string $source = 'webhook'): bool
+    {
+        $payment->refresh();
+
+        if ($payment->status !== PaymentStatus::Paid) {
+            throw new BookingException('Only an attempt the provider has paid can complete local settlement.');
+        }
+
+        $obligation = $payment->payable;
+
+        if (! $obligation instanceof BookingPayment) {
+            return false;
+        }
+
+        $booking = $obligation->booking;
+
+        if ($booking === null) {
+            throw new BookingException('The booking for this payment obligation could not be resolved.');
+        }
 
         try {
             DB::transaction(function () use ($obligation, $booking): void {
@@ -145,6 +194,15 @@ final class BookingPaymentSettlementService
 
             throw new BookingException('The payment was collected but the booking could not be settled.');
         }
+
+        $this->audit->logSystem(self::LOG_NAME, 'booking_payment_settled', sprintf('Booking %s settled from a verified %s payment.', (string) $booking->reference, (string) $payment->provider), $booking, [
+            'source' => $source,
+            'provider' => $payment->provider,
+            'payment_attempt_id' => $payment->id,
+            'provider_order_id' => $payment->provider_order_id,
+            'provider_payment_id' => $payment->provider_payment_id,
+            'booking_reference' => $booking->reference,
+        ]);
 
         return true;
     }

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Platform\Audit;
 
 use App\Booking\Services\MeetingProviderResolver;
+use App\Booking\Services\PaymentGatewayConfigurationService;
 use App\Models\AcademicLevel;
 use App\Models\BookingType;
 use App\Models\Country;
@@ -15,6 +16,7 @@ use App\Models\TeacherSubject;
 use App\Models\User;
 use App\Models\UserProfile;
 use App\Services\Payment\PaymentWebhookSignatureService;
+use App\Services\Payment\WebhookSecretState;
 use App\Settings\FeatureSettings;
 use App\Settings\LessonSettings;
 use App\Settings\MeetingSettings;
@@ -103,24 +105,39 @@ final class PlatformConfigAuditor
             if ($anyScope === []) {
                 $out[] = ConfigAuditFinding::fail(
                     $section,
-                    "{$label} is enabled but has NO webhook secret — every webhook delivery is rejected with 401, so payments only settle via the 10-minute reconciliation sweep.",
-                    "Register the webhook in the {$label} dashboard and paste its secret into Admin → Settings → Payments ({$webhookField}).",
+                    "{$label} is enabled but has NO webhook secret — every webhook delivery is rejected with 401, so payments only settle via the reconciliation sweep.",
+                    "Register each webhook in the {$label} dashboard and paste its secret into Admin → Settings → Payments, in the field named for that endpoint.",
                 );
 
                 continue;
             }
 
-            foreach ([
-                PaymentWebhookSignatureService::PURPOSE_WALLET => '/api/webhooks/wallets/recharges/'.$key,
-                PaymentWebhookSignatureService::PURPOSE_BOOKING => '/api/webhooks/bookings/payments/'.$key,
-                PaymentWebhookSignatureService::PURPOSE_PACKAGE => '/api/webhooks/packages/purchases/'.$key,
-            ] as $purpose => $path) {
-                if (PaymentWebhookSignatureService::decryptSecrets($this->gateways, $webhookField, $purpose) === []) {
-                    $out[] = ConfigAuditFinding::fail($section, "{$label}: no webhook secret is valid for the {$purpose} endpoint ({$path}).", "Add a line `{$purpose}:<secret>` (or an unprefixed secret) to {$webhookField}.");
+            // Per endpoint, per state. Missing is a hard failure (401 on
+            // every delivery). A legacy fallback still verifies, but a
+            // shared unprefixed secret can be correct for at most one
+            // of the three endpoints, so it is a warning until each
+            // endpoint has its own field populated.
+            $allDedicated = true;
+
+            foreach (PaymentGatewayConfigurationService::webhookEndpoints($key) as $purpose => $path) {
+                $state = PaymentWebhookSignatureService::secretState($this->gateways, $key, $purpose);
+                $field = PaymentWebhookSignatureService::dedicatedField($key, $purpose);
+
+                if ($state === WebhookSecretState::Missing) {
+                    $allDedicated = false;
+                    $out[] = ConfigAuditFinding::fail($section, "{$label}: no webhook secret is valid for the {$purpose} endpoint ({$path}) — its deliveries are rejected with 401.", "Paste that endpoint's secret from the {$label} dashboard into {$field}.");
+                } elseif ($state === WebhookSecretState::LegacyUnscoped) {
+                    $allDedicated = false;
+                    $out[] = ConfigAuditFinding::warn($section, "{$label}: the {$purpose} endpoint ({$path}) relies on the legacy SHARED secret. Each {$label} endpoint has its own secret, so this is correct for at most one endpoint.", "Paste the {$purpose} endpoint's own secret into {$field}.");
+                } elseif ($state === WebhookSecretState::LegacyScoped) {
+                    $allDedicated = false;
+                    $out[] = ConfigAuditFinding::warn($section, "{$label}: the {$purpose} endpoint ({$path}) verifies through a legacy `{$purpose}:` line; that field is retired next release.", "Move the secret into {$field}.");
                 }
             }
 
-            $out[] = ConfigAuditFinding::ok($section, "{$label}: credentials and webhook secrets present for all three endpoints.");
+            if ($allDedicated) {
+                $out[] = ConfigAuditFinding::ok($section, "{$label}: credentials present and a dedicated webhook secret configured for all three endpoints.");
+            }
         }
 
         if (! ($this->gateways->razorpay_enabled ?? false) && ! ($this->gateways->stripe_enabled ?? false) && $this->gateways->payments_enabled) {

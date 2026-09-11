@@ -118,6 +118,25 @@ final class BookingPaymentWebhookController extends Controller
             return response()->json(['status' => 'retry', 'reason' => 'settlement could not be completed'], 500);
         }
 
+        if ($settled) {
+            // The one row that answers "did the webhook arrive and did it
+            // settle?" — ids and event name only, never the payload.
+            $audit->logSystem(
+                'payments',
+                'booking_webhook_processed',
+                sprintf('Processed a verified %s booking payment webhook.', $provider),
+                $payment,
+                [
+                    'source' => 'webhook',
+                    'provider' => $provider,
+                    'event' => $event->type->value,
+                    'payment_attempt_id' => $payment->id,
+                    'provider_order_id' => $event->providerOrderId,
+                    'provider_payment_id' => $event->providerPaymentId,
+                ],
+            );
+        }
+
         return response()->json([
             'status' => $settled ? 'processed' : 'ignored',
             'event' => $event->type->value,

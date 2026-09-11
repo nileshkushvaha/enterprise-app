@@ -200,9 +200,12 @@
                     @endif
                 </span>
                 @if($awaitingPaymentConfirmation)
-                    <h2 data-booking-step-title tabindex="-1" class="mt-3 text-2xl font-black tracking-tight text-fg-strong outline-none sm:text-3xl">Confirming your payment</h2>
+                    @php
+                        $checkoutState = \App\Booking\Enums\BookingCheckoutState::tryFrom((string) $paymentConfirmationState) ?? \App\Booking\Enums\BookingCheckoutState::AwaitingCapture;
+                    @endphp
+                    <h2 data-booking-step-title tabindex="-1" class="mt-3 text-2xl font-black tracking-tight text-fg-strong outline-none sm:text-3xl">{{ $checkoutState->title() }}</h2>
                     <p class="mx-auto mt-2 max-w-md text-sm leading-6 text-fg-muted">
-                        Your payment has been accepted. We are waiting for the payment provider to confirm it — this usually takes a few seconds. Your lesson time stays reserved.
+                        {{ $checkoutState->message() }} Your lesson time stays reserved.
                     </p>
                 @else
                     <h2 data-booking-step-title tabindex="-1" class="mt-3 text-2xl font-black tracking-tight text-fg-strong outline-none sm:text-3xl">Complete your payment</h2>
@@ -273,24 +276,32 @@
                     <p class="text-3xl font-black tracking-tight text-fg-strong">{{ $result['amount_formatted'] ?? '—' }}</p>
 
                     @if($awaitingPaymentConfirmation)
-                        {{-- Verified checkout, settlement pending. Poll the server
-                             (the webhook or the reconciliation sweep settles it) and
-                             never offer a second Pay button for money already taken. --}}
+                        {{-- Verified checkout, settlement pending. The state is derived on
+                             the server (BookingCheckoutState): waiting for capture, provider
+                             unreachable, or needs attention. Poll — the callback re-check,
+                             the webhook or the reconciliation sweep settles it — and never
+                             offer a second Pay button for money that may already have moved. --}}
+                        @php
+                            $checkoutState = \App\Booking\Enums\BookingCheckoutState::tryFrom((string) $paymentConfirmationState) ?? \App\Booking\Enums\BookingCheckoutState::AwaitingCapture;
+                        @endphp
                         <div
-                            class="booking-payment-confirming mt-4 rounded-xl border border-indigo-300/50 bg-indigo-500/5 px-4 py-4"
+                            class="booking-payment-confirming mt-4 rounded-xl border px-4 py-4 {{ $checkoutState === \App\Booking\Enums\BookingCheckoutState::AwaitingCapture ? 'border-indigo-300/50 bg-indigo-500/5' : 'border-amber-300/60 bg-amber-400/10' }}"
+                            data-checkout-state="{{ $checkoutState->value }}"
                             role="status"
                             aria-live="polite"
                             wire:poll.3s="checkPaymentStatus"
                             x-data="{ since: {{ \Carbon\CarbonImmutable::parse($awaitingPaymentSince ?? now())->getTimestampMs() }}, now: Date.now(), init() { setInterval(() => this.now = Date.now(), 1000); }, get slow() { return this.now - this.since > 60000; } }"
                         >
                             <div class="flex items-start gap-3">
-                                <x-ui.spinner size="sm" class="mt-0.5 shrink-0 text-indigo-600 dark:text-indigo-300" />
+                                <x-ui.spinner size="sm" class="mt-0.5 shrink-0 {{ $checkoutState === \App\Booking\Enums\BookingCheckoutState::AwaitingCapture ? 'text-indigo-600 dark:text-indigo-300' : 'text-amber-600 dark:text-amber-300' }}" />
                                 <div>
-                                    <p class="text-sm font-bold text-fg-strong">Confirming your payment…</p>
-                                    <p class="mt-0.5 text-sm leading-6 text-fg-muted">Payment accepted. Waiting for the provider's confirmation — usually a few seconds. Please don't pay again.</p>
-                                    <p x-show="slow" x-cloak class="mt-2 text-sm leading-6 text-fg-muted">
-                                        This is taking longer than usual. You can safely leave this page: your booking is confirmed automatically the moment the provider confirms, and you'll receive an email. Your time stays reserved until the hold ends.
-                                    </p>
+                                    <p class="text-sm font-bold text-fg-strong">{{ $checkoutState->title() }}</p>
+                                    <p class="mt-0.5 text-sm leading-6 text-fg-muted">{{ $checkoutState->message() }}</p>
+                                    @if($checkoutState->delayedMessage())
+                                        <p x-show="slow" x-cloak class="mt-2 text-sm leading-6 text-fg-muted">
+                                            {{ $checkoutState->delayedMessage() }} Your time stays reserved until the hold ends.
+                                        </p>
+                                    @endif
                                 </div>
                             </div>
                             <div class="mt-3 flex flex-wrap gap-3">

@@ -245,6 +245,39 @@ class PaymentSettingsAtomicityTest extends TestCase
         $this->assertStringNotContainsString('whsec-synthetic-new', $activity->description);
     }
 
+    /** Saving the page with the endpoint secret fields left blank keeps every stored secret. */
+    public function test_saving_without_reentering_razorpay_endpoint_secrets_keeps_the_existing_ones(): void
+    {
+        $gateways = app(PaymentGatewaySettings::class);
+        $gateways->razorpay_booking_webhook_secret = Crypt::encryptString('booking-synthetic-keep');
+        $gateways->razorpay_package_webhook_secret = Crypt::encryptString('package-synthetic-keep');
+        $gateways->razorpay_wallet_webhook_secret = Crypt::encryptString('wallet-synthetic-keep');
+        $gateways->save();
+
+        Livewire::test(PaymentGatewayPage::class)
+            ->fillForm(['razorpay_key_id' => 'rzp_test_changed_only_this'])
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        $fresh = app(PaymentGatewaySettings::class)->refresh();
+        $this->assertSame('booking-synthetic-keep', Crypt::decryptString((string) $fresh->razorpay_booking_webhook_secret));
+        $this->assertSame('package-synthetic-keep', Crypt::decryptString((string) $fresh->razorpay_package_webhook_secret));
+        $this->assertSame('wallet-synthetic-keep', Crypt::decryptString((string) $fresh->razorpay_wallet_webhook_secret));
+
+        // Re-entering one replaces only that one, and its value never reaches the audit trail.
+        Livewire::test(PaymentGatewayPage::class)
+            ->fillForm(['razorpay_booking_webhook_secret' => 'booking-synthetic-new'])
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        $fresh = app(PaymentGatewaySettings::class)->refresh();
+        $this->assertSame('booking-synthetic-new', Crypt::decryptString((string) $fresh->razorpay_booking_webhook_secret));
+        $this->assertSame('package-synthetic-keep', Crypt::decryptString((string) $fresh->razorpay_package_webhook_secret));
+
+        $activity = $this->latestSettingsUpdate(PaymentGatewaySettings::class);
+        $this->assertStringNotContainsString('booking-synthetic', (string) json_encode($activity?->properties));
+    }
+
     public function test_stripe_secret_value_never_appears_in_description_or_properties(): void
     {
         $gateways = app(PaymentGatewaySettings::class);

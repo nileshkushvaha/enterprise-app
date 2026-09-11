@@ -54,12 +54,30 @@ final class RazorpaySdkClient implements RazorpayGatewayClient
 
     public function fetchOrder(string $keyId, string $keySecret, string $orderId): array
     {
+        return $this->fetchEntity($keyId, $keySecret, 'orders/'.rawurlencode($orderId), 'order');
+    }
+
+    public function fetchPayment(string $keyId, string $keySecret, string $paymentId): array
+    {
+        return $this->fetchEntity($keyId, $keySecret, 'payments/'.rawurlencode($paymentId), 'payment');
+    }
+
+    /**
+     * One bounded, authenticated GET for both the order and the payment
+     * look-ups. Same timeout policy, same failure abstraction: anything
+     * other than a readable 2xx body becomes GatewayRequestException,
+     * which callers must treat as "unreachable", never as "unpaid".
+     *
+     * @return array<string, mixed>
+     */
+    private function fetchEntity(string $keyId, string $keySecret, string $path, string $label): array
+    {
         try {
             $response = Http::withBasicAuth($keyId, $keySecret)
                 ->acceptJson()
                 ->connectTimeout(min(3, self::FETCH_ORDER_TIMEOUT_SECONDS))
                 ->timeout(self::FETCH_ORDER_TIMEOUT_SECONDS)
-                ->get('https://api.razorpay.com/v1/orders/'.rawurlencode($orderId));
+                ->get('https://api.razorpay.com/v1/'.$path);
         } catch (ConnectionException $e) {
             throw new GatewayRequestException('Razorpay did not respond in time: '.$e->getMessage(), previous: $e);
         } catch (Throwable $e) {
@@ -69,15 +87,15 @@ final class RazorpaySdkClient implements RazorpayGatewayClient
         if ($response->failed()) {
             $description = (string) ($response->json('error.description') ?? $response->reason());
 
-            throw new GatewayRequestException('Razorpay order lookup failed: '.$description);
+            throw new GatewayRequestException("Razorpay {$label} lookup failed: ".$description);
         }
 
-        $order = $response->json();
+        $entity = $response->json();
 
-        if (! is_array($order)) {
-            throw new GatewayRequestException('Razorpay order lookup returned an unreadable body.');
+        if (! is_array($entity)) {
+            throw new GatewayRequestException("Razorpay {$label} lookup returned an unreadable body.");
         }
 
-        return $order;
+        return $entity;
     }
 }

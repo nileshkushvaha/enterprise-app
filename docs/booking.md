@@ -847,28 +847,57 @@ paid type booked ──▶ RESERVATION  status=pending, payment=pending,
 cancel a PAID booking → automatic refund (SyncPaymentOnCancellation listener)
 ```
 
-- **Three settlement sources, one settlement path.** Every source ends
+- **Four settlement sources, one settlement path.** Every source ends
   in `BookingPaymentSettlementService::settle()` (attempt captured →
-  obligation captured → booking confirmed → receipt → notifications):
-  1. **Checkout completion** (`BookingCheckoutCompletionService`, since
-     2026-09-11): when Razorpay Checkout.js reports success, the server
-     verifies the callback signature and that the order is this
-     booking's, then confirms the order over the authenticated API
-     (`status: paid`) and settles — in the same request, so a captured
-     payment shows "Booking confirmed" immediately. The browser's word
-     alone never settles anything; an authorized-but-uncaptured payment
-     leaves the booking payable and the UI polls
-     (`refreshPendingPayment()`, provider re-asked at most every 15 s).
+  obligation captured → booking confirmed → receipt → notifications).
+  The normal hierarchy is *callback confirms in seconds; webhook is the
+  asynchronous authority; the sweep is the safety net*:
+  1. **Checkout completion** (`BookingCheckoutCompletionService`): when
+     Razorpay Checkout.js reports success, the server verifies the
+     callback signature and that the order is this booking's, records
+     the payment id, then asks Razorpay about **that specific payment**
+     over the authenticated API (`PaymentAttemptVerifier::verify()`,
+     `RazorpayGatewayClient::fetchPayment()`). `captured` settles in the
+     same request; `authorized` is *awaiting capture*; an unreachable
+     provider records a `provider_unavailable` incident. The browser's
+     word alone never settles anything. The result is a
+     `BookingCheckoutOutcome` whose `BookingCheckoutState`
+     (`confirmed | awaiting_capture | provider_unreachable |
+     needs_attention | failed | payable`) drives the student copy.
   2. **Webhook** (below) — the source when the browser never returns.
+     `payment.captured` and `order.paid` both settle (the latter carries
+     the same payment entity); duplicates are ignored on the attempt.
   3. **Reconciliation sweep** (`booking-payments:reconcile`, every five
      minutes, attempts older than
-     `booking_payment_unknown_timeout_minutes`, now 5) — the backstop
-     for both.
-- **Webhook**: `POST /api/webhooks/bookings/payments/{provider}` —
-  the provider's `parseWebhook()` verifies authenticity (401 on
-  failure) and normalizes to `succeeded|failed|refunded` + reference.
-  Idempotent: replays, unknown references, and out-of-state events
-  answer 200 `ignored` so providers stop retrying.
+     `booking_payment_unknown_timeout_minutes`, 5) — the backstop for
+     both. Worst-case recovery when callback and webhook both fail is
+     therefore timeout + one cadence ≈ 10 minutes.
+  4. **Admin retry** (`BookingPayments → Retry verification`) — the same
+     pass, on demand.
+- **Paid attempt, pending booking is repairable.** `settle()` marks the
+  attempt Paid first and then runs the booking half in
+  `completeLocalSettlement()`. If the booking half fails, a Critical
+  `provider_success_local_incomplete` incident is raised and every later
+  pass (sweep, poll, admin retry) re-enters
+  `completeLocalSettlement()` — lock-protected and idempotent through
+  `markPaid()` — instead of returning "attempt already paid" forever.
+  Success closes the incident and audits `booking_payment_recovered`.
+- **The confirming state is server-derived.**
+  `BookingCheckoutCompletionService::currentState()` looks at the attempt
+  ledger (an open attempt carrying the provider payment id, or a Paid
+  attempt beside a payable booking) and the incident queue. Both the
+  wizard and `BookingDetail` compute it on mount and on every poll, so a
+  reload, another device or a re-login shows "Payment submitted
+  successfully — please don't make another payment", never a Pay
+  button; `initiatePayment()` refuses to open a second checkout while it
+  is in progress. The page polls the database every 3 s and asks the
+  provider at most every 15 s (`PROVIDER_RECHECK_SECONDS`).
+- **Audit events** (`activity_log`, log `payments`, never a secret or a
+  payload): `booking_checkout_verified`, `booking_payment_provider_verified`
+  (provider status word + outcome), `booking_webhook_signature_invalid`,
+  `booking_webhook_processed`, `payment_attempt_paid`,
+  `booking_payment_settled` (with `source`), `booking_payment_recovered`,
+  `booking_reconciliation_completed`.
 - Payment transitions are recorded on the booking timeline
   (`payment_status_changed`); booking-status changes flow through
   `BookingService::confirm()/cancel()`, so events, notifications, and

@@ -9,6 +9,7 @@ use App\Booking\Contracts\BookingPaymentServiceInterface;
 use App\Booking\Contracts\RazorpayGatewayClient;
 use App\Booking\Contracts\StudentBookingServiceInterface;
 use App\Booking\DTOs\StudentBookingData;
+use App\Booking\Enums\BookingCheckoutState;
 use App\Booking\Enums\BookingPaymentStatus;
 use App\Booking\Enums\BookingStatus;
 use App\Booking\Enums\Weekday;
@@ -115,13 +116,28 @@ final class BookingCheckoutCompletionServiceTest extends TestCase
         return app(BookingCheckoutCompletionServiceInterface::class);
     }
 
+    /** @return array<string, mixed> */
+    private function capturedPayment(string $paymentId, string $orderId, int $amount = 49900, string $currency = 'INR'): array
+    {
+        return ['id' => $paymentId, 'entity' => 'payment', 'order_id' => $orderId, 'status' => 'captured', 'amount' => $amount, 'currency' => $currency];
+    }
+
+    /** @return array<string, mixed> */
+    private function authorizedPayment(string $paymentId, string $orderId): array
+    {
+        return ['id' => $paymentId, 'entity' => 'payment', 'order_id' => $orderId, 'status' => 'authorized', 'amount' => 49900, 'currency' => 'INR'];
+    }
+
     public function test_a_verified_callback_whose_order_razorpay_reports_paid_settles_through_the_real_path(): void
     {
         [$booking, $orderId] = $this->reservedBooking();
-        $this->razorpay->shouldReceive('fetchOrder')->once()->andReturn(['id' => $orderId, 'status' => 'paid', 'amount' => 49900, 'currency' => 'INR']);
+        $this->razorpay->shouldReceive('fetchPayment')->once()->with('rzp_test_key_id', self::KEY_SECRET, 'pay_SVC1')->andReturn($this->capturedPayment('pay_SVC1', $orderId));
+        $this->razorpay->shouldNotReceive('fetchOrder');
 
-        $result = $this->service()->completeRazorpayCheckout($booking, $orderId, 'pay_SVC1', $this->signature($orderId, 'pay_SVC1'));
+        $outcome = $this->service()->completeRazorpayCheckout($booking, $orderId, 'pay_SVC1', $this->signature($orderId, 'pay_SVC1'));
+        $result = $outcome->booking;
 
+        $this->assertSame(BookingCheckoutState::Confirmed, $outcome->state);
         $this->assertSame(BookingPaymentStatus::Paid, $result->payment_status);
         $this->assertSame(BookingStatus::Confirmed, $result->status);
         $this->assertNull($result->reserved_until, 'the hold is cleared');
@@ -136,10 +152,13 @@ final class BookingCheckoutCompletionServiceTest extends TestCase
     public function test_an_order_razorpay_does_not_yet_report_paid_leaves_the_booking_payable(): void
     {
         [$booking, $orderId] = $this->reservedBooking();
-        $this->razorpay->shouldReceive('fetchOrder')->once()->andReturn(['id' => $orderId, 'status' => 'attempted', 'amount' => 49900, 'currency' => 'INR']);
+        $this->razorpay->shouldReceive('fetchPayment')->once()->andReturn($this->authorizedPayment('pay_SVC1', $orderId));
 
-        $result = $this->service()->completeRazorpayCheckout($booking, $orderId, 'pay_SVC1', $this->signature($orderId, 'pay_SVC1'));
+        $outcome = $this->service()->completeRazorpayCheckout($booking, $orderId, 'pay_SVC1', $this->signature($orderId, 'pay_SVC1'));
+        $result = $outcome->booking;
 
+        $this->assertSame(BookingCheckoutState::AwaitingCapture, $outcome->state);
+        $this->assertTrue($outcome->confirmationInProgress());
         $this->assertSame(BookingPaymentStatus::Pending, $result->payment_status);
         $this->assertSame(BookingStatus::Pending, $result->status);
         $this->assertSame('pay_SVC1', Payment::query()->firstOrFail()->provider_payment_id, 'the payment id is still recorded for the webhook to correlate');
@@ -150,11 +169,13 @@ final class BookingCheckoutCompletionServiceTest extends TestCase
     public function test_an_unreachable_provider_leaves_the_booking_payable_and_raises_an_issue(): void
     {
         [$booking, $orderId] = $this->reservedBooking();
-        $this->razorpay->shouldReceive('fetchOrder')->once()->andThrow(new GatewayRequestException('timeout'));
+        $this->razorpay->shouldReceive('fetchPayment')->once()->andThrow(new GatewayRequestException('timeout'));
 
-        $result = $this->service()->completeRazorpayCheckout($booking, $orderId, 'pay_SVC1', $this->signature($orderId, 'pay_SVC1'));
+        $outcome = $this->service()->completeRazorpayCheckout($booking, $orderId, 'pay_SVC1', $this->signature($orderId, 'pay_SVC1'));
 
-        $this->assertSame(BookingPaymentStatus::Pending, $result->payment_status);
+        $this->assertSame(BookingCheckoutState::ProviderUnreachable, $outcome->state);
+        $this->assertTrue($outcome->confirmationInProgress(), 'the student is told not to pay again, not shown a Pay button');
+        $this->assertSame(BookingPaymentStatus::Pending, $outcome->booking->payment_status);
         $this->assertSame(1, BookingPaymentReconciliationIssue::query()->count());
     }
 
@@ -162,6 +183,7 @@ final class BookingCheckoutCompletionServiceTest extends TestCase
     {
         [$booking, $orderId] = $this->reservedBooking();
         $this->razorpay->shouldNotReceive('fetchOrder');
+        $this->razorpay->shouldNotReceive('fetchPayment');
 
         $this->expectException(InvalidPaymentWebhookException::class);
         $this->service()->completeRazorpayCheckout($booking, $orderId, 'pay_FORGED', 'not-the-signature');
@@ -171,28 +193,35 @@ final class BookingCheckoutCompletionServiceTest extends TestCase
     public function test_refresh_throttles_provider_lookups_and_settles_once_paid(): void
     {
         [$booking, $orderId] = $this->reservedBooking();
-        $this->razorpay->shouldReceive('fetchOrder')->once()->andReturn(['id' => $orderId, 'status' => 'attempted', 'amount' => 49900, 'currency' => 'INR']);
+        $this->razorpay->shouldReceive('fetchPayment')->once()->andReturn($this->authorizedPayment('pay_SVC1', $orderId));
         $this->service()->completeRazorpayCheckout($booking, $orderId, 'pay_SVC1', $this->signature($orderId, 'pay_SVC1'));
 
-        // Inside the window: no provider call even though it would now report paid.
-        $this->razorpay->shouldReceive('fetchOrder')->never();
-        $this->assertSame(BookingPaymentStatus::Pending, $this->service()->refreshPendingPayment($booking)->payment_status);
+        // Inside the window: no provider call even though it would now report captured.
+        $this->razorpay->shouldReceive('fetchPayment')->never();
+        $refreshed = $this->service()->refreshPendingPayment($booking);
+        $this->assertSame(BookingCheckoutState::AwaitingCapture, $refreshed->state);
+        $this->assertSame(BookingPaymentStatus::Pending, $refreshed->booking->payment_status);
 
         // After the window: asked again, settled.
         $this->travel(BookingCheckoutCompletionService::PROVIDER_RECHECK_SECONDS + 1)->seconds();
         Mockery::close();
         $this->razorpay = Mockery::mock(RazorpayGatewayClient::class);
-        $this->razorpay->shouldReceive('fetchOrder')->once()->andReturn(['id' => $orderId, 'status' => 'paid', 'amount' => 49900, 'currency' => 'INR']);
+        $this->razorpay->shouldReceive('fetchPayment')->once()->andReturn($this->capturedPayment('pay_SVC1', $orderId));
         $this->app->instance(RazorpayGatewayClient::class, $this->razorpay);
 
-        $this->assertSame(BookingPaymentStatus::Paid, $this->service()->refreshPendingPayment($booking->fresh())->payment_status);
+        $settled = $this->service()->refreshPendingPayment($booking->fresh());
+        $this->assertSame(BookingCheckoutState::Confirmed, $settled->state);
+        $this->assertSame(BookingPaymentStatus::Paid, $settled->booking->payment_status);
     }
 
     public function test_refresh_is_a_plain_read_for_a_booking_that_is_not_awaiting_payment(): void
     {
         $this->razorpay->shouldNotReceive('fetchOrder');
+        $this->razorpay->shouldNotReceive('fetchPayment');
         $booking = Booking::factory()->confirmed()->create(['payment_status' => BookingPaymentStatus::Paid]);
 
-        $this->assertSame(BookingPaymentStatus::Paid, $this->service()->refreshPendingPayment($booking)->payment_status);
+        $outcome = $this->service()->refreshPendingPayment($booking);
+        $this->assertSame(BookingCheckoutState::Confirmed, $outcome->state);
+        $this->assertSame(BookingPaymentStatus::Paid, $outcome->booking->payment_status);
     }
 }

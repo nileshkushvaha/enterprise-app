@@ -136,7 +136,11 @@ class BookingPaymentsTable
                     ->label('Retry verification')
                     ->icon('heroicon-m-arrow-path')
                     ->authorize(fn (BookingPayment $record): bool => auth()->user()?->can('retryVerification', $record) ?? false)
-                    ->visible(fn (BookingPayment $record): bool => ! $record->status->isTerminal() && $record->provider_order_id !== null)
+                    // The provider order id lives on the Payment ATTEMPT now,
+                    // not on the obligation; gating on the legacy column hid
+                    // this action for every booking collected since the cutover.
+                    ->visible(fn (BookingPayment $record): bool => ! $record->status->isTerminal()
+                        && $record->paymentAttempts()->whereNotNull('provider_order_id')->exists())
                     ->action(function (BookingPayment $record): void {
                         try {
                             // Re-runs an authenticated provider status fetch

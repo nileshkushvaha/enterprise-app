@@ -142,13 +142,21 @@
             @endif
 
             @if($isActive && $awaitingPaymentConfirmation && $booking->payment_status->value === 'pending')
-                {{-- Verified checkout, provider capture pending: poll, never a second Pay button. --}}
-                <div class="mt-5 rounded-xl border border-indigo-500/20 bg-indigo-500/10 px-4 py-3" role="status" aria-live="polite" wire:poll.3s="checkPaymentStatus">
+                {{-- Verified checkout, settlement pending. State derived on the server
+                     (BookingCheckoutState) and restored on every load: poll, never a
+                     second Pay button for money that may already have moved. --}}
+                @php
+                    $checkoutState = \App\Booking\Enums\BookingCheckoutState::tryFrom((string) $paymentConfirmationState) ?? \App\Booking\Enums\BookingCheckoutState::AwaitingCapture;
+                @endphp
+                <div class="mt-5 rounded-xl border px-4 py-3 {{ $checkoutState === \App\Booking\Enums\BookingCheckoutState::AwaitingCapture ? 'border-indigo-500/20 bg-indigo-500/10' : 'border-amber-400/40 bg-amber-400/10' }}" data-checkout-state="{{ $checkoutState->value }}" role="status" aria-live="polite" wire:poll.3s="checkPaymentStatus">
                     <div class="flex items-start gap-3">
-                        <x-ui.spinner size="sm" class="mt-0.5 shrink-0 text-indigo-600 dark:text-indigo-300" />
+                        <x-ui.spinner size="sm" class="mt-0.5 shrink-0 {{ $checkoutState === \App\Booking\Enums\BookingCheckoutState::AwaitingCapture ? 'text-indigo-600 dark:text-indigo-300' : 'text-amber-600 dark:text-amber-300' }}" />
                         <div>
-                            <p class="text-sm font-bold text-fg-strong">Confirming your payment…</p>
-                            <p class="mt-0.5 text-sm leading-6 text-fg-muted">Payment accepted. Waiting for the provider's confirmation — usually a few seconds. Please don't pay again.</p>
+                            <p class="text-sm font-bold text-fg-strong">{{ $checkoutState->title() }}</p>
+                            <p class="mt-0.5 text-sm leading-6 text-fg-muted">{{ $checkoutState->message() }}</p>
+                            @if($checkoutState->delayedMessage())
+                                <p class="mt-2 text-xs leading-5 text-fg-muted">{{ $checkoutState->delayedMessage() }}</p>
+                            @endif
                         </div>
                     </div>
                 </div>

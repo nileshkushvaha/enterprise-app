@@ -70,6 +70,11 @@ final class CountingRazorpayConcurrencyFakeClient implements RazorpayGatewayClie
         return ['id' => $orderId, 'status' => 'created'];
     }
 
+    public function fetchPayment(string $keyId, string $keySecret, string $paymentId): array
+    {
+        return ['id' => $paymentId, 'status' => 'created'];
+    }
+
     private function record(string $orderId): void
     {
         $path = $this->logPath ?? getenv(self::LOG_ENV);

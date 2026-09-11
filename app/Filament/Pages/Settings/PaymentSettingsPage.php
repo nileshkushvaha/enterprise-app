@@ -7,6 +7,7 @@ namespace App\Filament\Pages\Settings;
 use App\Booking\Services\PaymentGatewayConfigurationService;
 use App\Models\Country;
 use App\Models\Currency;
+use App\Services\Payment\PaymentWebhookSignatureService;
 use App\Settings\PaymentAdvancedSettings;
 use App\Settings\PaymentConfigurationSettings;
 use App\Settings\PaymentGatewaySettings;
@@ -115,6 +116,9 @@ abstract class PaymentSettingsPage extends Page
             'razorpay_key_id' => $gateways->razorpay_key_id,
             'razorpay_key_secret' => null,
             'razorpay_webhook_secret' => null,
+            'razorpay_booking_webhook_secret' => null,
+            'razorpay_package_webhook_secret' => null,
+            'razorpay_wallet_webhook_secret' => null,
             'razorpay_success_url' => $gateways->razorpay_success_url ?? url('/payments/razorpay/success'),
             'razorpay_failure_url' => $gateways->razorpay_failure_url ?? url('/payments/razorpay/failure'),
             'razorpay_webhook_url' => $gateways->razorpay_webhook_url ?? url('/api/webhooks/bookings/payments/razorpay'),
@@ -409,11 +413,19 @@ abstract class PaymentSettingsPage extends Page
                                 ->maxLength(255)
                                 ->helperText('Stored encrypted. Leave blank to keep existing.'),
                         ]),
-                        Textarea::make('razorpay_webhook_secret')
-                            ->label('Webhook Secret(s)')
-                            ->rows(3)
-                            ->autosize()
-                            ->helperText('Stored encrypted. Leave blank to keep existing. ONE SECRET PER LINE. Prefix a line to scope it to one endpoint: "booking:whsec_..." or "package:whsec_...". Two lines with the same prefix = credential rotation (both stay valid). An unprefixed line works for every endpoint (legacy behaviour).'),
+                        Section::make('Webhook secrets — one per Razorpay endpoint')
+                            ->description('Razorpay signs each registered webhook with its own secret. Paste each endpoint\'s secret (from Razorpay → Account & Settings → Webhooks) into the field named for that endpoint. Stored encrypted; leave a field blank to keep its existing value. During rotation, enter the old and new secret on two lines.')
+                            ->schema([
+                                $this->razorpayWebhookSecretInput(PaymentWebhookSignatureService::PURPOSE_BOOKING, 'Booking Payment Webhook Secret'),
+                                $this->razorpayWebhookSecretInput(PaymentWebhookSignatureService::PURPOSE_PACKAGE, 'Package Purchase Webhook Secret'),
+                                $this->razorpayWebhookSecretInput(PaymentWebhookSignatureService::PURPOSE_WALLET, 'Wallet Recharge Webhook Secret'),
+                                Textarea::make('razorpay_webhook_secret')
+                                    ->label('Legacy shared webhook secret (deprecated)')
+                                    ->rows(2)
+                                    ->autosize()
+                                    ->visible(fn (): bool => filled(app(PaymentGatewaySettings::class)->razorpay_webhook_secret))
+                                    ->helperText('Still honoured as a fallback for endpoints without a dedicated secret above, and retired next release. Move each endpoint\'s secret into its own field; then use "Reset gateway credentials" or leave this blank to keep it until removal.'),
+                            ]),
                         $this->gatewayUrls('razorpay'),
                     ]),
                 $this->razorpayInternationalSection(),
@@ -908,6 +920,7 @@ abstract class PaymentSettingsPage extends Page
             $this->saveEncryptedField($settings, 'stripe_webhook_secret', $data['stripe_webhook_secret'] ?? null);
             $this->saveEncryptedField($settings, 'razorpay_key_secret', $data['razorpay_key_secret'] ?? null);
             $this->saveEncryptedField($settings, 'razorpay_webhook_secret', $data['razorpay_webhook_secret'] ?? null);
+            $this->saveRazorpayEndpointSecrets($settings, $data);
             $this->saveEncryptedField($settings, 'paypal_client_secret', $data['paypal_client_secret'] ?? null);
             $this->saveEncryptedField($settings, 'paypal_webhook_secret', $data['paypal_webhook_secret'] ?? null);
             $this->saveEncryptedField($settings, 'applepay_merchant_certificate', $data['applepay_merchant_certificate'] ?? null);
@@ -950,6 +963,37 @@ abstract class PaymentSettingsPage extends Page
         });
     }
 
+    /**
+     * One password input per Razorpay webhook endpoint. The helper text
+     * reports the endpoint path and how its secret is currently
+     * configured — never the secret itself.
+     */
+    protected function razorpayWebhookSecretInput(string $purpose, string $label): Textarea
+    {
+        $field = PaymentWebhookSignatureService::dedicatedField('razorpay', $purpose);
+        $path = PaymentGatewayConfigurationService::webhookEndpoints('razorpay')[$purpose];
+
+        return Textarea::make($field)
+            ->label($label)
+            ->rows(1)
+            ->autosize()
+            ->helperText(function () use ($purpose, $path): string {
+                $state = PaymentWebhookSignatureService::secretState(app(PaymentGatewaySettings::class), 'razorpay', $purpose);
+
+                return sprintf('%s — %s', $path, $state->label());
+            });
+    }
+
+    /** @param  array<string, mixed>  $data */
+    protected function saveRazorpayEndpointSecrets(PaymentGatewaySettings $settings, array $data): void
+    {
+        foreach (PaymentWebhookSignatureService::PURPOSES as $purpose) {
+            $field = PaymentWebhookSignatureService::dedicatedField('razorpay', $purpose);
+
+            $this->saveEncryptedField($settings, $field, $data[$field] ?? null);
+        }
+    }
+
     protected function saveEncryptedField(PaymentGatewaySettings $settings, string $field, ?string $value): void
     {
         if (filled($value)) {
@@ -963,6 +1007,7 @@ abstract class PaymentSettingsPage extends Page
             foreach ([
                 'stripe_secret_key', 'stripe_webhook_secret',
                 'razorpay_key_secret', 'razorpay_webhook_secret',
+                'razorpay_booking_webhook_secret', 'razorpay_package_webhook_secret', 'razorpay_wallet_webhook_secret',
                 'paypal_client_secret', 'paypal_webhook_secret',
                 'applepay_merchant_certificate', 'applepay_merchant_key', 'applepay_webhook_secret',
             ] as $secretField) {
@@ -1109,6 +1154,7 @@ abstract class PaymentSettingsPage extends Page
                     $settings->razorpay_key_id = $data['razorpay_key_id'] ?? null;
                     $this->saveEncryptedField($settings, 'razorpay_key_secret', $data['razorpay_key_secret'] ?? null);
                     $this->saveEncryptedField($settings, 'razorpay_webhook_secret', $data['razorpay_webhook_secret'] ?? null);
+                    $this->saveRazorpayEndpointSecrets($settings, $data);
                 })(),
                 'stripe' => (function () use ($settings, $data): void {
                     $settings->stripe_publishable_key = $data['stripe_publishable_key'] ?? null;

@@ -11,9 +11,11 @@ use App\Booking\Contracts\BookingPaymentServiceInterface;
 use App\Booking\Contracts\BookingRepositoryInterface;
 use App\Booking\Contracts\BookingServiceInterface;
 use App\Booking\DTOs\AvailabilityQueryData;
+use App\Booking\DTOs\BookingCheckoutOutcome;
 use App\Booking\DTOs\CancelBookingData;
 use App\Booking\DTOs\RescheduleBookingData;
 use App\Booking\Enums\BookingActor;
+use App\Booking\Enums\BookingCheckoutState;
 use App\Booking\Enums\BookingPaymentStatus;
 use App\Booking\Enums\BookingStatus;
 use App\Booking\Enums\RecordingPlaybackState;
@@ -139,6 +141,13 @@ final class BookingDetail extends Component
         Gate::authorize('view', $booking);
 
         $this->booking = $booking->loadMissing(['type', 'instructor']);
+
+        // Server-derived: a verified checkout that has not resolved shows
+        // the confirming state on a reload, a new device or a fresh
+        // login — never a Pay button over money that may have moved.
+        if ($this->booking->payment_status->isPayable() && ! $this->booking->status->isTerminal()) {
+            $this->applyCheckoutOutcome($this->checkout->currentState($this->booking));
+        }
     }
 
     public function openReschedulePanel(): void
@@ -431,9 +440,11 @@ final class BookingDetail extends Component
     /** Verified checkout awaiting the provider's capture confirmation — the page polls while true. */
     public bool $awaitingPaymentConfirmation = false;
 
+    /** BookingCheckoutState value rendered by the payment block; see BookingWizard::$paymentConfirmationState. */
+    public ?string $paymentConfirmationState = null;
+
     public function initiatePayment(): void
     {
-        $this->awaitingPaymentConfirmation = false;
         if (! $this->booking) {
             return;
         }
@@ -442,6 +453,19 @@ final class BookingDetail extends Component
 
         $this->banner = '';
         $this->paymentOrder = [];
+
+        // A verified checkout may already be in flight (reload, other
+        // tab). Money may have moved: never open a second checkout.
+        $current = $this->checkout->currentState($this->booking);
+
+        if ($current->confirmationInProgress()) {
+            $this->applyCheckoutOutcome($current);
+
+            return;
+        }
+
+        $this->awaitingPaymentConfirmation = false;
+        $this->paymentConfirmationState = null;
 
         // A resolvable billing country is required before
         // checkout — PaymentProviderResolver's country-aware routing
@@ -542,21 +566,29 @@ final class BookingDetail extends Component
 
         Gate::authorize('pay', $this->booking);
 
-        $booking = $this->awaitingPaymentConfirmation
+        $outcome = $this->awaitingPaymentConfirmation
             ? $this->checkout->refreshPendingPayment($this->booking)
-            : $this->booking->refresh();
+            : $this->checkout->currentState($this->booking);
 
-        if ($booking->payment_status->value === 'paid') {
-            $this->banner = '';
-            $this->awaitingPaymentConfirmation = false;
-        } elseif ($booking->payment_status->value === 'failed') {
+        $this->applyCheckoutOutcome($outcome);
+
+        if ($outcome->booking->payment_status->value === 'failed') {
             $this->banner = 'Payment failed. Please try again.';
-            $this->awaitingPaymentConfirmation = false;
-        } elseif ($booking->status->isTerminal()) {
-            $this->awaitingPaymentConfirmation = false;
         }
+    }
 
-        $this->booking = $booking->loadMissing(['type', 'instructor']);
+    /** Renders a checkout outcome: fresh booking, confirming flag and state. */
+    private function applyCheckoutOutcome(BookingCheckoutOutcome $outcome): void
+    {
+        $this->booking = $outcome->booking->loadMissing(['type', 'instructor']);
+        $this->paymentConfirmationState = $outcome->state->value;
+        $this->awaitingPaymentConfirmation = $outcome->confirmationInProgress();
+
+        if ($outcome->state === BookingCheckoutState::Failed) {
+            $this->banner = 'Payment failed. Please try again.';
+        } elseif ($outcome->state === BookingCheckoutState::Confirmed) {
+            $this->banner = '';
+        }
     }
 
     public function verifyPayment(string $orderId, string $paymentId, string $signature): void
@@ -573,12 +605,12 @@ final class BookingDetail extends Component
             // Verify, confirm with Razorpay, settle — see
             // BookingCheckoutCompletionService. Captured → confirmed now;
             // otherwise the confirming state below polls.
-            $booking = $this->checkout->completeRazorpayCheckout($this->booking, $orderId, $paymentId, $signature);
-
-            $this->awaitingPaymentConfirmation = $booking->payment_status->isPayable();
-            $this->booking = $booking->loadMissing(['type', 'instructor']);
+            $this->applyCheckoutOutcome(
+                $this->checkout->completeRazorpayCheckout($this->booking, $orderId, $paymentId, $signature),
+            );
         } catch (InvalidPaymentWebhookException|BookingException $exception) {
             $this->awaitingPaymentConfirmation = false;
+            $this->paymentConfirmationState = null;
             $this->banner = $exception->getMessage();
         }
     }

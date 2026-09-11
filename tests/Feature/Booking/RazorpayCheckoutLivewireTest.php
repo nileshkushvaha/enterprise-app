@@ -11,6 +11,7 @@ use App\Booking\Enums\BookingPaymentRecordStatus;
 use App\Booking\Enums\BookingPaymentStatus;
 use App\Booking\Enums\BookingStatus;
 use App\Booking\Enums\Weekday;
+use App\Booking\Exceptions\GatewayRequestException;
 use App\Booking\Services\BookingCheckoutCompletionService;
 use App\Livewire\Frontend\Student\BookingDetail;
 use App\Models\Booking;
@@ -122,6 +123,10 @@ class RazorpayCheckoutLivewireTest extends TestCase
         // exercising the "verified but unsettled" state; tests that want
         // instant confirmation override this with status 'paid'.
         $mock->shouldReceive('fetchOrder')->andReturn(['id' => 'order_LW1', 'status' => 'created', 'amount' => 49900, 'currency' => 'INR'])->byDefault();
+        // Once the callback has recorded the payment id, the specific
+        // PAYMENT is asked about. By default it is authorized but not yet
+        // captured — the "verified but unsettled" state.
+        $mock->shouldReceive('fetchPayment')->andReturnUsing(fn (string $k, string $s, string $paymentId): array => ['id' => $paymentId, 'order_id' => 'order_LW1', 'status' => 'authorized', 'amount' => 49900, 'currency' => 'INR'])->byDefault();
         $this->app->instance(RazorpayGatewayClient::class, $mock);
         $this->razorpayMock = $mock;
     }
@@ -132,6 +137,7 @@ class RazorpayCheckoutLivewireTest extends TestCase
     private function razorpayReportsPaid(string $orderId = 'order_LW1'): void
     {
         $this->razorpayMock->shouldReceive('fetchOrder')->andReturn(['id' => $orderId, 'status' => 'paid', 'amount' => 49900, 'currency' => 'INR']);
+        $this->razorpayMock->shouldReceive('fetchPayment')->andReturnUsing(fn (string $k, string $s, string $paymentId): array => ['id' => $paymentId, 'order_id' => $orderId, 'status' => 'captured', 'amount' => 49900, 'currency' => 'INR']);
     }
 
     private function checkoutSignature(string $orderId, string $paymentId): string
@@ -250,7 +256,7 @@ class RazorpayCheckoutLivewireTest extends TestCase
         $component->call('verifyPayment', $orderId, 'pay_LW1', $this->checkoutSignature($orderId, 'pay_LW1'))
             ->assertSet('awaitingPaymentConfirmation', false)
             ->assertSee('Booking confirmed')
-            ->assertDontSee('Confirming your payment')
+            ->assertDontSee('Payment submitted successfully')
             ->assertDontSee('Pay 499.00 INR securely');
 
         $booking = Booking::query()->findOrFail($component->get('bookingId'));
@@ -282,7 +288,7 @@ class RazorpayCheckoutLivewireTest extends TestCase
         // Not captured yet when the callback arrives.
         $component->call('verifyPayment', $orderId, 'pay_LW1', $this->checkoutSignature($orderId, 'pay_LW1'))
             ->assertSet('awaitingPaymentConfirmation', true)
-            ->assertSee('Confirming your payment');
+            ->assertSee('Payment submitted successfully');
         $bookingId = $component->get('bookingId');
         $this->assertNotNull(BookingPayment::query()->where('booking_id', $bookingId)->sole()->last_synced_at, 'the provider was asked at completion');
 
@@ -322,7 +328,7 @@ class RazorpayCheckoutLivewireTest extends TestCase
 
         $component->call('verifyPayment', $orderId, 'pay_LW1', $this->checkoutSignature($orderId, 'pay_LW1'))
             ->assertSet('awaitingPaymentConfirmation', true)
-            ->assertSee('Confirming your payment')
+            ->assertSee('Payment submitted successfully')
             ->assertSee('wire:poll.3s="checkPaymentStatus"', false)
             ->assertDontSee('Pay 499.00 INR securely')
             ->assertDontSee('Complete your payment');
@@ -352,7 +358,7 @@ class RazorpayCheckoutLivewireTest extends TestCase
         $component->call('checkPaymentStatus')
             ->assertSet('awaitingPaymentConfirmation', false)
             ->assertSee('Booking confirmed')
-            ->assertDontSee('Confirming your payment');
+            ->assertDontSee('Payment submitted successfully');
     }
 
     /** A rejected callback never enters the confirming state — the Pay button stays available. */
@@ -374,7 +380,7 @@ class RazorpayCheckoutLivewireTest extends TestCase
         $component->call('verifyPayment', $orderId, 'pay_FORGED', 'not-the-real-signature')
             ->assertSet('awaitingPaymentConfirmation', false)
             ->assertSee('Pay 499.00 INR securely')
-            ->assertDontSee('Confirming your payment');
+            ->assertDontSee('Payment submitted successfully');
     }
 
     /** Pressing Pay again (a retry after a failure) leaves any stale confirming state behind. */
@@ -541,7 +547,7 @@ class RazorpayCheckoutLivewireTest extends TestCase
 
         $component->call('verifyPayment', $orderId, 'pay_LW3', $this->checkoutSignature($orderId, 'pay_LW3'))
             ->assertSet('awaitingPaymentConfirmation', false)
-            ->assertDontSee('Confirming your payment')
+            ->assertDontSee('Payment submitted successfully')
             ->assertDontSee('Pay now');
 
         $booking->refresh();
@@ -572,8 +578,109 @@ class RazorpayCheckoutLivewireTest extends TestCase
 
         $component->call('verifyPayment', $orderId, 'pay_LW4', $this->checkoutSignature($orderId, 'pay_LW4'))
             ->assertSet('awaitingPaymentConfirmation', true)
-            ->assertSee('Confirming your payment')
+            ->assertSee('Payment submitted successfully')
             ->assertDontSee('Pay now');
+    }
+
+    /**
+     * The state is derived on the server: a reload, a new device or a
+     * fresh login after a verified callback shows the confirming state
+     * and never a Pay button over money that may already have moved.
+     */
+    public function test_the_confirming_state_survives_a_reload_of_the_booking_page(): void
+    {
+        $student = User::factory()->activeStudent()->create(['status' => User::STATUS_ACTIVE]);
+        $this->withBillingCountry($student);
+
+        $booking = app(StudentBookingServiceInterface::class)->book(new StudentBookingData(
+            typeKey: 'paid_one_to_one',
+            studentId: $student->id,
+            teacherId: $this->teacher->id,
+            startsAt: now('UTC')->addDays(4)->setTime(11, 0)->toImmutable(),
+            subject: $this->academic['subject']->name,
+            grade: 10,
+        ));
+
+        $first = Livewire::actingAs($student)
+            ->test(BookingDetail::class, ['bookingId' => $booking->id])
+            ->call('initiatePayment');
+        $orderId = $first->get('paymentOrder')['order_id'];
+        $first->call('verifyPayment', $orderId, 'pay_LW5', $this->checkoutSignature($orderId, 'pay_LW5'))
+            ->assertSet('awaitingPaymentConfirmation', true);
+
+        // A brand-new component instance — what a reload is.
+        $reloaded = Livewire::actingAs($student)->test(BookingDetail::class, ['bookingId' => $booking->id]);
+
+        $reloaded
+            ->assertSet('awaitingPaymentConfirmation', true)
+            ->assertSet('paymentConfirmationState', 'awaiting_capture')
+            ->assertSee('Payment submitted successfully')
+            ->assertSee("don't make another payment")
+            ->assertDontSee('Pay now')
+            ->assertSee('wire:poll.3s="checkPaymentStatus"', false);
+
+        // Even a direct call to initiatePayment cannot open a second checkout.
+        $this->razorpayMock->shouldReceive('createOrder')->never();
+        $reloaded->call('initiatePayment')
+            ->assertSet('awaitingPaymentConfirmation', true)
+            ->assertDontSee('Pay now');
+        $this->assertSame(1, Payment::query()->count(), 'no second attempt was opened');
+    }
+
+    /** The provider being down is told to the student honestly — and still never as "pay again". */
+    public function test_an_unreachable_provider_shows_its_own_message_and_no_pay_button(): void
+    {
+        $student = User::factory()->activeStudent()->create(['status' => User::STATUS_ACTIVE]);
+        $this->withBillingCountry($student);
+
+        $booking = app(StudentBookingServiceInterface::class)->book(new StudentBookingData(
+            typeKey: 'paid_one_to_one',
+            studentId: $student->id,
+            teacherId: $this->teacher->id,
+            startsAt: now('UTC')->addDays(4)->setTime(11, 0)->toImmutable(),
+            subject: $this->academic['subject']->name,
+            grade: 10,
+        ));
+
+        $component = Livewire::actingAs($student)
+            ->test(BookingDetail::class, ['bookingId' => $booking->id])
+            ->call('initiatePayment');
+        $orderId = $component->get('paymentOrder')['order_id'];
+
+        $this->razorpayMock->shouldReceive('fetchPayment')->andThrow(new GatewayRequestException('timeout'));
+
+        $component->call('verifyPayment', $orderId, 'pay_LW6', $this->checkoutSignature($orderId, 'pay_LW6'))
+            ->assertSet('awaitingPaymentConfirmation', true)
+            ->assertSet('paymentConfirmationState', 'provider_unreachable')
+            ->assertSee('trouble confirming the transaction')
+            ->assertSee("Don't make another payment")
+            ->assertDontSee('Pay now')
+            ->assertDontSee('timeout');
+    }
+
+    /** The wizard, too, refuses to open a second checkout while one is being confirmed. */
+    public function test_the_wizard_does_not_open_a_second_checkout_while_confirming(): void
+    {
+        $student = User::factory()->activeStudent()->create(['status' => User::STATUS_ACTIVE]);
+        $this->withBillingCountry($student);
+        $slot = CarbonImmutable::now('UTC')->addDays(3)->setTime(10, 0);
+
+        $component = $this->navigateAcademicWizardToSlot(
+            Livewire::actingAs($student)->test('frontend.booking.booking-wizard'),
+            $this->academic,
+            $slot,
+        );
+        $component->call('submit');
+        $component->call('initiatePayment');
+        $orderId = $component->get('paymentOrder')['order_id'];
+        $component->call('verifyPayment', $orderId, 'pay_LW7', $this->checkoutSignature($orderId, 'pay_LW7'))
+            ->assertSet('awaitingPaymentConfirmation', true);
+
+        $component->call('initiatePayment')
+            ->assertSet('awaitingPaymentConfirmation', true)
+            ->assertSet('paymentConfirmationState', 'awaiting_capture')
+            ->assertNotDispatched('razorpay-checkout-ready')
+            ->assertDontSee('Pay 499.00 INR securely');
     }
 
     public function test_student_cannot_pay_for_another_students_booking(): void

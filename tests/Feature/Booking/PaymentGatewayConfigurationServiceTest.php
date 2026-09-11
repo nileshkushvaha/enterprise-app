@@ -74,7 +74,10 @@ class PaymentGatewayConfigurationServiceTest extends TestCase
         $gateways->razorpay_enabled = true;
         $gateways->razorpay_key_id = 'rzp_test_key_id';
         $gateways->razorpay_key_secret = Crypt::encryptString('secret');
-        $gateways->razorpay_webhook_secret = Crypt::encryptString('whsecret');
+        // Fully configured means one dedicated secret PER ENDPOINT.
+        $gateways->razorpay_booking_webhook_secret = Crypt::encryptString('booking_whsecret');
+        $gateways->razorpay_package_webhook_secret = Crypt::encryptString('package_whsecret');
+        $gateways->razorpay_wallet_webhook_secret = Crypt::encryptString('wallet_whsecret');
         $gateways->save();
 
         $result = app(PaymentGatewayConfigurationService::class)->checkRazorpay();
@@ -82,6 +85,43 @@ class PaymentGatewayConfigurationServiceTest extends TestCase
         $this->assertTrue($result->isReady());
         $this->assertSame([], $result->issues);
         $this->assertNotNull(app(PaymentGatewaySettings::class)->razorpay_last_checked_at);
+    }
+
+    /** One shared legacy secret verifies, but is reported as a warning — it can be right for at most one of three endpoints. */
+    public function test_razorpay_legacy_shared_webhook_secret_is_ready_with_warnings(): void
+    {
+        $gateways = app(PaymentGatewaySettings::class);
+        $gateways->razorpay_enabled = true;
+        $gateways->razorpay_key_id = 'rzp_test_key_id';
+        $gateways->razorpay_key_secret = Crypt::encryptString('secret');
+        $gateways->razorpay_webhook_secret = Crypt::encryptString('whsecret');
+        $gateways->save();
+
+        $result = app(PaymentGatewayConfigurationService::class)->checkRazorpay();
+
+        $this->assertTrue($result->isReady(), 'deliveries can still be verified');
+        $this->assertCount(3, $result->issues);
+        $this->assertStringContainsString('legacy shared field', $result->issues[0]);
+        $this->assertStringNotContainsString('whsecret', implode(' ', $result->issues));
+    }
+
+    /** A missing endpoint secret is incomplete even when the other two are configured. */
+    public function test_razorpay_incomplete_when_one_endpoint_secret_is_missing(): void
+    {
+        $gateways = app(PaymentGatewaySettings::class);
+        $gateways->razorpay_enabled = true;
+        $gateways->razorpay_key_id = 'rzp_test_key_id';
+        $gateways->razorpay_key_secret = Crypt::encryptString('secret');
+        $gateways->razorpay_booking_webhook_secret = Crypt::encryptString('booking_whsecret');
+        $gateways->razorpay_package_webhook_secret = Crypt::encryptString('package_whsecret');
+        $gateways->razorpay_wallet_webhook_secret = null;
+        $gateways->razorpay_webhook_secret = null;
+        $gateways->save();
+
+        $result = app(PaymentGatewayConfigurationService::class)->checkRazorpay();
+
+        $this->assertSame('incomplete', $result->status);
+        $this->assertStringContainsString('wallet webhook secret is missing', implode(' ', $result->issues));
     }
 
     public function test_stripe_not_configured_when_disabled(): void

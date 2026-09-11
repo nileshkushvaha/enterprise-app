@@ -7,6 +7,7 @@ namespace App\Booking\Services;
 use App\Booking\DTOs\PaymentGatewayReadiness;
 use App\Booking\Payments\FakePaymentProvider;
 use App\Services\Payment\PaymentWebhookSignatureService;
+use App\Services\Payment\WebhookSecretState;
 use App\Settings\PaymentGatewaySettings;
 use Illuminate\Support\Carbon;
 
@@ -54,15 +55,44 @@ final class PaymentGatewayConfigurationService
             return $this->persist('razorpay', 'invalid', ['Razorpay key_id does not match the expected rzp_(test|live)_... format.']);
         }
 
-        if (blank($this->settings->razorpay_webhook_secret)) {
-            $issues[] = 'Razorpay webhook_secret is missing — webhooks cannot be verified.';
+        // Readiness is per ENDPOINT. Razorpay signs each registered
+        // webhook with its own secret, so "some secret exists" said
+        // nothing about whether the booking endpoint could verify a
+        // delivery — which is exactly how a captured payment sat behind
+        // six 401s. A missing endpoint secret is incomplete; a legacy
+        // fallback verifies but is flagged, never a clean ready.
+        $warnings = [];
+
+        foreach (self::webhookEndpoints('razorpay') as $purpose => $path) {
+            $state = PaymentWebhookSignatureService::secretState($this->settings, 'razorpay', $purpose);
+
+            if ($state === WebhookSecretState::Missing) {
+                $issues[] = sprintf('Razorpay %s webhook secret is missing — deliveries to %s are rejected with 401.', $purpose, $path);
+            } elseif ($state->isLegacy()) {
+                $warnings[] = sprintf('Razorpay %s webhook (%s) verifies through the legacy shared field (%s). Move its secret into the dedicated %s field.', $purpose, $path, $state->label(), PaymentWebhookSignatureService::dedicatedField('razorpay', $purpose));
+            }
         }
 
         if ($issues !== []) {
-            return $this->persist('razorpay', 'incomplete', $issues);
+            return $this->persist('razorpay', 'incomplete', [...$issues, ...$warnings]);
         }
 
-        return $this->persist('razorpay', 'ready');
+        return $this->persist('razorpay', 'ready', $warnings);
+    }
+
+    /**
+     * The webhook endpoints a gateway is registered for, keyed by the
+     * secret purpose that verifies them.
+     *
+     * @return array<string, string>
+     */
+    public static function webhookEndpoints(string $gateway): array
+    {
+        return [
+            PaymentWebhookSignatureService::PURPOSE_BOOKING => "/api/webhooks/bookings/payments/{$gateway}",
+            PaymentWebhookSignatureService::PURPOSE_PACKAGE => "/api/webhooks/packages/purchases/{$gateway}",
+            PaymentWebhookSignatureService::PURPOSE_WALLET => "/api/webhooks/wallets/recharges/{$gateway}",
+        ];
     }
 
     public function checkStripe(): PaymentGatewayReadiness

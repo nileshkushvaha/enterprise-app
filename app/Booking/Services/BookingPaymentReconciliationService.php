@@ -8,14 +8,18 @@ use App\Booking\Contracts\BookingPaymentReconciliationServiceInterface;
 use App\Booking\Contracts\BookingPaymentServiceInterface;
 use App\Booking\Enums\BookingPaymentReconciliationIssueStatus;
 use App\Booking\Enums\BookingPaymentReconciliationIssueType;
+use App\Booking\Enums\BookingPaymentReconciliationOutcome;
 use App\Booking\Enums\BookingPaymentReconciliationSeverity;
 use App\Booking\Enums\BookingPaymentRecordStatus;
+use App\Booking\Enums\BookingPaymentStatus;
 use App\Booking\Exceptions\BookingException;
 use App\Models\BookingPayment;
 use App\Models\BookingPaymentReconciliationIssue;
 use App\Models\Payment;
 use App\Models\User;
+use App\Payments\DTOs\PaymentVerificationResult;
 use App\Payments\Enums\PaymentStatus;
+use App\Payments\Enums\PaymentVerificationOutcome;
 use App\Payments\Services\PaymentAttemptVerifier;
 use App\Services\AuditTrailService;
 use App\Settings\PaymentGatewaySettings;
@@ -70,10 +74,20 @@ final class BookingPaymentReconciliationService implements BookingPaymentReconci
             ->get();
 
         $examined = 0;
+        $outcomes = [];
 
         foreach ($payments as $payment) {
-            $this->reconcileOne($payment, $cutoff);
+            $outcome = $this->reconcileOne($payment, 'reconciliation', $cutoff);
+            $outcomes[$outcome->value] = ($outcomes[$outcome->value] ?? 0) + 1;
             $examined++;
+        }
+
+        if ($examined > 0) {
+            // A sweep that examined nothing is the healthy steady state
+            // and not worth a row every five minutes; one that did work
+            // is the record an operator needs when asking "when did the
+            // backstop last act, and what did it find?".
+            $this->audit->logSystem(self::LOG_NAME, 'booking_reconciliation_completed', sprintf('Booking payment reconciliation examined %d attempt(s).', $examined), null, ['examined' => $examined, 'outcomes' => $outcomes]);
         }
 
         return $examined;
@@ -81,9 +95,14 @@ final class BookingPaymentReconciliationService implements BookingPaymentReconci
 
     public function reconcileAttempt(BookingPayment $payment): BookingPayment
     {
-        $this->reconcileOne($payment);
+        $this->reconcileOne($payment, 'admin_retry');
 
         return BookingPayment::query()->whereKey($payment->id)->firstOrFail();
+    }
+
+    public function reconcileNow(BookingPayment $payment, string $source = 'reconciliation'): BookingPaymentReconciliationOutcome
+    {
+        return $this->reconcileOne($payment, $source);
     }
 
     /**
@@ -95,7 +114,7 @@ final class BookingPaymentReconciliationService implements BookingPaymentReconci
      * only asks about money that may already have moved. A student can
      * never be charged by a sweep.
      */
-    private function reconcileOne(BookingPayment $payment, ?CarbonInterface $cutoff = null): void
+    private function reconcileOne(BookingPayment $payment, string $source, ?CarbonInterface $cutoff = null): BookingPaymentReconciliationOutcome
     {
         $cutoff ??= now()->subMinutes(max(1, $this->settings->booking_payment_unknown_timeout_minutes));
 
@@ -104,50 +123,173 @@ final class BookingPaymentReconciliationService implements BookingPaymentReconci
         if ($attempt === null) {
             $payment->forceFill(['last_synced_at' => now()])->save();
 
-            return;
+            return BookingPaymentReconciliationOutcome::NoAttempt;
         }
 
         if ($attempt->status === PaymentStatus::Paid) {
-            // The provider already told us, and settlement is the
-            // webhook's or an earlier sweep's business. Nothing to poll.
+            // The provider's money is on record. Normally the booking
+            // was settled in the same breath; when it was not (a local
+            // failure after the attempt transition), this is the state
+            // that used to be permanent — every pass returned here and
+            // no button could repair it. Finish the local half instead.
+            $outcome = $this->finishIncompleteLocalSettlement($payment, $attempt, $source);
             $payment->forceFill(['last_synced_at' => now()])->save();
 
-            return;
+            return $outcome;
         }
 
-        $reachable = true;
-        $event = $this->verifier->confirmedPayment($attempt, $reachable);
+        $verification = $this->verifier->verify($attempt);
 
-        if (! $reachable) {
-            // Unreachable is an outage, never evidence of non-payment.
-            $this->raiseIssue(
-                $payment,
-                BookingPaymentReconciliationIssueType::ProviderUnavailable,
-                BookingPaymentReconciliationSeverity::Warning,
-                sprintf('Could not reach %s to verify this payment.', (string) $attempt->provider),
-            );
-            $payment->forceFill(['last_synced_at' => now()])->save();
-
-            return;
+        if ($verification->outcome !== PaymentVerificationOutcome::AwaitingCapture) {
+            // Awaiting capture is the expected answer while a page polls
+            // and would only bury the signal; everything else is worth a
+            // row an operator can read back in order.
+            $this->audit->logSystem(self::LOG_NAME, 'booking_payment_provider_verified', sprintf('%s reported "%s" for booking payment attempt %s.', ucfirst((string) $attempt->provider), $verification->providerStatus ?? $verification->outcome->value, $attempt->id), $payment, [
+                'source' => $source,
+                'provider' => $attempt->provider,
+                'payment_attempt_id' => $attempt->id,
+                'provider_order_id' => $attempt->provider_order_id,
+                'provider_payment_id' => $attempt->provider_payment_id,
+                'provider_entity' => $verification->providerEntity,
+                'provider_status' => $verification->providerStatus,
+                'outcome' => $verification->outcome->value,
+            ]);
         }
 
-        if ($event !== null) {
-            try {
-                $this->settlement->settle($attempt, $event);
-            } catch (BookingException $e) {
-                // Mismatch refusal or a failed local settlement — both
-                // already raised their own incident inside the bridge.
-                report($e);
-            }
+        $outcome = match ($verification->outcome) {
+            PaymentVerificationOutcome::Unreachable => $this->recordUnreachable($payment, $attempt),
+            PaymentVerificationOutcome::Captured, PaymentVerificationOutcome::Failed => $this->applyEvidence($payment, $attempt, $verification, $source),
+            PaymentVerificationOutcome::NeedsAttention => $this->recordNeedsAttention($payment, $attempt, $verification),
+            PaymentVerificationOutcome::AwaitingCapture, PaymentVerificationOutcome::NotPaid => $this->recordStillOpen($payment, $attempt, $verification, $cutoff),
+            PaymentVerificationOutcome::Unverifiable => BookingPaymentReconciliationOutcome::NoAttempt,
+        };
 
-            $this->resolveOpenIssues($payment, BookingPaymentReconciliationIssueType::UnknownPaymentOutcome, 'auto_reconciled', 'Provider outcome confirmed on a later reconciliation pass.');
-            BookingPayment::query()->whereKey($payment->id)->update(['last_synced_at' => now()]);
-
-            return;
-        }
-
-        $this->detectStaleAttempt($payment, $attempt, $cutoff);
         BookingPayment::query()->whereKey($payment->id)->update(['last_synced_at' => now()]);
+
+        return $outcome;
+    }
+
+    private function recordUnreachable(BookingPayment $payment, Payment $attempt): BookingPaymentReconciliationOutcome
+    {
+        // Unreachable is an outage, never evidence of non-payment.
+        $this->raiseIssue(
+            $payment,
+            BookingPaymentReconciliationIssueType::ProviderUnavailable,
+            BookingPaymentReconciliationSeverity::Warning,
+            sprintf('Could not reach %s to verify this payment.', (string) $attempt->provider),
+        );
+
+        return BookingPaymentReconciliationOutcome::ProviderUnreachable;
+    }
+
+    /** Captured or definitively failed: hand the proof to the one settlement bridge. */
+    private function applyEvidence(BookingPayment $payment, Payment $attempt, PaymentVerificationResult $verification, string $source): BookingPaymentReconciliationOutcome
+    {
+        $event = $verification->event;
+
+        if ($event === null) {
+            return BookingPaymentReconciliationOutcome::NeedsAttention;
+        }
+
+        try {
+            $settled = $this->settlement->settle($attempt, $event, $source);
+        } catch (BookingException $e) {
+            // Local settlement failed after the attempt was recorded Paid.
+            // The bridge raised its incident; the next pass repairs it
+            // through finishIncompleteLocalSettlement().
+            report($e);
+
+            return BookingPaymentReconciliationOutcome::NeedsAttention;
+        }
+
+        if ($verification->outcome === PaymentVerificationOutcome::Failed) {
+            return BookingPaymentReconciliationOutcome::Failed;
+        }
+
+        foreach ([
+            BookingPaymentReconciliationIssueType::UnknownPaymentOutcome,
+            BookingPaymentReconciliationIssueType::ProviderUnavailable,
+            BookingPaymentReconciliationIssueType::StaleProcessing,
+        ] as $type) {
+            $this->resolveOpenIssues($payment, $type, 'auto_reconciled', 'Provider outcome confirmed on a later reconciliation pass.');
+        }
+
+        if ($settled) {
+            return BookingPaymentReconciliationOutcome::Settled;
+        }
+
+        // settle() returned false: either the booking was already paid
+        // (a race the webhook won) or the money did not match and the
+        // bridge refused, raising its own incident.
+        return $payment->booking?->fresh()?->payment_status === BookingPaymentStatus::Paid
+            ? BookingPaymentReconciliationOutcome::AlreadySettled
+            : BookingPaymentReconciliationOutcome::NeedsAttention;
+    }
+
+    private function recordNeedsAttention(BookingPayment $payment, Payment $attempt, PaymentVerificationResult $verification): BookingPaymentReconciliationOutcome
+    {
+        $this->raiseIssue(
+            $payment,
+            BookingPaymentReconciliationIssueType::UnknownPaymentOutcome,
+            BookingPaymentReconciliationSeverity::Warning,
+            sprintf('%s reported "%s" for this payment, a state the platform does not settle automatically.', ucfirst((string) $attempt->provider), $verification->providerStatus ?? 'unknown'),
+        );
+
+        return BookingPaymentReconciliationOutcome::NeedsAttention;
+    }
+
+    private function recordStillOpen(BookingPayment $payment, Payment $attempt, PaymentVerificationResult $verification, CarbonInterface $cutoff): BookingPaymentReconciliationOutcome
+    {
+        $this->detectStaleAttempt($payment, $attempt, $cutoff);
+
+        return $verification->outcome === PaymentVerificationOutcome::AwaitingCapture
+            ? BookingPaymentReconciliationOutcome::AwaitingCapture
+            : BookingPaymentReconciliationOutcome::NotPaid;
+    }
+
+    /**
+     * The attempt says Paid. If the booking is still payable the earlier
+     * settlement stopped halfway; re-enter the local half — lock-
+     * protected and idempotent inside the bridge — and close the
+     * incident it raised.
+     */
+    private function finishIncompleteLocalSettlement(BookingPayment $payment, Payment $attempt, string $source): BookingPaymentReconciliationOutcome
+    {
+        $booking = $payment->booking;
+
+        $stillPayable = $booking !== null
+            && $booking->payment_status->isPayable()
+            && ! $booking->status->isTerminal();
+
+        if (! $stillPayable && $payment->status === BookingPaymentRecordStatus::Captured) {
+            return BookingPaymentReconciliationOutcome::AlreadySettled;
+        }
+
+        try {
+            $completed = $this->settlement->completeLocalSettlement($attempt, $source);
+        } catch (BookingException $e) {
+            report($e);
+
+            return BookingPaymentReconciliationOutcome::NeedsAttention;
+        }
+
+        if (! $completed) {
+            return BookingPaymentReconciliationOutcome::AlreadySettled;
+        }
+
+        $this->resolveOpenIssues($payment, BookingPaymentReconciliationIssueType::ProviderSuccessLocalIncomplete, 'auto_reconciled', 'Local settlement completed on a later reconciliation pass.');
+        $this->resolveOpenIssues($payment, BookingPaymentReconciliationIssueType::ProviderUnavailable, 'auto_reconciled', 'Local settlement completed on a later reconciliation pass.');
+
+        $this->audit->logSystem(self::LOG_NAME, 'booking_payment_recovered', sprintf('Booking %s: local settlement completed for an attempt the provider had already paid.', (string) $booking?->reference), $payment, [
+            'source' => $source,
+            'provider' => $attempt->provider,
+            'payment_attempt_id' => $attempt->id,
+            'provider_order_id' => $attempt->provider_order_id,
+            'provider_payment_id' => $attempt->provider_payment_id,
+            'booking_reference' => $booking?->reference,
+        ]);
+
+        return BookingPaymentReconciliationOutcome::Recovered;
     }
 
     /**
@@ -191,33 +333,6 @@ final class BookingPaymentReconciliationService implements BookingPaymentReconci
             BookingPaymentReconciliationSeverity::Warning,
             'The provider has not resolved this payment attempt well past the normal window.',
         );
-    }
-
-    /**
-     * Closes incidents a later pass has genuinely disproved, so the queue
-     * only ever shows problems that are still real.
-     *
-     * Deliberately narrow. ProviderUnavailable and StaleProcessing are
-     * statements about our ABILITY to learn the outcome, so any definite
-     * outcome clears them. AmountMismatch, CurrencyMismatch,
-     * ProviderSuccessLocalIncomplete, WalletCreditFailed and
-     * LateSuccessResolutionFailed are statements about MONEY, and are
-     * never auto-closed — a replayed webhook or a fresh poll does not
-     * put a student's money where it belongs. Those stay open until an
-     * operator closes them.
-     */
-    private function resolveRecoveredIssues(BookingPayment $payment, BookingPaymentRecordStatus $before): void
-    {
-        if ($payment->status === $before || ! $payment->status->isTerminal()) {
-            return;
-        }
-
-        foreach ([
-            BookingPaymentReconciliationIssueType::ProviderUnavailable,
-            BookingPaymentReconciliationIssueType::StaleProcessing,
-        ] as $type) {
-            $this->resolveOpenIssues($payment, $type, 'auto_reconciled', 'The provider returned a definitive outcome on a later pass.');
-        }
     }
 
     public function raiseIssue(

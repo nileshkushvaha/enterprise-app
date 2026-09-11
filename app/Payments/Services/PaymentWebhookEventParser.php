@@ -107,7 +107,14 @@ final class PaymentWebhookEventParser
         return new VerifiedPaymentEvent(
             provider: 'razorpay',
             type: match ((string) ($payload['event'] ?? '')) {
-                'payment.captured' => PaymentEventType::Succeeded,
+                // `order.paid` carries the same payment entity as
+                // `payment.captured` (payload.payment.entity) and is only
+                // emitted once the order's payment is captured, so it is
+                // equally sufficient proof. Accepting it means an account
+                // subscribed to one event but not the other still settles;
+                // receiving both is harmless — settlement is idempotent
+                // on the attempt.
+                'payment.captured', 'order.paid' => PaymentEventType::Succeeded,
                 'payment.failed' => PaymentEventType::Failed,
                 'payment.authorized' => PaymentEventType::Processing,
                 default => PaymentEventType::Ignored,

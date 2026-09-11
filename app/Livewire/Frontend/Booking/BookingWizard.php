@@ -7,9 +7,11 @@ namespace App\Livewire\Frontend\Booking;
 use App\Booking\Contracts\BookingCheckoutCompletionServiceInterface;
 use App\Booking\Contracts\BookingPaymentServiceInterface;
 use App\Booking\Contracts\BookingRepositoryInterface;
+use App\Booking\DTOs\BookingCheckoutOutcome;
 use App\Booking\DTOs\RecurrencePatternData;
 use App\Booking\DTOs\RecurrenceRuleData;
 use App\Booking\DTOs\TimeSlotData;
+use App\Booking\Enums\BookingCheckoutState;
 use App\Booking\Enums\RecurrenceEndCondition;
 use App\Booking\Enums\RecurrenceFrequency;
 use App\Booking\Enums\Weekday;
@@ -235,6 +237,15 @@ final class BookingWizard extends Component
 
     /** When the confirming state began (ISO-8601), so the view can say "taking longer than usual". */
     public ?string $awaitingPaymentSince = null;
+
+    /**
+     * BookingCheckoutState value the payment screen renders — derived on
+     * the server from the attempt ledger (see
+     * BookingCheckoutCompletionService::currentState()), never inferred
+     * from a browser event, so it tells "waiting for capture" apart from
+     * "provider unreachable" and survives a reload.
+     */
+    public ?string $paymentConfirmationState = null;
 
     /**
      * Display-only — never treated as authoritative. Populated by
@@ -1523,6 +1534,18 @@ final class BookingWizard extends Component
 
         try {
             $booking = $this->bookings->findOrFail($this->bookingId);
+
+            // A verified checkout may already be in flight for this booking
+            // (the student reloaded, or came back from another tab). Money
+            // may have moved: never open a second checkout on top of it.
+            $current = $this->checkout->currentState($booking);
+
+            if ($current->confirmationInProgress()) {
+                $this->applyCheckoutOutcome($current);
+
+                return;
+            }
+
             $this->payments->initiate($booking);
             $payload = $this->payments->checkoutPayload($booking);
 
@@ -1671,15 +1694,43 @@ final class BookingWizard extends Component
             // confirmed before this method returns; an authorized-but-
             // uncaptured one (or an unreachable provider) leaves the
             // booking payable and the confirming state below polls.
-            $booking = $this->checkout->completeRazorpayCheckout($booking, $orderId, $paymentId, $signature);
-
-            $this->result = $this->wizard->result($booking);
-            $this->awaitingPaymentConfirmation = $booking->payment_status->isPayable();
-            $this->awaitingPaymentSince = $this->awaitingPaymentConfirmation ? now()->toIso8601String() : null;
+            $this->applyCheckoutOutcome(
+                $this->checkout->completeRazorpayCheckout($booking, $orderId, $paymentId, $signature),
+            );
         } catch (InvalidPaymentWebhookException|BookingException $exception) {
             $this->awaitingPaymentConfirmation = false;
             $this->awaitingPaymentSince = null;
+            $this->paymentConfirmationState = null;
             $this->paymentBanner = $exception->getMessage();
+        }
+    }
+
+    /**
+     * Renders a checkout outcome: the fresh booking result plus the
+     * confirming state and its message. The "since" stamp is kept across
+     * polls so the view can escalate its wording after a while.
+     */
+    private function applyCheckoutOutcome(BookingCheckoutOutcome $outcome): void
+    {
+        $this->result = $this->wizard->result($outcome->booking);
+        $this->paymentConfirmationState = $outcome->state->value;
+
+        $inProgress = $outcome->confirmationInProgress();
+
+        if ($inProgress && ! $this->awaitingPaymentConfirmation) {
+            $this->awaitingPaymentSince = now()->toIso8601String();
+        }
+
+        if (! $inProgress) {
+            $this->awaitingPaymentSince = null;
+        }
+
+        $this->awaitingPaymentConfirmation = $inProgress;
+
+        if ($outcome->state === BookingCheckoutState::Failed) {
+            $this->paymentBanner = 'Payment failed. Please try again.';
+        } elseif ($outcome->state === BookingCheckoutState::Confirmed) {
+            $this->paymentBanner = '';
         }
     }
 
@@ -1700,27 +1751,17 @@ final class BookingWizard extends Component
         $booking = $this->bookings->findOrFail($this->bookingId);
 
         // While confirming, each poll re-reads locally and re-asks the
-        // provider at most every PROVIDER_RECHECK_SECONDS.
-        $booking = $this->awaitingPaymentConfirmation
+        // provider at most every PROVIDER_RECHECK_SECONDS. Otherwise the
+        // state is still derived on the server, so a checkout verified in
+        // another tab is picked up here too.
+        $outcome = $this->awaitingPaymentConfirmation
             ? $this->checkout->refreshPendingPayment($booking)
-            : $booking->refresh();
+            : $this->checkout->currentState($booking);
 
-        $this->result = $this->wizard->result($booking);
+        $this->applyCheckoutOutcome($outcome);
 
-        if ($booking->payment_status->value === 'paid') {
-            $this->paymentBanner = '';
-            $this->awaitingPaymentConfirmation = false;
-            $this->awaitingPaymentSince = null;
-        } elseif ($booking->payment_status->value === 'failed') {
+        if ($outcome->booking->payment_status->value === 'failed') {
             $this->paymentBanner = 'Payment failed. Please try again.';
-            $this->awaitingPaymentConfirmation = false;
-            $this->awaitingPaymentSince = null;
-        } elseif ($booking->status->isTerminal()) {
-            // The hold lapsed before settlement arrived. Stop polling; the
-            // expired-reservation state renders, and a payment that still
-            // settles later is redirected to the wallet by markPaid().
-            $this->awaitingPaymentConfirmation = false;
-            $this->awaitingPaymentSince = null;
         }
     }
 
