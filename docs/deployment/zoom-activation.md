@@ -459,11 +459,17 @@ created**, for one booking, without touching `default_provider`:
    payment hold and **no meeting row** — that is the window. (A free
    demo auto-confirms and gets its meeting at once, so it cannot be used
    as the canary unless automatic demo meeting creation is off.)
-3. Pin it:
+3. Pin it, either from the admin table — Admin → Bookings → row →
+   **Pin Meeting Provider** → Zoom (the action is shown only while the
+   booking has no created meeting; the *Pinned Provider* column, hidden
+   by default, shows the result) — or from the shell:
 
    ```bash
    php artisan meetings:pin-provider BK-XXXXXXXXXX --provider=zoom --admin=<admin id or email>
    ```
+
+   `--admin` is a SIRI administrator (super_admin, or a user holding
+   `Manage:BookingMeeting`), not the Zoom host account.
 
    Verify: `bookings.meeting_provider_intent = zoom`;
    `meeting_host_reservations` one `active` row for the booking with

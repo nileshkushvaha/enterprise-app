@@ -13,11 +13,13 @@ use App\Booking\Exceptions\MeetingProviderSwitchNotSupportedException;
 use App\Booking\Meetings\GoogleCalendarMeetProvider;
 use App\Booking\Meetings\ManualMeetingProvider;
 use App\Booking\Meetings\ZoomMeetingProvider;
+use App\Filament\Resources\Bookings\Pages\ListBookings;
 use App\Models\Booking;
 use App\Models\BookingMeeting;
 use App\Models\User;
 use App\Settings\MeetingSettings;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Livewire\Livewire;
 use Spatie\Permission\Models\Role;
 use Tests\Support\BuildsZoomHostCapacityFixtures;
 use Tests\TestCase;
@@ -234,5 +236,30 @@ final class MeetingProviderSwitchTest extends TestCase
         $this->expectException(MeetingProviderSwitchNotSupportedException::class);
         $this->expectExceptionMessage('already has a created google_meet meeting. Switching it to zoom is not supported');
         app(BookingMeetingServiceInterface::class)->createMeeting($booking, ZoomMeetingProvider::KEY);
+    }
+
+    // ── The admin UI ──────────────────────────────────────────────────
+
+    /** The admin table offers the pin before a meeting exists, and refuses it once one has been created. */
+    public function test_the_admin_table_pins_a_pending_booking_to_zoom_and_refuses_a_created_meeting(): void
+    {
+        $admin = $this->admin();
+        $pending = $this->paid($this->teacherA, $this->slot());
+
+        Livewire::actingAs($admin)
+            ->test(ListBookings::class)
+            ->callTableAction('pin_meeting_provider', $pending, data: ['provider' => ZoomMeetingProvider::KEY])
+            ->assertNotified('Meeting provider pinned');
+
+        $this->assertSame(ZoomMeetingProvider::KEY, $pending->fresh()->meeting_provider_intent);
+        $this->assertNotNull($this->activeReservationFor($pending));
+
+        $created = $this->bookingWithCreatedGoogleMeeting(daysAhead: 5);
+
+        Livewire::actingAs($admin)
+            ->test(ListBookings::class)
+            ->assertTableActionHidden('pin_meeting_provider', $created);
+
+        $this->assertSame(GoogleCalendarMeetProvider::KEY, BookingMeeting::query()->where('booking_id', $created->id)->sole()->provider);
     }
 }

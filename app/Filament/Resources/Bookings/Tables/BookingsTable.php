@@ -101,6 +101,10 @@ class BookingsTable
                 TextColumn::make('meeting.provider')
                     ->label('Meeting Provider')
                     ->toggleable(),
+                TextColumn::make('meeting_provider_intent')
+                    ->label('Pinned Provider')
+                    ->placeholder('Default')
+                    ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('lesson.status')
                     ->label('Lesson')
                     ->badge()
@@ -228,6 +232,48 @@ class BookingsTable
                         fn (BookingServiceInterface $service) => $service->markNoShow($record),
                         'Booking marked as no-show',
                     )),
+
+                // The supported way to route ONE booking to another
+                // provider (a Zoom canary while Google Meet stays the
+                // default): before its meeting exists. Sets the intent
+                // and, for Zoom, reserves a host; the normal confirmation
+                // path then creates the meeting there. Once a meeting has
+                // been created, the provider cannot be changed.
+                Action::make('pin_meeting_provider')
+                    ->label('Pin Meeting Provider')
+                    ->icon('heroicon-m-map-pin')
+                    ->color('gray')
+                    ->authorize(fn (Booking $record): bool => auth()->user()?->can('manageMeeting', $record) ?? false)
+                    ->visible(fn (Booking $record): bool => ! $record->status->isTerminal()
+                        && $record->meeting?->status !== MeetingStatus::Created)
+                    ->modalDescription('Choose where this booking\'s meeting will be created. Zoom reserves a host now. The platform default is not changed.')
+                    ->form([
+                        Select::make('provider')
+                            ->label('Meeting provider')
+                            ->options(fn (): array => array_filter([
+                                ManualMeetingProvider::KEY => 'Manual',
+                                GoogleCalendarMeetProvider::KEY => 'Google Meet',
+                                ZoomMeetingProvider::KEY => app(ZoomMeetingProvider::class)->isConfigured() ? 'Zoom' : null,
+                            ]))
+                            ->required()
+                            ->native(false),
+                    ])
+                    ->fillForm(fn (Booking $record): array => ['provider' => $record->meeting_provider_intent])
+                    ->action(function (Booking $record, array $data): void {
+                        try {
+                            $pinned = app(BookingMeetingServiceInterface::class)->pinProvider($record, (string) $data['provider'], auth()->user());
+                        } catch (BookingException $e) {
+                            Notification::make()->title('Provider not pinned')->body($e->getMessage())->danger()->persistent()->send();
+
+                            return;
+                        }
+
+                        Notification::make()
+                            ->title('Meeting provider pinned')
+                            ->body(sprintf('The meeting for %s will be created on %s when the booking is confirmed.', $pinned->reference, $pinned->meeting_provider_intent))
+                            ->success()
+                            ->send();
+                    }),
 
                 Action::make('create_update_meeting')
                     ->label('Create/Update Meeting')
