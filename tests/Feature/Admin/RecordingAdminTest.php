@@ -7,6 +7,7 @@ namespace Tests\Feature\Admin;
 use App\Booking\Enums\RecordingFailureCode;
 use App\Booking\Enums\RecordingStatus;
 use App\Booking\Jobs\CaptureLessonRecordingJob;
+use App\Booking\Services\RecordingService;
 use App\Filament\Resources\Recordings\Pages\ListRecordings;
 use App\Filament\Resources\Recordings\Pages\ViewRecording;
 use App\Filament\Resources\Recordings\RecordingResource;
@@ -117,6 +118,38 @@ final class RecordingAdminTest extends TestCase
         $this->assertSame($admin->id, $activity->causer_id);
         $this->assertSame($recording->getKey(), $activity->subject_id);
         $this->assertSame('storage_quota_exceeded', $activity->properties['previous_failure_code'] ?? null);
+    }
+
+    /**
+     * A Failed row that still points at a preserved object (publication
+     * refused after a meeting replacement) shows the button disabled with
+     * the reason, and the service refuses even a direct call — so nothing
+     * is queued and the retained locator never changes.
+     */
+    public function test_the_retry_action_is_disabled_and_refused_for_a_row_whose_object_must_be_preserved(): void
+    {
+        Queue::fake();
+
+        $recording = Recording::factory()->failed()->create([
+            'failure_code' => RecordingFailureCode::MeetingReplacedDuringCapture,
+            'storage_driver' => 'filesystem',
+            'storage_path' => 'recordings/2026/09/lesson-preserved.mp4',
+            'size_bytes' => 4096,
+        ]);
+        $admin = $this->admin('ViewAny:Recording', 'View:Recording', 'Retry:Recording');
+
+        Livewire::actingAs($admin)
+            ->test(ListRecordings::class)
+            ->assertTableActionVisible('retryIngestion', $recording)
+            ->assertTableActionDisabled('retryIngestion', $recording);
+
+        $this->assertFalse(app(RecordingService::class)->retryFailed($recording, $admin));
+
+        $recording->refresh();
+        $this->assertSame(RecordingStatus::Failed, $recording->status);
+        $this->assertSame(RecordingFailureCode::MeetingReplacedDuringCapture, $recording->failure_code);
+        $this->assertSame('recordings/2026/09/lesson-preserved.mp4', $recording->storage_path);
+        Queue::assertNotPushed(CaptureLessonRecordingJob::class);
     }
 
     public function test_the_retry_action_is_hidden_from_an_admin_without_the_permission(): void

@@ -29,6 +29,7 @@ use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Spatie\Permission\Models\Role;
 use Tests\Support\InMemoryRecordingStorage;
@@ -644,5 +645,78 @@ final class RecordingProviderReplacementTest extends TestCase
         $recording->update(['status' => RecordingStatus::Failed, 'failure_code' => 'capture_retries_exhausted', 'transfer_started_at' => null]);
         $replacement = app(BookingMeetingServiceInterface::class)->saveManualMeeting($booking->fresh(), new MeetingUpdateContext(joinUrl: 'https://rooms.example.test/x'));
         $this->assertSame(MeetingStatus::Created, $replacement?->status);
+    }
+
+    // ── Admin retry never overwrites a preserved object ───────────────
+
+    /** Same-provider replacement mid-capture, then an admin retry: refused under the lock, nothing changes, nothing is queued. */
+    public function test_admin_retry_is_refused_after_a_same_provider_replacement_and_the_preserved_object_pointer_is_unchanged(): void
+    {
+        $recording = $this->capturableRecording();
+        FakeMeetingProvider::$nextRecordingContents = $this->fakeMp4Bytes();
+        FakeMeetingProvider::$onFetchRecording = function (BookingMeeting $meeting): void {
+            BookingMeeting::query()->whereKey($meeting->getKey())->update(['provider_meeting_id' => 'fake-meeting-2']);
+        };
+        $this->runCaptureJob($recording);
+
+        $before = $recording->fresh()->only(['status', 'failure_code', 'storage_driver', 'storage_path', 'storage_checksum', 'size_bytes', 'provider', 'capture_attempts', 'consent_snapshot']);
+        $this->assertSame('meeting_replaced_during_capture', $before['failure_code']->value);
+        $this->assertNotNull($before['storage_path']);
+
+        Queue::fake();
+        $admin = $this->admin();
+
+        $this->assertNotNull(app(RecordingService::class)->retryRefusalReason($recording->fresh()));
+        $this->assertFalse(app(RecordingService::class)->retryFailed($recording->fresh(), $admin));
+
+        $this->assertSame($before, $recording->fresh()->only(['status', 'failure_code', 'storage_driver', 'storage_path', 'storage_checksum', 'size_bytes', 'provider', 'capture_attempts', 'consent_snapshot']));
+        $this->assertNotNull($this->storage->storedName($before['storage_path']), 'the preserved object is still there');
+        Queue::assertNotPushed(CaptureLessonRecordingJob::class);
+        $this->assertSame(0, Activity::query()->where('event', 'recording_retry_requested')->count(), 'a refused retry is not recorded as a retry');
+    }
+
+    /** Any Failed row that still points at a stored object is refused, whatever its failure code. */
+    public function test_direct_retry_of_a_failed_row_with_a_locator_is_refused(): void
+    {
+        $recording = Recording::factory()->create([
+            'provider' => FakeMeetingProvider::KEY,
+            'status' => RecordingStatus::Failed,
+            'failure_code' => 'storage_verification_failed',
+            'storage_driver' => InMemoryRecordingStorage::KEY,
+            'storage_path' => 'recordings/2026/09/lesson-preserved.mp4',
+            'size_bytes' => 512,
+            'capture_attempts' => 2,
+        ]);
+        Queue::fake();
+
+        $this->assertFalse(app(RecordingService::class)->retryFailed($recording, $this->admin()));
+
+        $fresh = $recording->fresh();
+        $this->assertSame(RecordingStatus::Failed, $fresh->status);
+        $this->assertSame('storage_verification_failed', $fresh->failure_code->value);
+        $this->assertSame('recordings/2026/09/lesson-preserved.mp4', $fresh->storage_path);
+        $this->assertSame(2, $fresh->capture_attempts);
+        Queue::assertNotPushed(CaptureLessonRecordingJob::class);
+    }
+
+    /** A legitimately failed recording with nothing stored stays retryable. */
+    public function test_a_failed_row_without_a_stored_object_is_still_retryable(): void
+    {
+        $recording = Recording::factory()->create([
+            'provider' => FakeMeetingProvider::KEY,
+            'status' => RecordingStatus::Failed,
+            'failure_code' => 'capture_retries_exhausted',
+            'storage_path' => null,
+            'capture_attempts' => 5,
+        ]);
+
+        $this->assertNull(app(RecordingService::class)->retryRefusalReason($recording));
+        $this->assertTrue(app(RecordingService::class)->retryFailed($recording, $this->admin()));
+
+        $fresh = $recording->fresh();
+        $this->assertSame(RecordingStatus::Pending, $fresh->status);
+        $this->assertNull($fresh->failure_code);
+        $this->assertSame(0, $fresh->capture_attempts);
+        $this->assertDatabaseHas('activity_log', ['event' => 'recording_retry_requested', 'subject_id' => $recording->id]);
     }
 }

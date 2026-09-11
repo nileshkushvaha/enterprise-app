@@ -9,6 +9,7 @@ use App\Booking\DTOs\RecordingLocator;
 use App\Booking\DTOs\RecordingProviderReconciliation;
 use App\Booking\Enums\BookingStatus;
 use App\Booking\Enums\MeetingStatus;
+use App\Booking\Enums\RecordingFailureCode;
 use App\Booking\Enums\RecordingStatus;
 use App\Booking\Jobs\CaptureLessonRecordingJob;
 use App\Booking\Registry\MeetingProviderRegistry;
@@ -414,8 +415,9 @@ final class RecordingService
      * Idempotent and concurrency-safe — only a Failed row transitions,
      * so a double-clicked admin action, or a retry racing an in-flight
      * transfer, cannot start two ingestions. Retrying never re-uploads
-     * an object that already exists: a row holding a locator is Stored
-     * or Available, neither of which this touches.
+     * over an object that already exists: a Failed row that still holds
+     * a locator (publication refused after a meeting replacement) is
+     * refused here — see retryRefusalReason().
      */
     public function retryFailed(Recording $recording, User $admin): bool
     {
@@ -426,6 +428,14 @@ final class RecordingService
             $fresh = Recording::query()->whereKey($recording->getKey())->lockForUpdate()->firstOrFail();
 
             if ($fresh->status !== RecordingStatus::Failed) {
+                return false;
+            }
+
+            // Enforced HERE, under the lock, not only by hiding a button:
+            // a row that still points at a preserved object must never be
+            // sent back through the pipeline, which would fetch again and
+            // overwrite the locator — orphaning the object it preserved.
+            if ($this->retryRefusalReason($fresh) !== null) {
                 return false;
             }
 
@@ -441,6 +451,37 @@ final class RecordingService
 
             return true;
         });
+    }
+
+    /**
+     * Why an ordinary retry is refused for this Failed row, or null when
+     * it may be retried. Two cases, both of which need operator recovery
+     * rather than another pass through the pipeline:
+     *
+     *  - the meeting was replaced while this row was being captured
+     *    (RecordingFailureCode::MeetingReplacedDuringCapture) — the object
+     *    belongs to the OLD meeting and must not be re-fetched under the
+     *    new one;
+     *  - the row still holds a storage locator — retrying would fetch
+     *    and store again, overwriting the pointer to a preserved object.
+     *
+     * Read-only; retryFailed() re-evaluates it under the row lock.
+     */
+    public function retryRefusalReason(Recording $recording): ?string
+    {
+        if ($recording->status !== RecordingStatus::Failed) {
+            return null;
+        }
+
+        if ($recording->failure_code === RecordingFailureCode::MeetingReplacedDuringCapture) {
+            return 'The meeting was replaced while this recording was being captured. The stored object belongs to the previous meeting; operator recovery is required.';
+        }
+
+        if ($recording->storage_path !== null) {
+            return 'This recording still points at a stored object. Retrying would overwrite that pointer; operator recovery is required.';
+        }
+
+        return null;
     }
 
     /**

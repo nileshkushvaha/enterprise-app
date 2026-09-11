@@ -29,8 +29,10 @@ use Filament\Support\Icons\Heroicon;
  *    double-click, or a retry racing the reconciliation sweep, cannot
  *    start two ingestions or produce a second stored object.
  *  - NON-DESTRUCTIVE — it never deletes, and never re-uploads over an
- *    object that already exists: a row holding a storage locator is
- *    Stored or Available, and neither state is retryable.
+ *    object that already exists. A Failed row that still holds a
+ *    locator (publication refused because the meeting was replaced
+ *    mid-capture) is disabled here and refused by the service; that
+ *    object needs operator recovery, not another pass.
  */
 final class RetryRecordingIngestionAction
 {
@@ -45,14 +47,22 @@ final class RetryRecordingIngestionAction
             ->modalDescription('The recording will be fetched from the meeting provider and stored again. Existing stored recordings are never affected.')
             ->visible(fn (Recording $record): bool => $record->status === RecordingStatus::Failed
                 && auth()->user()?->can('retry', $record) === true)
+            // A Failed row that still points at a preserved object (the
+            // meeting was replaced mid-capture) is shown but not
+            // retryable: the button explains that operator recovery is
+            // required. The service refuses regardless, under its lock.
+            ->disabled(fn (Recording $record, RecordingService $recordings): bool => $recordings->retryRefusalReason($record) !== null)
+            ->tooltip(fn (Recording $record, RecordingService $recordings): ?string => $recordings->retryRefusalReason($record))
             ->action(function (Recording $record, RecordingService $recordings): void {
-                $queued = $recordings->retryFailed($record, auth()->user());
+                $refusal = $recordings->retryRefusalReason($record);
+                $queued = $refusal === null && $recordings->retryFailed($record, auth()->user());
 
                 if (! $queued) {
                     Notification::make()
-                        ->title('Nothing to retry')
-                        ->body('This recording is no longer in a failed state.')
+                        ->title($refusal !== null ? 'Operator recovery required' : 'Nothing to retry')
+                        ->body($refusal ?? 'This recording is no longer in a failed state.')
                         ->warning()
+                        ->persistent()
                         ->send();
 
                     return;
