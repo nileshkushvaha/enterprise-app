@@ -22,6 +22,14 @@ final readonly class MeetingUpdateContext
         public ?CarbonImmutable $startsAt = null,
         public ?CarbonImmutable $endsAt = null,
         public ?string $timezone = null,
+        /**
+         * The platform host identity the remote meeting must be created
+         * under (a Zoom user id/email from platform_meeting_hosts). Null
+         * lets the provider fall back to its configured default host.
+         * Set by BookingMeetingService from the booking's capacity
+         * reservation, so the host that was reserved is the host used.
+         */
+        public ?string $hostReference = null,
     ) {}
 
     /** The same intent re-expressed as a first creation — used when no meeting row exists yet. */
@@ -35,6 +43,7 @@ final readonly class MeetingUpdateContext
             startsAt: $this->startsAt,
             endsAt: $this->endsAt,
             timezone: $this->timezone,
+            hostReference: $this->hostReference,
         );
     }
 }

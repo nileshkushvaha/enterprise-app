@@ -189,8 +189,26 @@ Create, update (reschedule) and cancel all run through
 by the same `BookingMeetingService` and events as Google Meet. No Zoom
 API call is made from a controller or Livewire component.
 
-Meetings are created as **scheduled** (type 2) with waiting room on,
-join-before-host off, and participant video off. The meeting topic and
+Meetings are created as **scheduled** (type 2) and **hostless** (since
+Phase 4, 2026-09-11): the licensed platform user owns the meeting but
+never has to join. Zoom settings SIRI fixes on every create and update
+(`ZoomMeetingProvider::meetingPayload()`), never admin knobs:
+
+| Zoom field | Value | Why |
+|---|---|---|
+| `join_before_host` / `jbh_time` | `true` / `5` | participants enter from five minutes before the start without the host; SIRI's own join window stays authoritative for who gets the link and when |
+| `waiting_room` | `false` | nobody needs admitting |
+| `use_pmi` | `false` | a generated id per lesson, never the reusable PMI |
+| `alternative_hosts` | `''` | the teacher is never host, co-host or alternative host; the student is a participant |
+| `meeting_authentication` | `false` | guests join by link and passcode |
+| `approval_type` | `2` | no registration step |
+| `auto_recording` | `cloud` when the lesson is recording-eligible, else `none` | recording starts when the first participant joins; consent and policy still decide |
+| `password` (create only) | SIRI-generated, 10 alphanumeric | strong per-lesson passcode, never rotated by a reschedule |
+| `mute_upon_entry`, `host_video`, `participant_video` | `true`, `true`, `false` | unchanged |
+
+Account-level Zoom settings can lock the opposite of any of these; the
+exact portal state is in `docs/deployment/zoom-activation.md` §5a and
+is confirmed by inspecting the first staging meeting. The topic and
 agenda use the same PII-safe builder as Google Meet: booking reference,
 subject and duration — never a student name, email, phone or price.
 
@@ -226,6 +244,15 @@ recordings:capture │  (bounded, every 15 min — the guarantee)
 
 The webhook is an optimization; the sweep is the guarantee. A webhook
 that was never delivered costs latency, never a recording.
+
+**Ownership.** An event is correlated to a lesson only through the Zoom
+meeting id of a `booking_meetings` row SIRI itself created, and an
+event whose `payload.account_id` names a different Zoom account is
+refused (422) even when correctly signed. **Source disposal.** With
+`zoom_recording_trash_source_after_persistence` on (ships off), the
+Zoom copy is moved to the account's recoverable trash strictly after
+the SIRI copy is stored, read back, matched and `available` — never
+before, never permanently (`docs/recordings.md` §11a).
 
 **Webhook authenticity** (`VerifiesZoomWebhooks`): the HMAC-SHA256 of
 `v0:<x-zm-request-timestamp>:<raw body>` under `zoom_webhook_secret` is
@@ -295,6 +322,269 @@ after N days") must be configured **deliberately**; left at the default
 the originals accumulate indefinitely, and the admin-only access rule
 SIRI enforces is only as good as the Zoom account's own sharing
 settings (§5 below).
+
+---
+
+## 4a. Zoom host capacity — one licence, many instructors
+
+> **Status: implemented 2026-09-11, ships OFF**
+> (`meeting.zoom_host_capacity_enabled`). Nothing below changes booking
+> behaviour until an operator registers the host and enables the flag —
+> see the rollout steps in `docs/deployment/zoom-activation.md` §6a.
+
+### The problem
+
+Every Zoom lesson is created under **one platform-owned Zoom user**
+(`zoom_host_user_id`), and a Zoom Pro user may run **one meeting at a
+time**. Instructor availability cannot express this: two instructors
+with empty calendars can both be sold 10:00 on Monday, and the second
+Zoom meeting will refuse to start. Google Meet has no such limit, which
+is one reason it stays the default until the controlled cutover.
+
+### Data
+
+| Table / column | Holds |
+|---|---|
+| `platform_meeting_hosts` | one row per host identity: `provider`, `host_reference` (the Zoom user id/email meetings are created under), `capacity` (Zoom Pro: 1), `is_active`, `sort_order`. **Identity only, never a credential** — the one Server-to-Server OAuth client in settings addresses every host. A second licence later is one more row (`meetings:zoom-hosts:register --host=…`), not another secret and never instructor OAuth. |
+| `meeting_host_reservations` | one row per (booking, host) claim: the occupied UTC interval, `status` (`active`/`released`), `expires_at` (mirrors a pending-payment hold), `released_at` + `release_reason`. Never deleted — a rescheduled booking has one released and one active row. |
+| `bookings.meeting_provider_intent` | the provider the booking was **accepted** for (written only while the feature is on). `BookingMeetingService` prefers it to today's `default_provider`, so flipping the default later cannot route an accepted booking onto a host nobody reserved, nor away from one it holds. |
+| `booking_meetings.platform_meeting_host_id` | the host the remote meeting was actually created under. A Zoom meeting belongs to its user, so reschedules stay on this host. |
+
+Instructor and student identities never appear on a host row; the
+booking keeps its own `instructor_id`/`student_id`.
+
+### When capacity is reserved — the acceptance boundary
+
+`BookingService::request()` is where every commitment is made — a free
+demo, a paid **pending-payment hold**, a **package-funded** lesson and
+each **recurring occurrence** (`BookingSeriesService` calls the same
+method) all create their booking row there, inside the instructor lock
+and one transaction. Capacity is reserved in that same transaction,
+after the instructor's availability passed and after the package unit
+was taken, so:
+
+- no capacity → `MeetingHostCapacityException` → the whole transaction
+  rolls back: no booking, no hold, no package unit consumed, nothing
+  charged, and **no silent switch to another provider**. The message is
+  safe to show ("No Zoom host is available between … Please choose
+  another time"). A recurring occurrence that hits this is recorded as
+  a series conflict exactly like an instructor clash — never dropped
+  silently;
+- a **pending-payment hold** carries `reserved_until` on the
+  reservation for visibility, but is released only when the hold is
+  actually cancelled (`booking:release-expired` → `cancel()`), exactly
+  as the instructor's slot is. A verified payment that lands late but
+  before the sweep therefore still finds its capacity; `confirm()` just
+  clears the expiry. If the sweep wins, `markPaid()`'s existing
+  late-terminal path redirects the money to the wallet as before;
+- `confirm()` **rechecks**: a booking that somehow reaches confirmation
+  without a reservation (accepted before the feature was on) is
+  reserved then if there is room. That late attempt never throws — the
+  money has moved — it is audited (`meeting_host_capacity_unreserved`)
+  and meeting creation will refuse a Zoom meeting for the booking until
+  capacity exists or the provider is changed deliberately.
+
+### What is reserved — the occupied interval
+
+UTC, half-open, and wider than the lesson:
+
+```text
+[ starts_at − meeting_link_visible_before_minutes − buffer ,
+  ends_at   + meeting_link_visible_after_minutes  + buffer )
+```
+
+The two window settings are the ones §5b already uses for when a
+participant may join and when SIRI closes the meeting; `buffer` is
+`meeting.zoom_host_capacity_buffer_minutes` (ships 5), an explicit
+operational turnaround. With the shipped 15/15/5 a 10:00–10:30 lesson
+occupies 09:40–10:50; the next lesson may begin at 11:10 (its interval
+starts exactly at 10:50, and touching is not overlapping).
+
+**This prevents planned overlap only.** A reservation says two lessons
+were never *scheduled* on the host at once. It does not prove a remote
+meeting has *ended*: a class that runs past its window still occupies
+the licence at Zoom. Ending it at the provider (Zoom auto-end) is a
+later phase; until then the join window and `meetings:close-expired`
+are the operational controls.
+
+### Lock order — atomic across instructors
+
+Instructor locks are per instructor, so they cannot serialize two
+instructors competing for one host. `MeetingHostCapacityService` does,
+with database locks, in this fixed order:
+
+1. the instructor advisory lock (existing, `withInstructorLock()`);
+2. **the `platform_meeting_hosts` rows, `FOR UPDATE`, ordered
+   `sort_order, id` — taken at the very start of the transaction**,
+   before any locking read on `bookings`;
+3. the existing duplicate/availability re-reads and the booking insert;
+4. a **locking** overlap count on `meeting_host_reservations` (so it
+   reads the latest committed rows, not the transaction's snapshot),
+   then the insert or release.
+
+Step 2 before step 3 is load-bearing: the availability re-read takes
+InnoDB gap locks on `bookings`, and a transaction holding those gaps
+while waiting for the host rows deadlocks with the host-holder trying
+to insert into the same gap. `MeetingHostCapacityConcurrencyTest`
+races two real processes — two instructors, one host, one instant —
+and asserts exactly one booking and a `MeetingHostCapacityException`
+for the loser.
+
+### Reschedule, cancel, expire, finish
+
+- **Reschedule** (`BookingService::reschedule()`): the replacement
+  interval is checked and reserved **before** the original is released,
+  all in the same transaction under the host lock. If it cannot be, the
+  transaction rolls back and the booking keeps both its time and its
+  reservation. A booking may shift within its own interval (its own
+  reservation never blocks it). Once a Zoom meeting exists the booking
+  is **pinned to that meeting's host**; another host with room is not
+  used, because a Zoom meeting cannot change user without being
+  recreated. History is kept: the old row is `released` with reason
+  `rescheduled`.
+- **Cancel / hold expiry / complete / no-show**: released in the same
+  transaction as the status change (`cancelled`, `hold_expired`,
+  `finished`). Idempotent — a replayed event finds nothing active.
+
+### Meeting creation — at most one remote create
+
+`BookingMeetingService::createMeeting()` now runs under a per-booking
+advisory lock (`booking:meeting:<id>`) and re-reads the row inside it.
+The unique `booking_meetings.booking_id` only proved one *local* row;
+two callers racing past the "already created?" read (a redelivered
+listener and an admin retry) would each have asked Zoom. The lock makes
+the remote create at-most-once — `MeetingHostCapacityConcurrencyTest`
+counts provider calls across two processes and asserts one.
+
+Before talking to Zoom the service reads the booking's reservation (or,
+for a booking accepted before the feature, takes one — refusing clearly
+as a failed meeting when there is no room) and creates the meeting
+under **that host's** identity (`MeetingCreationContext::$hostReference`),
+so the host that was reserved is the host used.
+
+**Ambiguous creates fail closed.** If the create request leaves this
+server and no answer returns (connection error, timeout), Zoom may hold
+a meeting SIRI has no id for. `ZoomApiClient` raises
+`GatewayAmbiguousRequestException`, the provider maps it to
+`AmbiguousMeetingCreationException`, and the row is recorded `failed`
+with `metadata.remote_state_unknown = true`. Automatic paths never
+re-run for a failed row. The next *explicit* attempt (admin retry)
+first **queries** Zoom — `GET /users/{host}/meetings?type=upcoming`,
+walked page by page, matching the booking reference SIRI writes into
+the agenda, and reading `GET /meetings/{id}` for a same-start entry
+whose list row omits the agenda — and acts only on evidence:
+
+| Reconciliation result | Action |
+|---|---|
+| exactly one remote meeting carries the reference (`found`) | aligned (PATCH) and **adopted** as the booking's meeting; audited `meeting_adopted_after_ambiguity` |
+| no match, search exhaustive (`none`) | **nothing is created.** A missing result does not prove the original create failed (the listing is eventually consistent and bounded to upcoming meetings). Row stays failed + flagged; what was seen is recorded in `metadata.reconciliation` |
+| several matches, or the bounded walk did not reach the end (`inconclusive`) | **nothing is created or adopted.** Candidate ids recorded; row stays failed + flagged |
+
+Repeated attempts repeat only the query. Resolution is a person's
+decision, audited with the acting administrator:
+
+```bash
+php artisan meetings:resolve-ambiguous BK-…                              # show what reconciliation established
+php artisan meetings:resolve-ambiguous BK-… --admin=me@… --adopt=<zoom meeting id>
+php artisan meetings:resolve-ambiguous BK-… --admin=me@… --none --reason="Checked the Zoom account: nothing scheduled"
+```
+
+`--adopt` aligns and adopts the identified meeting (reserving host
+capacity first, like any Zoom meeting); `--none` clears the flag so a
+fresh create may proceed. **What the local lock guarantees and what
+remains uncertain:** the per-booking lock guarantees SIRI issues at
+most one create request per booking at a time and never another once
+a row is Created. It cannot know whether an unanswered request reached
+Zoom; that gap is closed only by the reconciliation evidence above or
+by an administrator who looked.
+
+**Adoption is verified, never trusted.** Whether reconciliation found
+the single match or an administrator supplied an id
+(`meetings:resolve-ambiguous --adopt=…`), the meeting is READ
+(`GET /meetings/{id}`) and checked before anything is written: it
+exists; it is hosted by the platform host the booking is reserved on
+(Zoom user id or email); no other local booking owns that id; its
+agenda does not name a different booking reference; and, when the
+agenda carries no reference at all, its start is within 24 hours of
+the lesson. Only then is it aligned (PATCH) and adopted. The evidence
+is stored with the adoption.
+
+**Evidence is append-only.** `booking_meetings.metadata.ambiguity_history`
+records the unanswered create, every reconciliation query with what it
+established (status, exhaustive, candidate ids), and the resolution —
+adopted (by whom, which id, on what evidence) or declared none (by
+whom, why) — each stamped. Declaring none clears the
+`remote_state_unknown` flag and keeps everything else; a later
+successful create carries the record forward.
+
+### Rollout control, preflight, backfill
+
+- `meeting.zoom_host_capacity_enabled` (Settings → Meetings → Zoom →
+  *Reserve Zoom Host Capacity*) ships **off**. It governs whether NEW
+  reservations may be granted. Zoom is capacity-governed **whether the
+  switch is on or off**: a Zoom-bound booking is never accepted without
+  a reservation, so with the switch off Zoom-bound acceptance is
+  **refused** (fail closed), not accepted unreserved. Existing
+  reservations keep being honoured, moved and released regardless.
+- `php artisan meetings:zoom-hosts:register` creates the host row from
+  the configured host identity (idempotent; `--capacity`, `--label`,
+  `--host` for an additional licence).
+- `php artisan meetings:zoom-hosts:preflight [--days=60]` is
+  **read-only**: the pool and its capacity; every upcoming accepted
+  (pending or confirmed) online booking that will run on Zoom — pinned
+  to it, already carrying a Zoom meeting, or unpinned while Zoom is the
+  default — and holds no active reservation; and where their planned
+  intervals plus existing reservations exceed capacity. Generated
+  recurring occurrences and pending-payment holds are bookings and are
+  covered; occurrences not yet generated reserve when they are. Exit 1
+  when anything needs attention. It rewrites nothing.
+- `php artisan meetings:zoom-hosts:backfill [--apply]` is the
+  supported reconciliation for bookings accepted before the feature:
+  earliest lesson first, each unallocated Zoom-bound booking is given a
+  reservation under the same host lock and interval rules as a fresh
+  acceptance, and a legacy Zoom meeting is pinned to the host it lands
+  on. What does not fit is reported and left untouched — the operator
+  reschedules it to a free hour or cancels it. **A booking whose Zoom
+  meeting already exists is never switched to another provider**; that
+  transition is not supported. Dry-run by default; deliberately usable
+  while the switch is still off, because that is how the pool is made
+  clean before enabling.
+
+**Two gates are enforced on the settings page**, so the stored state
+can never express an unsafe combination:
+
+1. the switch cannot be turned **on** while the preflight has findings
+   (the page runs the same `ZoomHostCapacityPreflightService` and
+   refuses the save with the summary);
+2. Zoom cannot be made the **default provider** while the switch is
+   off (every Zoom booking would be refused).
+
+**Rollback — safe sequence.** 1) Set `default_provider` back to Google
+Meet: new bookings are accepted for Meet and pinned to it. 2) Only then
+turn *Reserve Zoom Host Capacity* off. Afterwards: new Zoom-bound
+acceptance (an explicit admin Zoom choice, or a Zoom default) is
+refused; existing pending holds keep their reservations and are
+released by the normal expiry/cancel path; existing pinned bookings
+keep `meeting_provider_intent = zoom` and, if reserved, still get their
+Zoom meeting on the reserved host; a pinned booking with no reservation
+gets no meeting until backfilled; reschedules of reserved bookings
+still check capacity, reschedules of unreserved Zoom bookings are
+refused; created Zoom meetings and all reservation history are
+untouched. Nothing needs a migration to undo.
+
+### Known limits (this phase)
+
+- The wizard's slot list and the recurring **preview** do not consult
+  host capacity; a slot the instructor has free can still be refused at
+  submit with the message above, and a recurring occurrence can be
+  recorded as a conflict that the preview did not predict.
+- Reconciliation matches on the agenda text SIRI writes. If the
+  listing ever omits both the agenda and an exact start time, an
+  ambiguous create resolves only by an administrator's decision.
+- The `none` reconciliation result is deliberately not trusted as
+  proof of a failed create; an operator confirms in the Zoom account.
+- Capacity is per provider pool, not per country or instructor group.
+- See "does not prove a remote meeting has ended" above.
 
 ---
 
@@ -441,6 +731,7 @@ configuration change for both providers at once.
 | `recording_enabled`, `recording_retention_days` | platform recording policy; retention counts from `recorded_at`, ships 30 days (`docs/recordings.md` §11a) |
 | `zoom_account_id`, `zoom_client_id`, `zoom_client_secret` | Server-to-Server OAuth (secret encrypted) |
 | `zoom_host_user_id` / `zoom_host_email` | platform host the meetings run under |
+| `zoom_host_capacity_enabled`, `zoom_host_capacity_buffer_minutes` | one-host capacity reservation (§4a); ships off / 5 |
 | `zoom_webhook_secret` | webhook signature verification (encrypted) |
 | `zoom_recording_webhooks_enabled` | accept recording webhooks |
 

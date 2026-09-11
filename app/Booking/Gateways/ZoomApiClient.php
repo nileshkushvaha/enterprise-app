@@ -6,8 +6,11 @@ namespace App\Booking\Gateways;
 
 use App\Booking\Contracts\ZoomMeetingClient;
 use App\Booking\DTOs\ProviderDownloadStream;
+use App\Booking\Exceptions\GatewayAmbiguousRequestException;
 use App\Booking\Exceptions\GatewayRequestException;
 use App\Settings\MeetingSettings;
+use Carbon\CarbonImmutable;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Cache;
@@ -36,16 +39,26 @@ final class ZoomApiClient implements ZoomMeetingClient
     /** Refresh this many seconds before Zoom's stated expiry. */
     private const int TOKEN_EXPIRY_BUFFER_SECONDS = 60;
 
+    /** Bound on the paginated search for an existing meeting during ambiguity reconciliation. */
+    private const int FIND_MEETING_MAX_PAGES = 3;
+
     public function __construct(
         private readonly MeetingSettings $settings,
     ) {}
 
     public function createMeeting(string $hostUser, array $payload): array
     {
-        $response = $this->request()->post(
-            sprintf('%s/users/%s/meetings', self::API_BASE, rawurlencode($hostUser)),
-            $payload,
-        );
+        try {
+            $response = $this->request()->post(
+                sprintf('%s/users/%s/meetings', self::API_BASE, rawurlencode($hostUser)),
+                $payload,
+            );
+        } catch (ConnectionException $e) {
+            // The request left this host and no answer came back. Zoom
+            // may have created the meeting. This is NOT a failure a
+            // caller may blindly retry — see GatewayAmbiguousRequestException.
+            throw new GatewayAmbiguousRequestException('Zoom API request to create the meeting did not complete (connection error or timeout); the meeting may or may not exist.', 0, $e);
+        }
 
         if ($response->failed()) {
             throw new GatewayRequestException($this->safeError('create meeting', $response));
@@ -73,6 +86,96 @@ final class ZoomApiClient implements ZoomMeetingClient
         }
 
         return $this->sanitizeMeeting($fresh->json() ?? []);
+    }
+
+    public function findScheduledMeetings(string $hostUser, string $bookingReference, ?CarbonImmutable $startsAt = null): array
+    {
+        $needle = sprintf('Booking reference: %s', $bookingReference);
+        $startsAtUtc = $startsAt?->utc()->format('Y-m-d\TH:i:s\Z');
+        $nextPageToken = null;
+        $matches = [];
+        $exhaustive = false;
+
+        for ($page = 0; $page < self::FIND_MEETING_MAX_PAGES; $page++) {
+            $response = $this->request()->get(
+                sprintf('%s/users/%s/meetings', self::API_BASE, rawurlencode($hostUser)),
+                array_filter([
+                    'type' => 'upcoming',
+                    'page_size' => 300,
+                    'next_page_token' => $nextPageToken,
+                ], static fn (mixed $value): bool => $value !== null && $value !== ''),
+            );
+
+            if ($response->failed()) {
+                throw new GatewayRequestException($this->safeError('list host meetings', $response));
+            }
+
+            foreach ((array) $response->json('meetings', []) as $meeting) {
+                if (! is_array($meeting) || ! isset($meeting['id'])) {
+                    continue;
+                }
+
+                // The agenda is the only field SIRI writes the reference
+                // into (BuildsSafeMeetingContent); the topic is not unique.
+                if (array_key_exists('agenda', $meeting)) {
+                    if (str_contains((string) $meeting['agenda'], $needle)) {
+                        $matches[] = $this->sanitizeMeeting($meeting);
+                    }
+
+                    continue;
+                }
+
+                // Some list responses omit the agenda. For an entry that
+                // starts exactly when this lesson does, read the meeting
+                // itself (GET /meetings/{id}) and match on ITS agenda —
+                // never on the start time alone, which many lessons share.
+                if ($startsAtUtc !== null && (string) ($meeting['start_time'] ?? '') === $startsAtUtc) {
+                    $full = $this->request()->get(sprintf('%s/meetings/%s', self::API_BASE, rawurlencode((string) $meeting['id'])));
+
+                    if ($full->failed()) {
+                        throw new GatewayRequestException($this->safeError('fetch meeting', $full));
+                    }
+
+                    if (str_contains((string) ($full->json('agenda') ?? ''), $needle)) {
+                        $matches[] = $this->sanitizeMeeting($full->json() ?? []);
+                    }
+                }
+            }
+
+            $nextPageToken = (string) ($response->json('next_page_token') ?? '');
+
+            if ($nextPageToken === '') {
+                $exhaustive = true;
+
+                break;
+            }
+        }
+
+        return ['matches' => $matches, 'exhaustive' => $exhaustive];
+    }
+
+    public function inspectMeeting(string $meetingId): ?array
+    {
+        $response = $this->request()->get(sprintf('%s/meetings/%s', self::API_BASE, rawurlencode($meetingId)));
+
+        if ($response->status() === 404) {
+            return null;
+        }
+
+        if ($response->failed()) {
+            throw new GatewayRequestException($this->safeError('fetch meeting', $response));
+        }
+
+        $data = $response->json() ?? [];
+
+        // Identity only — no join/start URL, no passcode, no settings.
+        return [
+            'id' => (string) ($data['id'] ?? $meetingId),
+            'host_id' => isset($data['host_id']) ? (string) $data['host_id'] : null,
+            'host_email' => isset($data['host_email']) ? (string) $data['host_email'] : null,
+            'agenda' => isset($data['agenda']) ? (string) $data['agenda'] : null,
+            'start_time' => isset($data['start_time']) ? (string) $data['start_time'] : null,
+        ];
     }
 
     public function deleteMeeting(string $meetingId): bool
@@ -123,6 +226,27 @@ final class ZoomApiClient implements ZoomMeetingClient
      * only ever reaches a destination that passed that check. Hops,
      * connect time and read time are all bounded by configuration.
      */
+    public function trashMeetingRecordings(string $meetingId): bool
+    {
+        // The action rides in the query string (Laravel would otherwise
+        // send it as a JSON body, which Zoom ignores — and the default
+        // action is a PERMANENT delete).
+        $response = $this->request()->delete(
+            sprintf('%s/meetings/%s/recordings?action=trash', self::API_BASE, rawurlencode($meetingId)),
+        );
+
+        // 404 = nothing there (already trashed, or never recorded).
+        if ($response->status() === 404) {
+            return true;
+        }
+
+        if ($response->failed()) {
+            throw new GatewayRequestException($this->safeError('trash meeting recordings', $response));
+        }
+
+        return true;
+    }
+
     public function openRecordingStream(string $downloadUrl, ?string $downloadToken = null): ProviderDownloadStream
     {
         // Zoom's own short-lived download token when we have one (it is

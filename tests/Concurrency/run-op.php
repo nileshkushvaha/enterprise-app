@@ -1,11 +1,13 @@
 <?php
 
 declare(strict_types=1);
+use App\Booking\Contracts\BookingMeetingServiceInterface;
 use App\Booking\Contracts\BookingPaymentReconciliationServiceInterface;
 use App\Booking\Contracts\BookingPaymentServiceInterface;
 use App\Booking\Contracts\BookingServiceInterface;
 use App\Booking\Contracts\RazorpayGatewayClient;
 use App\Booking\Contracts\StripeGatewayClient;
+use App\Booking\Contracts\ZoomMeetingClient;
 use App\Booking\DTOs\CancelBookingData;
 use App\Booking\DTOs\CancellationRefundDecision;
 use App\Booking\DTOs\CreateBookingData;
@@ -72,6 +74,7 @@ use Illuminate\Contracts\Http\Kernel as HttpKernel;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
 use Tests\Support\CountingRazorpayConcurrencyFakeClient;
+use Tests\Support\CountingZoomConcurrencyFakeClient;
 use Tests\Support\RazorpayConcurrencyFakeClient;
 use Tests\Support\RazorpayXConcurrencyFakeClient;
 use Tests\Support\StripeConcurrencyFakeClient;
@@ -390,6 +393,52 @@ try {
             $examined = app(BookingPaymentReconciliationServiceInterface::class)->reconcileDue((int) ($args['limit'] ?? 200));
 
             return ['examined' => $examined];
+        })(),
+
+        // Zoom host capacity: two different instructors race a booking
+        // for the SAME hour. Their instructor locks are DIFFERENT, so
+        // only the host-row lock inside MeetingHostCapacityService can
+        // serialize them; exactly one may win the single-capacity host.
+        'book-free-demo-for-host' => (function () use ($args) {
+            $booking = app(BookingServiceInterface::class)->request(new CreateBookingData(
+                typeKey: 'free_demo',
+                studentId: (int) $args['student_id'],
+                instructorId: (int) $args['instructor_id'],
+                startsAt: CarbonImmutable::parse($args['starts_at']),
+                durationMinutes: 30,
+                meta: ['subject' => 'maths', 'grade' => 7],
+            ));
+
+            return ['booking_id' => $booking->id, 'status' => $booking->status->value];
+        })(),
+
+        // Zoom host capacity: a verified payment settles a pending hold
+        // whose reserved_until has passed, racing the sweep that cancels
+        // lapsed holds. Both take the booking row lock; whichever wins,
+        // the row and its host reservation must agree.
+        'mark-booking-paid' => (function () use ($args) {
+            $booking = Booking::query()->findOrFail($args['booking_id']);
+
+            $booking = app(BookingPaymentServiceInterface::class)->markPaid($booking, (string) $args['reference']);
+
+            return ['status' => $booking->status->value, 'payment_status' => $booking->payment_status->value];
+        })(),
+
+        // Zoom host capacity / meeting idempotency: two workers ask for
+        // the SAME booking's Zoom meeting at once (a redelivered
+        // listener and an admin retry). The per-booking meeting-creation
+        // lock must let exactly one reach the provider; the counting
+        // fake records every remote create to a shared file.
+        'create-zoom-meeting' => (function () use ($args) {
+            app()->instance(ZoomMeetingClient::class, new CountingZoomConcurrencyFakeClient(
+                logPath: (string) $args['log_path'],
+            ));
+
+            $booking = Booking::query()->findOrFail($args['booking_id']);
+
+            $meeting = app(BookingMeetingServiceInterface::class)->createMeeting($booking, 'zoom');
+
+            return ['meeting_id' => $meeting?->id, 'status' => $meeting?->status->value, 'provider_meeting_id' => $meeting?->provider_meeting_id];
         })(),
 
         'release-expired-booking-reservations' => (function () {

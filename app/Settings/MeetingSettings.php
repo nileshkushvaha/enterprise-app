@@ -185,6 +185,26 @@ class MeetingSettings extends Settings
     public bool $zoom_recording_webhooks_enabled;
 
     /**
+     * After a Zoom recording has been stored AND verified in SIRI's own
+     * storage, move Zoom's copy to the account's recoverable trash.
+     * Ships OFF: it removes the only other copy of a class recording,
+     * so it is a deliberate retention decision, taken once the staging
+     * pipeline has proven itself (docs/deployment/zoom-activation.md).
+     */
+    public bool $zoom_recording_trash_source_after_persistence;
+
+    /**
+     * Zoom host capacity reservation (docs/meetings.md §4a). Ships OFF.
+     * On: every Zoom-bound booking reserves a slot on a registered
+     * platform host at acceptance and is refused clearly when none has
+     * room; Zoom meetings are never created without a reservation.
+     */
+    public bool $zoom_host_capacity_enabled;
+
+    /** Operational buffer, in minutes, added on both sides of a host's occupied interval. */
+    public int $zoom_host_capacity_buffer_minutes;
+
+    /**
      * Google Drive folder that owns the recording hierarchy
      * (SIRI Education Recordings/YYYY/MM). Not a credential — an id.
      * Empty means Drive recording storage is not configured, and

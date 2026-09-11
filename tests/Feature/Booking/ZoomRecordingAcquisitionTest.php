@@ -9,6 +9,7 @@ use App\Booking\Enums\BookingStatus;
 use App\Booking\Enums\RecordingFailureCode;
 use App\Booking\Enums\RecordingStatus;
 use App\Booking\Exceptions\GatewayRequestException;
+use App\Booking\Exceptions\RecordingStorageException;
 use App\Booking\Gateways\ZoomApiClient;
 use App\Booking\Meetings\ZoomMeetingProvider;
 use App\Booking\Services\RecordingService;
@@ -335,6 +336,110 @@ final class ZoomRecordingAcquisitionTest extends TestCase
         $this->assertSame(RecordingFailureCode::SourceRejected, $recording->failure_code);
         $this->assertCount(0, $this->storage->objects);
         $this->assertCount(0, File::files(app(RecordingStagingArea::class)->path()));
+    }
+
+    // ── Zoom source disposal (Phase 5) ────────────────────────────────
+
+    private function enableSourceDisposal(): void
+    {
+        $settings = app(MeetingSettings::class);
+        $settings->zoom_recording_trash_source_after_persistence = true;
+        $settings->save();
+    }
+
+    private function readyVideo(Recording $recording): void
+    {
+        $this->zoom->downloadBytes = $this->mp4Bytes();
+        $this->zoom->withRecordingFile(self::MEETING_ID, 'video-1', 'MP4', 'shared_screen_with_speaker_view');
+    }
+
+    /** Ships off: the first real staging recording is never removed from Zoom unless an administrator chooses to. */
+    public function test_the_zoom_source_is_kept_by_default_after_a_successful_ingestion(): void
+    {
+        $recording = $this->lesson();
+        $this->readyVideo($recording);
+
+        $this->capture($recording);
+
+        $this->assertSame(RecordingStatus::Available, $recording->fresh()->status);
+        $this->assertSame([], $this->zoom->trashed);
+        $this->assertNotContains('trashMeetingRecordings', $this->zoom->calls);
+    }
+
+    public function test_with_disposal_on_the_zoom_source_is_trashed_only_after_the_siri_copy_is_verified_available(): void
+    {
+        $this->enableSourceDisposal();
+        $recording = $this->lesson();
+        $this->readyVideo($recording);
+
+        $this->capture($recording);
+
+        $this->assertSame(RecordingStatus::Available, $recording->fresh()->status);
+        $this->assertSame([self::MEETING_ID], $this->zoom->trashed, 'trash — never a permanent delete — of this meeting only');
+        // Order: download, store, verify (in storage), publish, THEN dispose.
+        $this->assertSame(['listMeetingRecordings', 'openRecordingStream', 'trashMeetingRecordings'], $this->zoom->calls);
+        $this->assertDatabaseHas('activity_log', ['event' => 'recording_source_disposed']);
+    }
+
+    /** Uploaded but not yet verified (Stored): the source must stay — verification may still fail. */
+    public function test_the_zoom_source_is_not_trashed_while_the_siri_copy_is_unverified(): void
+    {
+        $this->enableSourceDisposal();
+        $recording = $this->lesson();
+        $this->readyVideo($recording);
+        $this->storage->failNextVerify = RecordingStorageException::verificationFailed('transient backend blip');
+
+        $this->capture($recording);
+
+        $this->assertSame(RecordingStatus::Stored, $recording->fresh()->status);
+        $this->assertSame([], $this->zoom->trashed, 'a Stored copy is not proof; nothing is disposed of');
+
+        // The retry verifies and publishes — disposal happens exactly once, now.
+        $this->capture($recording->fresh());
+        $this->assertSame(RecordingStatus::Available, $recording->fresh()->status);
+        $this->assertSame([self::MEETING_ID], $this->zoom->trashed);
+    }
+
+    /** A verification mismatch means no disposal, ever, for that attempt. */
+    public function test_the_zoom_source_is_never_trashed_when_the_siri_copy_fails_verification(): void
+    {
+        $this->enableSourceDisposal();
+        $recording = $this->lesson();
+        $this->readyVideo($recording);
+        $this->storage->reportWrongSize = true;
+
+        $this->capture($recording);
+
+        $this->assertNotSame(RecordingStatus::Available, $recording->fresh()->status);
+        $this->assertSame([], $this->zoom->trashed);
+    }
+
+    public function test_a_disposal_failure_is_audited_and_leaves_the_available_recording_untouched(): void
+    {
+        $this->enableSourceDisposal();
+        $recording = $this->lesson();
+        $this->readyVideo($recording);
+        $this->zoom->throwOnTrash = new GatewayRequestException('Zoom API failed to trash meeting recordings (HTTP 403): scope missing.');
+
+        $this->capture($recording);
+
+        $this->assertSame(RecordingStatus::Available, $recording->fresh()->status, 'the SIRI copy is canonical; disposal is hygiene');
+        $this->assertNull($recording->fresh()->failure_code);
+        $this->assertDatabaseHas('activity_log', ['event' => 'recording_source_disposal_failed']);
+    }
+
+    /** A replayed capture of an already-available recording disposes of nothing a second time. */
+    public function test_disposal_happens_once_even_when_capture_is_replayed(): void
+    {
+        $this->enableSourceDisposal();
+        $recording = $this->lesson();
+        $this->readyVideo($recording);
+
+        $this->capture($recording);
+        $this->capture($recording->fresh());
+        $this->artisan('recordings:capture')->assertSuccessful();
+
+        $this->assertCount(1, $this->zoom->trashed);
     }
 
     // ── Failure classification ────────────────────────────────────────

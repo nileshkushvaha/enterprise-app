@@ -77,6 +77,7 @@ class Booking extends Model
         'meeting_provider',
         'meeting_ref',
         'meeting_url',
+        'meeting_provider_intent',
         'cancelled_by',
         'cancellation_reason',
         'confirmed_at',
@@ -135,6 +136,12 @@ class Booking extends Model
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    /** Every host capacity claim this booking has ever held — active and released (history). */
+    public function hostReservations(): HasMany
+    {
+        return $this->hasMany(MeetingHostReservation::class);
     }
 
     public function meeting(): HasOne

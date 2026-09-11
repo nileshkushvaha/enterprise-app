@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Booking\Contracts;
 
 use App\Booking\DTOs\ProviderDownloadStream;
+use App\Booking\Exceptions\GatewayAmbiguousRequestException;
 use App\Booking\Exceptions\GatewayRequestException;
+use Carbon\CarbonImmutable;
 
 /**
  * Isolation seam for the Zoom REST API — the only boundary Zoom HTTP
@@ -26,9 +28,47 @@ interface ZoomMeetingClient
      * @param  array<string, mixed>  $payload  Zoom create-meeting body (topic, type, start_time, …)
      * @return array{id: string, join_url: ?string, start_url: ?string, password: ?string, timezone: ?string, status: ?string}
      *
-     * @throws GatewayRequestException
+     * @throws GatewayRequestException on a definite failure (Zoom answered with an error)
+     * @throws GatewayAmbiguousRequestException when the request did not complete and Zoom MAY have created the meeting
      */
     public function createMeeting(string $hostUser, array $payload): array;
+
+    /**
+     * Every upcoming meeting under $hostUser whose agenda carries this
+     * booking's reference — the reconciliation query for an AMBIGUOUS
+     * create (a request that timed out after it may have reached Zoom).
+     *
+     * Returns ALL matches, never "the first one": adopting an arbitrary
+     * match would be a guess. `exhaustive` is false when the bounded
+     * page walk stopped before the host's upcoming list was fully read,
+     * in which case an empty `matches` proves nothing. Bounded: upcoming
+     * meetings only, a fixed maximum number of pages.
+     *
+     * Endpoints: GET /users/{userId}/meetings?type=upcoming (granular
+     * scope meeting:read:list_meetings:admin) and, for a listed meeting
+     * that starts at $startsAt but whose list entry carries no agenda,
+     * GET /meetings/{meetingId} (meeting:read:meeting:admin — already
+     * required by updateMeeting). Matching is on the agenda text SIRI
+     * wrote, never on topic or time alone.
+     *
+     * @return array{matches: list<array{id: string, join_url: ?string, start_url: ?string, password: ?string, timezone: ?string, status: ?string}>, exhaustive: bool}
+     *
+     * @throws GatewayRequestException
+     */
+    public function findScheduledMeetings(string $hostUser, string $bookingReference, ?CarbonImmutable $startsAt = null): array;
+
+    /**
+     * Identity of one meeting, read without modifying it: host user id
+     * and email, agenda, start time. Used to CHECK a meeting before it
+     * is adopted for a booking. Null when Zoom reports no such meeting
+     * (404). Endpoint: GET /meetings/{meetingId}
+     * (granular scope meeting:read:meeting:admin).
+     *
+     * @return array{id: string, host_id: ?string, host_email: ?string, agenda: ?string, start_time: ?string}|null
+     *
+     * @throws GatewayRequestException on any other failure
+     */
+    public function inspectMeeting(string $meetingId): ?array;
 
     /**
      * Update an existing meeting and return its fresh sanitized state.
@@ -65,6 +105,18 @@ interface ZoomMeetingClient
      * @throws GatewayRequestException
      */
     public function listMeetingRecordings(string $meetingId): ?array;
+
+    /**
+     * Moves every cloud-recording file of one meeting to Zoom's
+     * recoverable TRASH (never a permanent delete). Called only after
+     * SIRI holds a verified copy. A meeting with no recordings (404)
+     * counts as success — the goal state is "no source left", not "we
+     * removed it". Endpoint: DELETE /meetings/{meetingId}/recordings
+     * ?action=trash (granular scope cloud_recording:delete:meeting_recording:admin).
+     *
+     * @throws GatewayRequestException
+     */
+    public function trashMeetingRecordings(string $meetingId): bool;
 
     /**
      * Opens an authenticated read stream for one cloud-recording file.

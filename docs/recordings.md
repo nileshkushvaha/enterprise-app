@@ -768,7 +768,7 @@ It never touches anything at the meeting provider:
 | Object | Owner | SIRI retention applies? | Retention is configured in |
 |---|---|---|---|
 | SIRI's copy in Drive (later S3) | SIRI | **yes** — this section | `meeting.recording_retention_days` |
-| Zoom cloud recording (the original SIRI downloaded) | Zoom account | no | Zoom admin → Account Settings → Recording → auto-delete cloud recordings after N days |
+| Zoom cloud recording (the original SIRI downloaded) | Zoom account | only if `meeting.zoom_recording_trash_source_after_persistence` is on: moved to Zoom's recoverable trash strictly after the SIRI copy is `available` (ships off) | otherwise Zoom admin → Account Settings → Recording → auto-delete cloud recordings after N days |
 | Meet-generated MP4 in the platform account's Drive | Google Workspace | no | Workspace admin (Drive retention / Vault) or a deliberate, separately built deletion |
 
 Both provider-side retentions must be set **deliberately** by the

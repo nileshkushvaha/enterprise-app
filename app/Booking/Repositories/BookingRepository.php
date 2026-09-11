@@ -384,6 +384,33 @@ final class BookingRepository implements BookingRepositoryInterface
         ]);
     }
 
+    /**
+     * Serializes meeting creation for ONE booking across workers and
+     * processes. The unique booking_meetings.booking_id row proves only
+     * that one LOCAL row exists — two callers racing past the "already
+     * created?" read would each ask the provider for a meeting, and the
+     * loser's remote meeting would be orphaned. Holding this lock while
+     * re-reading the row and calling the provider is what makes the
+     * remote create at-most-once. Taken AFTER any instructor lock and
+     * never while holding host rows (see MeetingHostCapacityService).
+     */
+    public function withMeetingCreationLock(string $bookingId, Closure $callback): mixed
+    {
+        $name = sprintf('booking:meeting:%s', $bookingId);
+
+        $granted = DB::selectOne('SELECT GET_LOCK(?, ?) AS granted', [$name, self::LOCK_TIMEOUT_SECONDS]);
+
+        if ((int) ($granted->granted ?? 0) !== 1) {
+            throw new BookingException(sprintf('Could not acquire meeting creation lock for booking %s.', $bookingId));
+        }
+
+        try {
+            return $callback();
+        } finally {
+            DB::selectOne('SELECT RELEASE_LOCK(?) AS released', [$name]);
+        }
+    }
+
     public function withInstructorLock(int $instructorId, Closure $callback): mixed
     {
         $name = sprintf('booking:host:%d', $instructorId);

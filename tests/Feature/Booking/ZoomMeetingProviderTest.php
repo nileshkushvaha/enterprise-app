@@ -20,6 +20,7 @@ use App\Filament\Pages\Settings\MeetingSettingsPage;
 use App\Http\Resources\Student\StudentBookingResource;
 use App\Models\Booking;
 use App\Models\BookingMeeting;
+use App\Models\PlatformMeetingHost;
 use App\Models\User;
 use App\Settings\FeatureSettings;
 use App\Settings\MeetingSettings;
@@ -65,7 +66,15 @@ class ZoomMeetingProviderTest extends TestCase
         $settings->zoom_client_id = 'client_abc';
         $settings->zoom_client_secret = Crypt::encryptString(self::SECRET);
         $settings->zoom_host_user_id = 'host-user-1';
+        // Zoom is capacity-governed (docs/meetings.md §4a): a Zoom meeting is never
+        // created without a host reservation, so the fixture registers the host
+        // and switches new reservations on, as production must before using Zoom.
+        $settings->zoom_host_capacity_enabled = true;
         $settings->save();
+        PlatformMeetingHost::query()->updateOrCreate(
+            ['provider' => ZoomMeetingProvider::KEY, 'host_reference' => 'host-user-1'],
+            ['label' => 'Test host', 'capacity' => 1, 'is_active' => true],
+        );
 
         return $settings;
     }
@@ -311,7 +320,7 @@ class ZoomMeetingProviderTest extends TestCase
             ->withArgs(function (string $hostUser, array $payload) use ($booking): bool {
                 $this->assertSame('host-user-1', $hostUser);
                 $this->assertSame(2, $payload['type']); // scheduled, never instant
-                $this->assertFalse($payload['settings']['join_before_host']);
+                $this->assertTrue($payload['settings']['join_before_host'], 'hostless since Phase 4 — see ZoomHostlessMeetingPayloadTest');
                 $this->assertSame('none', $payload['settings']['auto_recording']);
                 // Agenda/topic carry no payment details.
                 $this->assertStringNotContainsString((string) $booking->price, $payload['agenda']);

@@ -8,6 +8,7 @@ use App\Booking\Contracts\ZoomMeetingClient;
 use App\Booking\Exceptions\GatewayRequestException;
 use App\Booking\Gateways\ZoomApiClient;
 use App\Settings\MeetingSettings;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Crypt;
@@ -434,5 +435,138 @@ class ZoomApiClientTest extends TestCase
         $this->assertSame(123, (int) $options['read_timeout']);
         $this->assertFalse($options['allow_redirects'], 'redirects must be followed by hand, never by the client');
         $this->assertTrue($options['stream'], 'the body must be streamed, never buffered');
+    }
+
+    // ── Reconciliation search (ambiguous create) ──────────────────────
+
+    /** @param  list<array<string, mixed>>  $pages  one array per response page */
+    private function fakeMeetingList(array $pages, array $fullMeetings = []): void
+    {
+        $call = 0;
+        Http::fake(function (Request $request) use (&$call, $pages, $fullMeetings) {
+            if (str_contains($request->url(), 'oauth/token')) {
+                return Http::response(['access_token' => self::TOKEN, 'expires_in' => 3600]);
+            }
+
+            if (preg_match('#/v2/meetings/(\d+)$#', $request->url(), $m) === 1) {
+                return Http::response($fullMeetings[$m[1]] ?? ['code' => 3001, 'message' => 'Meeting does not exist'], isset($fullMeetings[$m[1]]) ? 200 : 404);
+            }
+
+            $page = $pages[$call] ?? ['meetings' => []];
+            $call++;
+
+            return Http::response($page);
+        });
+    }
+
+    public function test_the_search_follows_pagination_and_returns_a_match_from_a_later_page(): void
+    {
+        $this->fakeMeetingList([
+            ['meetings' => [['id' => 111, 'agenda' => 'Booking reference: BK-OTHER', 'start_time' => '2026-09-14T10:00:00Z']], 'next_page_token' => 'p2'],
+            ['meetings' => [['id' => 222, 'agenda' => "Booking reference: BK-TARGET\nDuration: 30 minutes", 'start_time' => '2026-09-14T10:00:00Z', 'join_url' => 'https://zoom.us/j/222']], 'next_page_token' => ''],
+        ]);
+
+        $result = $this->client()->findScheduledMeetings('host-user-1', 'BK-TARGET');
+
+        $this->assertTrue($result['exhaustive']);
+        $this->assertCount(1, $result['matches']);
+        $this->assertSame('222', $result['matches'][0]['id']);
+        Http::assertSent(fn (Request $r): bool => str_contains($r->url(), 'next_page_token=p2'));
+    }
+
+    public function test_a_search_that_hits_the_page_cap_is_not_exhaustive(): void
+    {
+        $this->fakeMeetingList(array_fill(0, 5, ['meetings' => [], 'next_page_token' => 'more']));
+
+        $result = $this->client()->findScheduledMeetings('host-user-1', 'BK-TARGET');
+
+        $this->assertFalse($result['exhaustive'], 'an empty result from a truncated walk proves nothing');
+        $this->assertSame([], $result['matches']);
+        Http::assertSentCount(1 + 3); // token + FIND_MEETING_MAX_PAGES pages
+    }
+
+    public function test_every_match_is_returned_never_only_the_first(): void
+    {
+        $this->fakeMeetingList([
+            ['meetings' => [
+                ['id' => 1, 'agenda' => 'Booking reference: BK-TARGET', 'start_time' => '2026-09-14T10:00:00Z'],
+                ['id' => 2, 'agenda' => 'Booking reference: BK-TARGET', 'start_time' => '2026-09-14T10:00:00Z'],
+                ['id' => 3, 'agenda' => 'Booking reference: BK-TARGETX', 'start_time' => '2026-09-14T10:00:00Z'],
+            ]],
+        ]);
+
+        $result = $this->client()->findScheduledMeetings('host-user-1', 'BK-TARGET');
+
+        $this->assertSame(['1', '2', '3'], array_column($result['matches'], 'id'));
+        $this->assertTrue($result['exhaustive']);
+    }
+
+    /** List entries without an agenda: only entries starting exactly when the lesson does are read in full, and matched on THEIR agenda. */
+    public function test_entries_without_an_agenda_are_confirmed_by_reading_the_meeting_when_the_start_time_matches(): void
+    {
+        $startsAt = CarbonImmutable::parse('2026-09-14 10:00:00', 'UTC');
+        $this->fakeMeetingList(
+            [['meetings' => [
+                ['id' => 10, 'start_time' => '2026-09-14T10:00:00Z', 'topic' => 'Lesson'],   // same start, IS ours
+                ['id' => 11, 'start_time' => '2026-09-14T10:00:00Z', 'topic' => 'Lesson'],   // same start, someone else's
+                ['id' => 12, 'start_time' => '2026-09-14T12:00:00Z', 'topic' => 'Lesson'],   // different start: never fetched
+            ]]],
+            [
+                '10' => ['id' => 10, 'agenda' => 'Booking reference: BK-TARGET', 'join_url' => 'https://zoom.us/j/10', 'start_url' => 'https://zoom.us/s/10?zak=x'],
+                '11' => ['id' => 11, 'agenda' => 'Booking reference: BK-ELSE'],
+            ],
+        );
+
+        $result = $this->client()->findScheduledMeetings('host-user-1', 'BK-TARGET', $startsAt);
+
+        $this->assertSame(['10'], array_column($result['matches'], 'id'));
+        Http::assertSent(fn (Request $r): bool => str_ends_with($r->url(), '/v2/meetings/10'));
+        Http::assertSent(fn (Request $r): bool => str_ends_with($r->url(), '/v2/meetings/11'));
+        Http::assertNotSent(fn (Request $r): bool => str_ends_with($r->url(), '/v2/meetings/12'));
+    }
+
+    public function test_the_search_only_lists_upcoming_meetings_of_the_given_host(): void
+    {
+        $this->fakeMeetingList([['meetings' => []]]);
+
+        $this->client()->findScheduledMeetings('host-user-1', 'BK-TARGET');
+
+        Http::assertSent(fn (Request $r): bool => str_contains($r->url(), '/v2/users/host-user-1/meetings') && str_contains($r->url(), 'type=upcoming'));
+    }
+
+    // ── Source disposal (Phase 5) ─────────────────────────────────────
+
+    public function test_trashing_meeting_recordings_uses_the_trash_action_never_a_permanent_delete(): void
+    {
+        $this->fakeDownload([
+            'api.zoom.us/v2/meetings/*/recordings*' => Http::response('', 204),
+        ]);
+
+        $this->assertTrue($this->client()->trashMeetingRecordings('987654321'));
+
+        Http::assertSent(fn (Request $r): bool => $r->method() === 'DELETE'
+            && str_contains($r->url(), '/v2/meetings/987654321/recordings')
+            && str_contains($r->url(), 'action=trash'));
+    }
+
+    public function test_trashing_recordings_of_a_meeting_with_none_left_is_a_success(): void
+    {
+        $this->fakeDownload([
+            'api.zoom.us/v2/meetings/*/recordings*' => Http::response(['code' => 3301, 'message' => 'There is no recording for this meeting.'], 404),
+        ]);
+
+        $this->assertTrue($this->client()->trashMeetingRecordings('987654321'));
+    }
+
+    public function test_a_refused_trash_surfaces_as_a_safe_gateway_error(): void
+    {
+        $this->fakeDownload([
+            'api.zoom.us/v2/meetings/*/recordings*' => Http::response(['code' => 124, 'message' => 'Invalid access token, does not contain scopes'], 401),
+        ]);
+
+        $this->expectException(GatewayRequestException::class);
+        $this->expectExceptionMessage('trash meeting recordings (HTTP 401)');
+
+        $this->client()->trashMeetingRecordings('987654321');
     }
 }

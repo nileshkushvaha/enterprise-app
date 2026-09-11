@@ -37,6 +37,7 @@ class BookingMeeting extends Model
     protected $fillable = [
         'booking_id',
         'provider',
+        'platform_meeting_host_id',
         'provider_meeting_id',
         'provider_event_id',
         'join_url',
@@ -71,6 +72,12 @@ class BookingMeeting extends Model
             'attendance_synced_at' => 'immutable_datetime',
             'attendance_sync_attempts' => 'integer',
         ];
+    }
+
+    /** The platform host the remote meeting was created under (Zoom); null for other providers. */
+    public function platformHost(): BelongsTo
+    {
+        return $this->belongsTo(PlatformMeetingHost::class, 'platform_meeting_host_id');
     }
 
     public function booking(): BelongsTo
