@@ -59,7 +59,7 @@ class PaymentGatewayPage extends PaymentSettingsPage
                 ->footer([
                     ActionsComponent::make([
                         Action::make('save')
-                            ->label('Save Gateway Settings')
+                            ->label('Save changes')
                             ->submit('save')
                             ->keyBindings(['mod+s']),
                         Action::make('validate_credentials')

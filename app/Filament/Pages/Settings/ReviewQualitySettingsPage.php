@@ -81,7 +81,7 @@ class ReviewQualitySettingsPage extends Page
 
     public function getSubheading(): string|Htmlable|null
     {
-        return 'The canonical reviews.reviews_enabled switch, rating rules, moderation model, quality-alert thresholds, dashboard classification, and notification channel routing.';
+        return 'Whether students can review lessons, the rating scale, moderation, quality alerts and how notifications are sent.';
     }
 
     public static function canAccess(): bool
@@ -159,7 +159,7 @@ class ReviewQualitySettingsPage extends Page
                 ->footer([
                     ActionsComponent::make([
                         Action::make('save')
-                            ->label('Save Reviews & Quality Settings')
+                            ->label('Save changes')
                             ->submit('save')
                             ->keyBindings(['mod+s']),
                     ])->key('form-actions'),
@@ -175,122 +175,137 @@ class ReviewQualitySettingsPage extends Page
     public function form(Schema $schema): Schema
     {
         return $schema->components([
-            Section::make('General')
-                ->description('The canonical platform-wide switch and demo-lesson policy.')
+            Section::make('Reviews')
+                ->description('Who may leave a review and for how long after a lesson.')
                 ->columnSpanFull()
                 ->schema([
                     Grid::make(2)->schema([
                         Toggle::make('reviews_enabled')
-                            ->label('Reviews Enabled (canonical switch)')
-                            ->helperText('Off blocks new eligibility, submissions, edits, and reports everywhere — historical reviews stay fully visible.'),
+                            ->label('Enable reviews')
+                            ->helperText('Off stops new reviews, edits and reports everywhere. Existing reviews stay visible.'),
                         Toggle::make('paid_lesson_reviews_enabled')
-                            ->label('Paid Lesson Reviews Enabled'),
+                            ->label('Allow reviews of paid lessons'),
                         Select::make('demo_review_policy')
-                            ->label('Demo Review Policy')
+                            ->label('Demo lesson reviews')
                             ->options([
-                                'disabled' => 'Disabled',
-                                'private_only' => 'Private Only',
-                                'public' => 'Public',
+                                'disabled' => 'Not allowed',
+                                'private_only' => 'Private feedback to the instructor only',
+                                'public' => 'Public, like paid lessons',
                             ])
                             ->required()
                             ->native(false),
-                        $this->integerInput('review_window_days', 'Review Window (days)', 1, 3650),
+                        $this->integerInput('review_window_days', 'Review window (days)', 1, 3650)
+                            ->helperText('Days after a completed lesson during which a review can be left.'),
                     ]),
                     Textarea::make('change_reason')
                         ->label('Reason for change')
                         ->rows(2)
                         ->maxLength(1000)
-                        ->helperText('Required when changing the Reviews Enabled switch or the Moderation Model below — recorded in the audit trail.')
+                        ->helperText('Required when turning reviews on or off or changing the moderation model. Kept in the audit trail.')
                         ->columnSpanFull(),
                 ]),
 
-            Section::make('Rating')
-                ->description('Rating scale and written-feedback rules.')
+            Section::make('Rating & written feedback')
                 ->columnSpanFull()
                 ->schema([
                     Grid::make(3)->schema([
-                        $this->integerInput('rating_min', 'Rating Min', 0, 100),
-                        $this->integerInput('rating_max', 'Rating Max', 0, 100),
-                        $this->integerInput('review_max_tags', 'Max Tags per Review', 0, 50),
-                        $this->integerInput('review_min_length', 'Min Written Length', 0, 10000),
-                        $this->integerInput('review_max_length', 'Max Written Length', 0, 10000),
+                        $this->integerInput('rating_min', 'Lowest rating', 0, 100),
+                        $this->integerInput('rating_max', 'Highest rating', 0, 100)
+                            ->helperText('Changing the scale never rewrites past reviews.'),
+                        $this->integerInput('review_max_tags', 'Tags per review (max)', 0, 50),
+                        Toggle::make('written_review_required')
+                            ->label('Require written feedback'),
+                        $this->integerInput('review_min_length', 'Written feedback minimum (characters)', 0, 10000),
+                        $this->integerInput('review_max_length', 'Written feedback maximum (characters)', 0, 10000),
                     ]),
-                    Grid::make(2)->schema([
-                        Toggle::make('written_review_required')->label('Written Review Required'),
-                        Toggle::make('rating_dimensions_enabled')->label('Dimension Ratings Enabled'),
-                    ]),
+                    Toggle::make('rating_dimensions_enabled')
+                        ->label('Allow ratings per dimension')
+                        ->helperText('The optional per-aspect ratings alongside the overall score.'),
                 ]),
 
-            Section::make('Moderation & Privacy')
-                ->description('How newly submitted reviews are moderated, edited, reported, and how a reviewing student is identified publicly.')
+            Section::make('Moderation & privacy')
+                ->description('What happens to a new review, what students can do afterwards, and how they are named publicly.')
                 ->columnSpanFull()
                 ->schema([
                     Grid::make(2)->schema([
                         Select::make('moderation_model')
-                            ->label('Moderation Model')
+                            ->label('Moderation')
                             ->options([
-                                'pre_moderation' => 'Pre-moderation',
-                                'post_moderation' => 'Post-moderation',
-                                'risk_based' => 'Risk-based',
+                                'pre_moderation' => 'Every review waits for an administrator',
+                                'post_moderation' => 'Clean reviews publish, administrators review afterwards',
+                                'risk_based' => 'Clean reviews publish, flagged ones wait',
                             ])
                             ->required()
-                            ->native(false),
+                            ->native(false)
+                            ->helperText('Reviews with unsafe content always wait for an administrator.'),
+                        Toggle::make('auto_publish_clean_reviews')
+                            ->label('Auto-publish clean reviews')
+                            ->helperText('Off means nothing publishes automatically, whatever the moderation model.'),
                         Select::make('public_review_identity_mode')
-                            ->label('Public Reviewer Identity')
+                            ->label('Reviewer shown publicly as')
                             ->options([
-                                'anonymous' => 'Anonymous',
-                                'first_name_initial' => 'First Name + Initial',
-                                'first_name_only' => 'First Name Only',
+                                'anonymous' => 'Verified student (anonymous)',
+                                'first_name_initial' => 'First name initial',
+                                'first_name_only' => 'First name',
                             ])
                             ->required()
                             ->native(false),
-                        Toggle::make('auto_publish_clean_reviews')->label('Auto-publish Clean Reviews'),
-                        Toggle::make('review_reporting_enabled')->label('Review Reporting Enabled'),
-                        Toggle::make('review_editing_enabled')->label('Review Editing Enabled'),
-                        $this->integerInput('review_edit_window_hours', 'Edit Window (hours)', 1, 8760),
+                        Toggle::make('review_reporting_enabled')
+                            ->label('Allow reporting a review'),
+                        Toggle::make('review_editing_enabled')
+                            ->label('Allow editing a review'),
+                        $this->integerInput('review_edit_window_hours', 'Edit window (hours)', 1, 8760)
+                            ->helperText('Applies while editing is allowed.'),
                     ]),
                 ]),
 
-            Section::make('Quality Alerts')
-                ->description('Detector thresholds — master switch off means no detector runs at all, regardless of the counts below.')
+            Section::make('Quality alerts')
+                ->description('Raise an operational alert when a pattern appears. Off means no detector runs, whatever the thresholds.')
                 ->columnSpanFull()
                 ->schema([
-                    Toggle::make('quality_alerts_enabled')->label('Quality Alerts Enabled'),
-                    Grid::make(3)->schema([
-                        $this->integerInput('low_rating_threshold', 'Low Rating Threshold', 0, 100),
-                        $this->integerInput('repeated_low_rating_count', 'Repeated Low Rating Count', 1, 1000),
-                        $this->integerInput('repeated_low_rating_window_days', 'Repeated Low Rating Window (days)', 1, 3650),
-                        $this->integerInput('repeated_no_show_count', 'Repeated No-show Count', 1, 1000),
-                        $this->integerInput('repeated_no_show_window_days', 'Repeated No-show Window (days)', 1, 3650),
-                        $this->integerInput('repeated_cancellation_count', 'Repeated Cancellation Count', 1, 1000),
-                        $this->integerInput('repeated_cancellation_window_days', 'Repeated Cancellation Window (days)', 1, 3650),
+                    Grid::make(2)->schema([
+                        Toggle::make('quality_alerts_enabled')
+                            ->label('Enable quality alerts'),
+                        Toggle::make('single_low_rating_alert_enabled')
+                            ->label('Alert on every single low rating'),
                     ]),
-                    Toggle::make('single_low_rating_alert_enabled')->label('Single Low Rating Alert Enabled'),
-                ]),
-
-            Section::make('Dashboard')
-                ->description('Admin dashboard classification thresholds only — distinct from the alert threshold above; these never feed detection.')
-                ->columnSpanFull()
-                ->schema([
                     Grid::make(3)->schema([
-                        $this->numericInput('quality_dashboard_low_rating_threshold', 'Low-rated Threshold', 0),
-                        $this->numericInput('quality_dashboard_high_rating_threshold', 'Highly-rated Threshold', 0),
-                        $this->integerInput('quality_dashboard_min_review_count', 'Minimum Review Count', 1, 100000),
+                        $this->integerInput('low_rating_threshold', 'Low rating is at or below', 0, 100)
+                            ->helperText('On the rating scale above.'),
+                        $this->integerInput('repeated_low_rating_count', 'Repeated low ratings: count', 1, 1000),
+                        $this->integerInput('repeated_low_rating_window_days', 'Repeated low ratings: within (days)', 1, 3650),
+                        $this->integerInput('repeated_no_show_count', 'Repeated no-shows: count', 1, 1000),
+                        $this->integerInput('repeated_no_show_window_days', 'Repeated no-shows: within (days)', 1, 3650),
+                        $this->integerInput('repeated_cancellation_count', 'Repeated cancellations: count', 1, 1000),
+                        $this->integerInput('repeated_cancellation_window_days', 'Repeated cancellations: within (days)', 1, 3650),
                     ]),
                 ]),
 
             Section::make('Notification channels')
-                ->description('These channel settings apply to every review and quality-alert notification. In-app notifications are always sent in addition to any channels enabled below.')
+                ->description('For review and quality-alert notifications. In-app notifications are always sent.')
                 ->columnSpanFull()
                 ->schema([
                     Grid::make(3)->schema([
                         Toggle::make('review_channel_email_enabled')->label('Email'),
                         Toggle::make('review_channel_whatsapp_enabled')
                             ->label('WhatsApp')
-                            ->helperText('No provider is configured yet — messages are logged but not sent until one is set up.'),
+                            ->helperText('No WhatsApp provider is set up: messages are logged, not sent.'),
                         Toggle::make('review_channel_sms_enabled')
                             ->label('SMS')
-                            ->helperText('No provider is configured yet — messages are logged but not sent until one is set up.'),
+                            ->helperText('No SMS provider is set up: messages are logged, not sent.'),
+                    ]),
+                ]),
+
+            Section::make('Dashboard classification')
+                ->description('How the admin quality dashboard labels instructors. Display only; never triggers an alert.')
+                ->columnSpanFull()
+                ->collapsible()
+                ->collapsed()
+                ->schema([
+                    Grid::make(3)->schema([
+                        $this->numericInput('quality_dashboard_low_rating_threshold', 'Low-rated at or below', 0),
+                        $this->numericInput('quality_dashboard_high_rating_threshold', 'Highly rated at or above', 0),
+                        $this->integerInput('quality_dashboard_min_review_count', 'Reviews needed before classifying', 1, 100000),
                     ]),
                 ]),
         ]);

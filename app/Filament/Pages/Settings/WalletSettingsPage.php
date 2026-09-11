@@ -103,7 +103,7 @@ class WalletSettingsPage extends Page
                     ...$sections,
                     ActionsComponent::make([
                         Action::make('save')
-                            ->label('Save Wallet Settings')
+                            ->label('Save changes')
                             ->submit('save')
                             ->keyBindings(['mod+s']),
                     ])->columnSpanFull(),

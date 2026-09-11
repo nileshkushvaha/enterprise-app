@@ -121,7 +121,7 @@ class ReviewQualitySettingsPageTest extends TestCase
         $this->actingAs($this->admin())
             ->get('/admin/settings/reviews-quality')
             ->assertOk()
-            ->assertSee('Reviews & Quality Settings');
+            ->assertSee('Reviews & Quality');
     }
 
     public function test_page_is_forbidden_for_a_user_without_the_view_permission(): void

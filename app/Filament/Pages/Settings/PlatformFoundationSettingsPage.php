@@ -59,7 +59,7 @@ class PlatformFoundationSettingsPage extends Page
 
     public function getSubheading(): string|Htmlable|null
     {
-        return 'Prepare booking, instructor, localization, and feature flag defaults. Wallet limits live under Wallet. Referral reward rules live in Referral Campaigns; meeting providers live under Meetings.';
+        return 'Feature switches, booking windows, lesson completion, instructor approval and the default country.';
     }
 
     public function mount(): void
@@ -107,7 +107,7 @@ class PlatformFoundationSettingsPage extends Page
                 ->footer([
                     ActionsComponent::make([
                         Action::make('save')
-                            ->label('Save Platform Settings')
+                            ->label('Save changes')
                             ->submit('save')
                             ->keyBindings(['mod+s']),
                     ])->key('form-actions'),
@@ -123,67 +123,92 @@ class PlatformFoundationSettingsPage extends Page
     public function form(Schema $schema): Schema
     {
         return $schema->components([
-            Grid::make(2)->schema([
-                Section::make('Booking')
-                    ->description('Foundation booking windows and lifecycle defaults.')
-                    ->schema([
-                        Grid::make(2)->schema([
-                            $this->integerInput('demo_duration_minutes', 'Demo Duration', 1, 480),
-                            $this->integerInput('reservation_expiry_minutes', 'Reservation Expiry', 1, 240),
-                            $this->integerInput('minimum_booking_notice_minutes', 'Minimum Notice (minutes)', 0, 43200)
-                                ->helperText('Paid lessons: earliest a student may book before the start time.'),
-                            $this->integerInput('demo_minimum_booking_notice_minutes', 'Demo Minimum Notice (minutes)', 0, 43200)
-                                ->helperText('Free demos only. Keep this short so a student can try an instructor who is free right now.'),
-                            $this->integerInput('maximum_advance_booking_days', 'Advance Window (days)', 1, 365),
-                            $this->integerInput('cancellation_window_hours', 'Cancellation Window', 0, 720),
-                            $this->integerInput('reschedule_limit', 'Reschedule Limit', 0, 20),
-                            $this->integerInput('no_show_grace_minutes', 'No-show Grace (minutes)', 0, 120)
-                                ->helperText('How long after the start time a no-show may be recorded.'),
-                            $this->integerInput('auto_completion_delay_minutes', 'Auto-completion Delay (minutes)', 0, 10080)
-                                ->helperText('Minutes after the scheduled end before an ended lesson is marked completed (processed every 5 minutes, so 15 means 15–20 minutes). Until then the student sees "Lesson ended · Completion pending".'),
-                        ]),
+            Section::make('Features')
+                ->description('The on/off switch for each module. Module settings elsewhere have no effect while its switch is off.')
+                ->columnSpanFull()
+                ->schema([
+                    Grid::make(3)->schema([
+                        Toggle::make('demo_lessons_enabled')
+                            ->label('Demo lessons')
+                            ->helperText('Free demos use the student\'s country-aware academic flow (Class, Grade or Year).'),
+                        Toggle::make('wallet_enabled')
+                            ->label('Wallet')
+                            ->helperText('Recharge limits are under Wallet.'),
+                        Toggle::make('referral_enabled')
+                            ->label('Referral')
+                            ->helperText('Reward rules are under Referral Campaigns.'),
+                        Toggle::make('waitlist_enabled')
+                            ->label('Waitlist'),
+                        Toggle::make('homework_enabled')
+                            ->label('Homework'),
+                        Toggle::make('recording_enabled')
+                            ->label('Recording')
+                            ->helperText('Whether lesson recording exists at all. Whether new lessons are recorded, and how, is under Meetings.'),
                     ]),
+                ]),
 
-                Section::make('Instructor')
-                    ->description('Instructor approval and public profile controls.')
-                    ->schema([
-                        Grid::make(2)->schema([
-                            Toggle::make('approval_required')->label('Approval Required'),
-                            Toggle::make('profile_publish_requires_approval')->label('Publish Requires Approval'),
-                            $this->integerInput('featured_instructor_limit', 'Featured Limit', 0, 100),
-                            Toggle::make('availability_required_for_public_profile')->label('Require Availability'),
-                        ]),
+            Section::make('Booking')
+                ->description('How far ahead and how late students can book, and what they can change afterwards.')
+                ->columnSpanFull()
+                ->schema([
+                    Grid::make(3)->schema([
+                        $this->integerInput('minimum_booking_notice_minutes', 'Earliest booking notice (minutes)', 0, 43200)
+                            ->helperText('Paid lessons must start at least this long after booking.'),
+                        $this->integerInput('demo_minimum_booking_notice_minutes', 'Demo booking notice (minutes)', 0, 43200)
+                            ->helperText('Free demos only. Keep it short so a student can try an instructor who is free now.'),
+                        $this->integerInput('maximum_advance_booking_days', 'Booking horizon (days)', 1, 365)
+                            ->helperText('Furthest ahead a lesson or a recurring series may be scheduled.'),
+                        $this->integerInput('demo_duration_minutes', 'Demo duration (minutes)', 1, 480),
+                        $this->integerInput('reservation_expiry_minutes', 'Slot hold during checkout (minutes)', 1, 240)
+                            ->helperText('A slot stays reserved this long while the student pays; then it is released.'),
+                        $this->integerInput('cancellation_window_hours', 'Free cancellation until (hours before start)', 0, 720)
+                            ->helperText('Cancelling later than this is subject to the refund policy.'),
+                        $this->integerInput('reschedule_limit', 'Reschedules per booking', 0, 20)
+                            ->helperText('0 disables rescheduling by students.'),
                     ]),
+                ]),
 
-                Section::make('Localization')
-                    ->description('Country and locale-switching defaults. Timezone, language, and currency live under General Settings.')
-                    ->schema([
-                        TextInput::make('default_country')
-                            ->label('Default Country')
-                            ->helperText('ISO 3166-1 alpha-2 code, e.g. IN, US.')
-                            ->minLength(2)
-                            ->maxLength(2)
-                            ->required(),
+            Section::make('Lesson completion')
+                ->description('What happens after the scheduled end. Joining windows are under Meetings.')
+                ->columnSpanFull()
+                ->schema([
+                    Grid::make(2)->schema([
+                        $this->integerInput('no_show_grace_minutes', 'No-show can be recorded after (minutes)', 0, 120)
+                            ->helperText('Minutes after the scheduled start before a participant may be marked absent.'),
+                        $this->integerInput('auto_completion_delay_minutes', 'Mark completed after (minutes)', 0, 10080)
+                            ->helperText('Minutes after the scheduled end before an ended lesson is completed. Runs every 5 minutes, so 15 means 15–20 minutes. Until then students see "Lesson ended · Completion pending".'),
                     ]),
+                ]),
 
-                Section::make('Feature Flags')
-                    ->description('Global module switches — the single on/off source of truth for each feature. Domain sections above only hold configuration, not the switch itself. Reviews has its own canonical switch under Reviews & Quality Settings, not here.')
-                    ->columnSpanFull()
-                    ->schema([
-                        Grid::make(4)->schema([
-                            Toggle::make('demo_lessons_enabled')
-                                ->label('Demo Lessons')
-                                ->helperText('Free Demo always uses the student’s country-aware academic flow: Class in India, Grade in supported grade-based systems, and Year in year-based systems.'),
-                            Toggle::make('wallet_enabled')->label('Wallet'),
-                            Toggle::make('referral_enabled')->label('Referral'),
-                            Toggle::make('waitlist_enabled')->label('Waitlist'),
-                            Toggle::make('homework_enabled')->label('Homework'),
-                            Toggle::make('recording_enabled')
-                                ->label('Recording')
-                                ->helperText('Platform-wide outer switch. The meeting-level recording default (Meeting Settings) has no effect while this is off.'),
-                        ]),
+            Section::make('Instructors')
+                ->columnSpanFull()
+                ->schema([
+                    Grid::make(2)->schema([
+                        Toggle::make('approval_required')
+                            ->label('Approve new instructors before they can teach'),
+                        Toggle::make('profile_publish_requires_approval')
+                            ->label('Approve profile changes before they are published'),
+                        Toggle::make('availability_required_for_public_profile')
+                            ->label('Show only instructors with availability publicly'),
+                        $this->integerInput('featured_instructor_limit', 'Featured instructors shown', 0, 100)
+                            ->helperText('How many instructors the featured list holds. 0 hides it.'),
                     ]),
-            ]),
+                ]),
+
+            Section::make('Localization')
+                ->description('Timezone and currency defaults are under General.')
+                ->columnSpanFull()
+                ->collapsible()
+                ->collapsed()
+                ->schema([
+                    TextInput::make('default_country')
+                        ->label('Default country')
+                        ->helperText('Two-letter country code, for example IN or US. Used before a visitor\'s country is known.')
+                        ->minLength(2)
+                        ->maxLength(2)
+                        ->required()
+                        ->columnSpan(1),
+                ]),
         ]);
     }
 

@@ -60,7 +60,7 @@ class GeneralSettingsPage extends Page
 
     public function getSubheading(): string|Htmlable|null
     {
-        return 'Configure your application\'s global information, branding, and localization.';
+        return 'Name, contact details, branding, homepage and footer for the public site.';
     }
 
     public function mount(): void
@@ -100,16 +100,17 @@ class GeneralSettingsPage extends Page
                 ->footer([
                     ActionsComponent::make([
                         Action::make('save')
-                            ->label('Save Settings')
+                            ->label('Save changes')
                             ->submit('save')
                             ->keyBindings(['mod+s']),
 
                         Action::make('reset')
-                            ->label('Reset to Defaults')
+                            ->label('Reset defaults')
                             ->color('gray')
                             ->requiresConfirmation()
-                            ->modalHeading('Reset to defaults?')
-                            ->modalDescription('This will restore all general settings to their default values.')
+                            ->modalHeading('Reset the defaults?')
+                            ->modalDescription('Sets the default timezone to UTC and the currency to INR, turns the header top bar off, clears the social links, and shows the built-in homepage. Name, contact details, branding and footer text are kept. This is saved immediately.')
+                            ->modalSubmitActionLabel('Reset')
                             ->action('resetDefaults'),
                     ])->key('form-actions'),
                 ]),
@@ -124,194 +125,125 @@ class GeneralSettingsPage extends Page
     public function form(Schema $schema): Schema
     {
         return $schema->components([
-            Grid::make(2)->schema([
-
-                // ── Application Information ─────────────────────── full width
-                Section::make('Application Information')
-                    ->description('Basic information about your application.')
-                    ->columnSpanFull()
-                    ->schema([
-                        Grid::make(3)->schema([
-                            TextInput::make('app_name')
-                                ->label('Application Name')
-                                ->required()
-                                ->maxLength(150)
-                                ->placeholder('SIRI Education'),
-
-                            TextInput::make('app_short_name')
-                                ->label('Short Name')
-                                ->maxLength(50)
-                                ->placeholder('SIRI'),
-
-                            TextInput::make('organization_name')
-                                ->label('Organization Name')
-                                ->maxLength(150),
-                        ]),
-
-                        Grid::make(3)->schema([
-                            TextInput::make('support_email')
-                                ->label('Support Email')
-                                ->email()
-                                ->required()
-                                ->maxLength(150),
-
-                            TextInput::make('support_phone')
-                                ->label('Support Phone')
-                                ->tel()
-                                ->maxLength(30),
-
-                            TextInput::make('website_url')
-                                ->label('Website URL')
-                                ->url()
-                                ->maxLength(255)
-                                ->placeholder('https://example.com'),
-                        ]),
-
-                        Textarea::make('address')
-                            ->label('Address')
-                            ->rows(2)
-                            ->maxLength(500),
+            Section::make('Organization & contact')
+                ->description('Shown in the header, footer, emails and invoices.')
+                ->columnSpanFull()
+                ->schema([
+                    Grid::make(3)->schema([
+                        TextInput::make('app_name')
+                            ->label('Application name')
+                            ->required()
+                            ->maxLength(150)
+                            ->placeholder('SIRI Education'),
+                        TextInput::make('app_short_name')
+                            ->label('Short name')
+                            ->maxLength(50)
+                            ->placeholder('SIRI')
+                            ->helperText('Used where space is tight, such as browser tabs.'),
+                        TextInput::make('organization_name')
+                            ->label('Organization name')
+                            ->maxLength(150)
+                            ->helperText('The legal or trading name, if it differs from the application name.'),
                     ]),
-
-                // ── Branding ──────────────────────────────────────── left
-                Section::make('Branding')
-                    ->description('Upload your logo, dark logo, and favicon.')
-                    ->columnSpanFull()
-                    ->schema([
-                        Grid::make(3)->schema([
-                            FileUpload::make('logo')
-                                ->label('Logo (Light)')
-                                ->image()
-                                ->disk('public')
-                                ->acceptedFileTypes(['image/png', 'image/jpeg', 'image/svg+xml'])
-                                ->maxSize(2048)
-                                ->directory('settings/branding')
-                                ->imagePreviewHeight('80')
-                                ->helperText('PNG, JPG or SVG. Max 2MB.'),
-
-                            FileUpload::make('favicon')
-                                ->label('Favicon')
-                                ->image()
-                                ->disk('public')
-                                ->acceptedFileTypes(['image/x-icon', 'image/png'])
-                                ->maxSize(512)
-                                ->directory('settings/branding')
-                                ->imagePreviewHeight('80')
-                                ->helperText('ICO or PNG. Max 512KB.'),
-                        ]),
-                    ]),
-
-                Section::make('Header Top Bar')
-                    ->description('Show contact details and optional social links above the public navigation.')
-                    ->columnSpanFull()
-                    ->schema([
-                        Toggle::make('header_top_bar_enabled')
-                            ->label('Show header top bar')
-                            ->helperText('The support phone and email come from Application Information above.')
-                            ->live(),
-
-                        Grid::make(4)->schema([
-                            TextInput::make('facebook_url')
-                                ->label('Facebook URL')
-                                ->url()
-                                ->maxLength(255)
-                                ->placeholder('https://facebook.com/...'),
-
-                            TextInput::make('instagram_url')
-                                ->label('Instagram URL')
-                                ->url()
-                                ->maxLength(255)
-                                ->placeholder('https://instagram.com/...'),
-
-                            TextInput::make('x_url')
-                                ->label('X URL')
-                                ->url()
-                                ->maxLength(255)
-                                ->placeholder('https://x.com/...'),
-
-                            TextInput::make('youtube_url')
-                                ->label('YouTube URL')
-                                ->url()
-                                ->maxLength(255)
-                                ->placeholder('https://youtube.com/@...'),
-                        ])->visible(fn ($get) => (bool) $get('header_top_bar_enabled')),
-                    ]),
-
-                // ── Localization ──────────────────────────────────── right
-                // Timezone and currency are both "what defaults does this
-                // platform assume" — two one-field sections side by side read
-                // as more structure than there is.
-                Section::make('Localization & Application')
-                    ->description('Platform-wide defaults for timezone and currency. Country and locale-switching defaults live under Platform Foundation Settings.')
-                    ->columnSpanFull()
-                    ->schema([
-                        Grid::make(2)->schema([
-                            Select::make('default_timezone')
-                                ->label('Default Timezone')
-                                ->options(
-                                    collect(IanaTimezone::identifiers())
-                                        ->mapWithKeys(fn (string $tz): array => [$tz => $tz])
-                                        ->all()
-                                )
-                                ->searchable()
-                                ->native(false)
-                                ->required(),
-
-                            Select::make('default_currency')
-                                ->label('Default Currency')
-                                ->options([
-                                    'INR' => 'INR — Indian Rupee (₹)',
-                                    'USD' => 'USD — US Dollar ($)',
-                                    'EUR' => 'EUR — Euro (€)',
-                                    'GBP' => 'GBP — British Pound (£)',
-                                    'AED' => 'AED — UAE Dirham (د.إ)',
-                                    'SGD' => 'SGD — Singapore Dollar (S$)',
-                                    'AUD' => 'AUD — Australian Dollar (A$)',
-                                    'CAD' => 'CAD — Canadian Dollar (C$)',
-                                ])
-                                ->native(false)
-                                ->searchable()
-                                ->required(),
-                        ]),
-                    ]),
-
-                // ── Footer ────────────────────────────────────── full width
-                Section::make('Footer')
-                    ->description('Text displayed in your application\'s footer.')
-                    ->columnSpanFull()
-                    ->schema([
-                        TextInput::make('footer_copyright')
-                            ->label('Copyright Text')
+                    Grid::make(3)->schema([
+                        TextInput::make('support_email')
+                            ->label('Support email')
+                            ->email()
+                            ->required()
+                            ->maxLength(150),
+                        TextInput::make('support_phone')
+                            ->label('Support phone')
+                            ->tel()
+                            ->maxLength(30),
+                        TextInput::make('website_url')
+                            ->label('Website')
+                            ->url()
                             ->maxLength(255)
-                            ->placeholder('© {year} {name}. All rights reserved.')
-                            ->helperText('Leave empty for the default line. Use {year} for the current year and {name} for the application name so both stay up to date.'),
-
-                        Textarea::make('footer_text')
-                            ->label('Footer Text')
-                            ->rows(3)
-                            ->maxLength(500)
-                            ->helperText('Optional additional footer text or legal disclaimer.'),
+                            ->placeholder('https://example.com'),
                     ]),
+                    Textarea::make('address')
+                        ->label('Postal address')
+                        ->rows(2)
+                        ->maxLength(500),
+                ]),
 
-                // ── Reading ───────────────────────────────────────── full width
-                Section::make('Reading')
-                    ->description('Control what visitors see on your homepage — your custom template or any published page.')
-                    ->columnSpanFull()
-                    ->schema([
-                        Select::make('homepage_display')
-                            ->label('Your homepage displays')
+            Section::make('Branding')
+                ->columnSpanFull()
+                ->schema([
+                    Grid::make(2)->schema([
+                        FileUpload::make('logo')
+                            ->label('Logo')
+                            ->image()
+                            ->disk('public')
+                            ->acceptedFileTypes(['image/png', 'image/jpeg', 'image/svg+xml'])
+                            ->maxSize(2048)
+                            ->directory('settings/branding')
+                            ->imagePreviewHeight('80')
+                            ->helperText('PNG, JPG or SVG, up to 2 MB.'),
+                        FileUpload::make('favicon')
+                            ->label('Favicon')
+                            ->image()
+                            ->disk('public')
+                            ->acceptedFileTypes(['image/x-icon', 'image/png'])
+                            ->maxSize(512)
+                            ->directory('settings/branding')
+                            ->imagePreviewHeight('80')
+                            ->helperText('ICO or PNG, up to 512 KB.'),
+                    ]),
+                ]),
+
+            Section::make('Defaults')
+                ->description('Used when nothing more specific applies. The default country and locale switching are under Platform.')
+                ->columnSpanFull()
+                ->schema([
+                    Grid::make(2)->schema([
+                        Select::make('default_timezone')
+                            ->label('Default timezone')
+                            ->options(
+                                collect(IanaTimezone::identifiers())
+                                    ->mapWithKeys(fn (string $tz): array => [$tz => $tz])
+                                    ->all()
+                            )
+                            ->searchable()
+                            ->native(false)
+                            ->required()
+                            ->helperText('For users who have not set their own timezone.'),
+                        Select::make('default_currency')
+                            ->label('Default currency')
                             ->options([
-                                'template' => '🏠  Default template (built-in homepage)',
-                                'static_page' => '📄  A static page',
+                                'INR' => 'INR — Indian Rupee (₹)',
+                                'USD' => 'USD — US Dollar ($)',
+                                'EUR' => 'EUR — Euro (€)',
+                                'GBP' => 'GBP — British Pound (£)',
+                                'AED' => 'AED — UAE Dirham (د.إ)',
+                                'SGD' => 'SGD — Singapore Dollar (S$)',
+                                'AUD' => 'AUD — Australian Dollar (A$)',
+                                'CAD' => 'CAD — Canadian Dollar (C$)',
+                            ])
+                            ->native(false)
+                            ->searchable()
+                            ->required()
+                            ->helperText('Prices are set per country; this applies where no country price exists.'),
+                    ]),
+                ]),
+
+            Section::make('Homepage')
+                ->description('What visitors see at the site root.')
+                ->columnSpanFull()
+                ->schema([
+                    Grid::make(2)->schema([
+                        Select::make('homepage_display')
+                            ->label('Homepage shows')
+                            ->options([
+                                'template' => 'The built-in homepage',
+                                'static_page' => 'A published page',
                             ])
                             ->native(false)
                             ->live()
-                            ->required()
-                            ->helperText('Choose "Default template" to use your custom-coded homepage, or "A static page" to pick any published CMS page.'),
-
+                            ->required(),
                         Select::make('homepage_id')
-                            ->label('Homepage')
-                            ->placeholder('— Select a page —')
+                            ->label('Page')
+                            ->placeholder('Select a published page')
                             ->options(fn () => PageModel::query()
                                 ->published()
                                 ->orderBy('title')
@@ -323,10 +255,57 @@ class GeneralSettingsPage extends Page
                             ->native(false)
                             ->visible(fn ($get) => $get('homepage_display') === 'static_page')
                             ->required(fn ($get) => $get('homepage_display') === 'static_page')
-                            ->helperText('This page will be shown at your site root ( / ).'),
+                            ->helperText('Only published pages can be chosen. Unpublishing it later falls back to the built-in homepage.'),
                     ]),
+                ]),
 
-            ]),
+            Section::make('Footer')
+                ->columnSpanFull()
+                ->schema([
+                    TextInput::make('footer_copyright')
+                        ->label('Copyright line')
+                        ->maxLength(255)
+                        ->placeholder('© {year} {name}. All rights reserved.')
+                        ->helperText('Leave empty for the default line. {year} and {name} are filled in automatically.'),
+                    Textarea::make('footer_text')
+                        ->label('Additional footer text')
+                        ->rows(3)
+                        ->maxLength(500)
+                        ->helperText('Optional, for example a legal disclaimer.'),
+                ]),
+
+            Section::make('Header top bar')
+                ->description('A strip above the public navigation with the support phone and email, and optional social links.')
+                ->columnSpanFull()
+                ->collapsible()
+                ->collapsed(fn ($get): bool => ! (bool) $get('header_top_bar_enabled'))
+                ->schema([
+                    Toggle::make('header_top_bar_enabled')
+                        ->label('Show the header top bar')
+                        ->live(),
+                    Grid::make(4)->schema([
+                        TextInput::make('facebook_url')
+                            ->label('Facebook')
+                            ->url()
+                            ->maxLength(255)
+                            ->placeholder('https://facebook.com/…'),
+                        TextInput::make('instagram_url')
+                            ->label('Instagram')
+                            ->url()
+                            ->maxLength(255)
+                            ->placeholder('https://instagram.com/…'),
+                        TextInput::make('x_url')
+                            ->label('X')
+                            ->url()
+                            ->maxLength(255)
+                            ->placeholder('https://x.com/…'),
+                        TextInput::make('youtube_url')
+                            ->label('YouTube')
+                            ->url()
+                            ->maxLength(255)
+                            ->placeholder('https://youtube.com/@…'),
+                    ])->visible(fn ($get) => (bool) $get('header_top_bar_enabled')),
+                ]),
         ]);
     }
 
