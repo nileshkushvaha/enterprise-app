@@ -707,6 +707,25 @@ stops working the moment the lesson ends, the booking is cancelled or
 the account is suspended. Google Meet bookings take the same path.
 `MeetingJoinGatewayTest` covers the matrix.
 
+**Dedicated participant host.** `MeetingSettings::participant_join_base_url`
+(Admin → Settings → Meetings → "Join Link Domain", e.g.
+`https://meet.sirieducation.com`) makes `joinLinkFor()` generate
+`<base>/join/{booking}` instead of the main-host route. `APP_URL` is not
+changed and links already sent on the main host keep working; both
+paths run the same controller and checks. The session cookie is
+host-only (`SESSION_DOMAIN` unset), so a participant signed in on the
+main site is a guest on the join host: `ConsumeMeetingJoinHandoff` sends
+that guest to the main host's `/dashboard/meetings/{booking}/handoff`,
+which — behind the normal dashboard middleware, so login with intended
+URL applies — issues a random, single-use, 60-second token bound to the
+user and booking (`MeetingJoinHandoffService`, cache-backed), audits
+`meeting_join_handoff_issued`, and redirects back to the join host with
+`?handoff=`. The join host redeems it, opens its own session for that
+user, drops the token from the URL and then applies every gateway rule
+as usual; the token grants nothing else. A guest on the main host goes
+to login, never into a loop. See `docs/deployment/meeting-join-domain.md`
+for the server side.
+
 **One window, two enforcement points.**
 `BookingMeetingService::joinAvailabilityFor()` decides what SIRI hands
 out; `closeExpiredMeeting()` decides what stays alive at the provider.

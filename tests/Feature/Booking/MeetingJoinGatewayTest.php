@@ -8,8 +8,10 @@ use App\Booking\Contracts\BookingMeetingServiceInterface;
 use App\Booking\Enums\BookingStatus;
 use App\Booking\Enums\MeetingStatus;
 use App\Booking\Events\MeetingCreated;
+use App\Booking\Services\MeetingJoinHandoffService;
 use App\Enums\InstructorStatus;
 use App\Enums\StudentStatus;
+use App\Filament\Pages\Settings\MeetingSettingsPage;
 use App\Http\Resources\Student\StudentBookingResource;
 use App\Listeners\Booking\SendMeetingNotifications;
 use App\Livewire\Frontend\Student\BookingDetail;
@@ -69,7 +71,8 @@ final class MeetingJoinGatewayTest extends TestCase
         $instructor->assignRole('instructor');
         $instructor->profile()->update(['instructor_status' => InstructorStatus::Active]);
 
-        $type = BookingType::factory()->create(['key' => 'free_demo', 'duration_minutes' => 30]);
+        $type = BookingType::query()->where('key', 'free_demo')->first()
+            ?? BookingType::factory()->create(['key' => 'free_demo', 'duration_minutes' => 30]);
 
         $booking = Booking::factory()->for($type, 'type')->create([
             'student_id' => $student->id,
@@ -279,5 +282,161 @@ final class MeetingJoinGatewayTest extends TestCase
         $booking->meeting->update(['provider' => 'google_meet', 'join_url' => 'https://meet.google.com/abc-defg-hij', 'host_url' => null, 'password' => null]);
 
         $this->actingAs($student)->get($this->gateway($booking))->assertRedirect('https://meet.google.com/abc-defg-hij');
+    }
+
+    // ── Dedicated participant host (meet.sirieducation.com) ───────────
+
+    private const string JOIN_HOST = 'https://meet.sirieducation.test';
+
+    private function useParticipantHost(): void
+    {
+        $settings = app(MeetingSettings::class);
+        $settings->participant_join_base_url = self::JOIN_HOST.'/';
+        $settings->save();
+    }
+
+    private function hostedJoin(Booking $booking): string
+    {
+        return self::JOIN_HOST.'/join/'.$booking->id;
+    }
+
+    public function test_join_links_move_to_the_participant_host_when_configured_and_app_url_is_untouched(): void
+    {
+        [$booking, $student] = $this->confirmedBookingWithMeeting();
+        $service = app(BookingMeetingServiceInterface::class);
+
+        $this->assertSame(route('dashboard.meetings.join', $booking), $service->joinLinkFor($booking), 'unset: the main host');
+
+        $this->useParticipantHost();
+
+        $this->assertSame($this->hostedJoin($booking), $service->joinLinkFor($booking));
+        $this->assertSame('http://127.0.0.1:8000', config('app.url'), 'APP_URL is not the mechanism');
+        $this->assertSame(self::JOIN_URL, $service->participantJoinUrlFor($booking, $student), 'the provider decision is unchanged');
+
+        // Surfaces and notifications follow the setting.
+        Livewire::actingAs($student)
+            ->test(BookingDetail::class, ['bookingId' => $booking->id])
+            ->assertSee($this->hostedJoin($booking))
+            ->assertDontSee(self::JOIN_URL);
+    }
+
+    public function test_previously_sent_main_host_links_keep_working(): void
+    {
+        [$booking, $student] = $this->confirmedBookingWithMeeting();
+        $this->useParticipantHost();
+
+        $this->actingAs($student)->get(route('dashboard.meetings.join', $booking))->assertRedirect(self::JOIN_URL);
+        $this->actingAs($student)->get('/join/'.$booking->id)->assertRedirect(self::JOIN_URL);
+    }
+
+    /** No cookie is shared across hosts: a guest on the join host is sent to the main host's handoff, not to a second login. */
+    public function test_a_guest_on_the_join_host_is_sent_to_the_main_host_handoff(): void
+    {
+        [$booking] = $this->confirmedBookingWithMeeting();
+        $this->useParticipantHost();
+
+        $this->get($this->hostedJoin($booking))
+            ->assertRedirect(config('app.url').'/dashboard/meetings/'.$booking->id.'/handoff');
+    }
+
+    public function test_a_guest_on_the_main_host_goes_to_login_not_into_a_handoff_loop(): void
+    {
+        [$booking] = $this->confirmedBookingWithMeeting();
+        $this->useParticipantHost();
+
+        $this->get('/join/'.$booking->id)->assertRedirect('/login');
+    }
+
+    public function test_the_handoff_signs_the_participant_in_on_the_join_host_once_and_then_redirects_to_the_provider(): void
+    {
+        [$booking, $student] = $this->confirmedBookingWithMeeting();
+        $this->useParticipantHost();
+
+        // Main host: the existing session issues a token and sends the browser across.
+        $issued = $this->actingAs($student)->get(route('dashboard.meetings.handoff', $booking));
+        $issued->assertRedirect();
+        $location = (string) $issued->headers->get('Location');
+        $this->assertStringStartsWith($this->hostedJoin($booking).'?handoff=', $location);
+        $token = (string) parse_url($location, PHP_URL_QUERY);
+        $this->assertStringNotContainsString('zoom.us', $location);
+        $this->assertDatabaseHas('activity_log', ['event' => 'meeting_join_handoff_issued', 'subject_id' => $booking->id]);
+
+        // Join host, as a GUEST (fresh browser state): the token opens a session there and is dropped from the URL.
+        auth()->logout();
+        $this->app['session']->flush();
+        $redeemed = $this->get($location);
+        $redeemed->assertRedirect($this->hostedJoin($booking));
+        $this->assertTrue(auth()->check());
+        $this->assertSame($student->id, auth()->id());
+
+        // The clean URL now runs the ordinary gateway.
+        $this->get($this->hostedJoin($booking))->assertRedirect(self::JOIN_URL);
+
+        // Single use: replaying the token as a guest gives nothing.
+        auth()->logout();
+        $this->app['session']->flush();
+        $this->get($location)->assertRedirect($this->hostedJoin($booking));
+        $this->assertFalse(auth()->check());
+        $this->get($this->hostedJoin($booking))->assertRedirect(config('app.url').'/dashboard/meetings/'.$booking->id.'/handoff');
+    }
+
+    public function test_a_handoff_token_expires_and_is_bound_to_its_booking(): void
+    {
+        [$booking, $student] = $this->confirmedBookingWithMeeting();
+        [$other] = $this->confirmedBookingWithMeeting();
+        $this->useParticipantHost();
+        $handoff = app(MeetingJoinHandoffService::class);
+
+        // Wrong booking: refused and consumed.
+        $token = $handoff->issue($student, $booking);
+        $this->assertNull($handoff->redeem($token, $other));
+        $this->assertNull($handoff->redeem($token, $booking), 'a failed attempt still burns the token');
+
+        // Expired.
+        $token = $handoff->issue($student, $booking);
+        $this->travel(MeetingJoinHandoffService::TTL_SECONDS + 1)->seconds();
+        $this->assertNull($handoff->redeem($token, $booking));
+
+        // Garbage.
+        $this->assertNull($handoff->redeem('', $booking));
+        $this->assertNull($handoff->redeem(str_repeat('a', 200), $booking));
+    }
+
+    /** The handoff signs in; it grants nothing. A stranger holding a token for a booking that is not theirs still meets the gateway. */
+    public function test_a_handoff_never_bypasses_the_gateway(): void
+    {
+        [$booking] = $this->confirmedBookingWithMeeting();
+        $this->useParticipantHost();
+        $stranger = User::factory()->create(['status' => User::STATUS_ACTIVE]);
+        $stranger->assignRole('student');
+        $stranger->profile()->update(['student_status' => StudentStatus::Active]);
+
+        // The stranger cannot even obtain a token for this booking on the main host.
+        $this->actingAs($stranger)->get(route('dashboard.meetings.handoff', $booking))->assertForbidden();
+
+        // And a token minted for them anyway signs them in, then the gateway refuses.
+        $token = app(MeetingJoinHandoffService::class)->issue($stranger, $booking);
+        auth()->logout();
+        $this->app['session']->flush();
+        $this->get($this->hostedJoin($booking).'?handoff='.$token)->assertRedirect($this->hostedJoin($booking));
+        $response = $this->get($this->hostedJoin($booking));
+        $response->assertForbidden();
+        $this->assertStringNotContainsString(self::JOIN_URL, (string) $response->getContent());
+        $this->assertStringNotContainsString(self::HOST_URL, (string) $response->getContent());
+    }
+
+    public function test_the_settings_page_stores_the_join_link_domain_without_a_trailing_slash(): void
+    {
+        Role::firstOrCreate(['name' => 'super_admin', 'guard_name' => 'web']);
+        $admin = User::factory()->create(['status' => User::STATUS_ACTIVE]);
+        $admin->assignRole('super_admin');
+
+        Livewire::actingAs($admin)
+            ->test(MeetingSettingsPage::class)
+            ->fillForm(['participant_join_base_url' => 'https://meet.sirieducation.test/'])
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        $this->assertSame('https://meet.sirieducation.test', app(MeetingSettings::class)->refresh()->participant_join_base_url);
     }
 }

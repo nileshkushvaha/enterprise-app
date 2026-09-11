@@ -87,6 +87,14 @@ class MeetingSettings extends Settings
 
     public bool $instructor_join_url_visible;
 
+    /**
+     * Public base URL for the participant join gateway, e.g.
+     * https://meet.sirieducation.com. When set, joinLinkFor() builds
+     * `<base>/join/{booking}` there instead of on APP_URL. Null = links
+     * stay on the main host. Never changes what the gateway enforces.
+     */
+    public ?string $participant_join_base_url;
+
     public bool $zoom_enabled;
 
     public ?string $zoom_account_id;

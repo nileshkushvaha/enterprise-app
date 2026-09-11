@@ -98,6 +98,7 @@ class MeetingSettingsPage extends Page
             'manual_provider_enabled' => $meeting->manual_provider_enabled,
             'student_join_url_visible' => $meeting->student_join_url_visible,
             'instructor_join_url_visible' => $meeting->instructor_join_url_visible,
+            'participant_join_base_url' => $meeting->participant_join_base_url,
             'google_meet_enabled' => $meeting->google_meet_enabled,
             'google_meet_recording_enabled' => $meeting->google_meet_recording_enabled,
             'google_meet_space_access' => GoogleMeetSpaceAccess::fromSetting($meeting->google_meet_space_access)->value,
@@ -220,6 +221,13 @@ class MeetingSettingsPage extends Page
                         Toggle::make('instructor_join_url_visible')
                             ->label('Instructor Can See Join Link')
                             ->helperText('Off: instructors never see the link, even inside the visibility window.'),
+                        TextInput::make('participant_join_base_url')
+                            ->label('Join Link Domain')
+                            ->url()
+                            ->placeholder('https://meet.sirieducation.com')
+                            ->maxLength(255)
+                            ->columnSpanFull()
+                            ->helperText('Join links are generated on this address, for example https://meet.sirieducation.com/join/…. Leave empty to use the main site. The address must point at this application.'),
                     ]),
                 ]),
 
@@ -469,6 +477,7 @@ class MeetingSettingsPage extends Page
             $settings->create_after_paid_booking_confirmation = (bool) ($data['create_after_paid_booking_confirmation'] ?? false);
             $settings->student_join_url_visible = (bool) ($data['student_join_url_visible'] ?? false);
             $settings->instructor_join_url_visible = (bool) ($data['instructor_join_url_visible'] ?? false);
+            $settings->participant_join_base_url = filled($data['participant_join_base_url'] ?? null) ? rtrim(trim((string) $data['participant_join_base_url']), '/') : null;
 
             $settings->google_meet_enabled = (bool) ($data['google_meet_enabled'] ?? false);
             $settings->google_meet_recording_enabled = (bool) ($data['google_meet_recording_enabled'] ?? false);

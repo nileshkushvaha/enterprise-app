@@ -18,6 +18,7 @@ use App\Http\Controllers\Auth\ResetPasswordController;
 use App\Http\Controllers\Auth\VerifyEmailController;
 use App\Http\Controllers\Booking\BookingWizardPageController;
 use App\Http\Controllers\Booking\MeetingJoinController;
+use App\Http\Controllers\Booking\MeetingJoinHandoffController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\ContactFormController;
 use App\Http\Controllers\Dashboard\DashboardController;
@@ -76,6 +77,7 @@ use App\Http\Controllers\Student\StudentWaitlistController;
 use App\Http\Controllers\Student\StudentWalletController;
 use App\Http\Controllers\Student\StudentWishlistController;
 use App\Http\Controllers\TagController;
+use App\Http\Middleware\ConsumeMeetingJoinHandoff;
 use App\Http\Middleware\EnsureAccountIsActive;
 use App\Http\Middleware\EnsureInstructorWorkspaceAccess;
 use App\Http\Middleware\EnsureSupportedFrontendPortalAudience;
@@ -235,6 +237,24 @@ Route::name('auth.')->middleware('auth')->group(function (): void {
 });
 
 // ── Student Dashboard sub-pages (auth + active account + frontend portal) ──
+// The participant join gateway on its public path — the same controller
+// and checks as dashboard.meetings.join, reachable on the participant
+// host (meet.sirieducation.com) as well as the main one.
+// ConsumeMeetingJoinHandoff stands in for `auth` here: it redeems a
+// handoff token, sends a guest on another host to the main host's
+// handoff instead of a second login, and sends a guest on the main host
+// to login with the intended URL, exactly as `auth` would.
+Route::get('/join/{booking}', MeetingJoinController::class)
+    ->middleware([
+        ConsumeMeetingJoinHandoff::class,
+        'email.verify.if.required',
+        EnsureAccountIsActive::class,
+        'password.change.required',
+        'frontend.portal',
+        EnsureSupportedFrontendPortalAudience::class,
+    ])
+    ->name('meetings.join');
+
 Route::prefix('dashboard')->name('dashboard.')->middleware([
     'auth',
     'email.verify.if.required',
@@ -266,6 +286,10 @@ Route::prefix('dashboard')->name('dashboard.')->middleware([
     // provider's participant URL. The link every participant surface and
     // notification carries; never the provider URL itself.
     Route::get('/meetings/{booking}/join', MeetingJoinController::class)->name('meetings.join');
+    // Issues a short-lived, single-use handoff so a participant signed in
+    // HERE can be signed in on the participant join host
+    // (MeetingSettings::participant_join_base_url) without a second login.
+    Route::get('/meetings/{booking}/handoff', MeetingJoinHandoffController::class)->name('meetings.handoff');
     Route::get('/instructor/onboarding', [InstructorOnboardingController::class, 'show'])->name('instructor.onboarding');
 
     // ── Instructor teaching workspace — gated behind

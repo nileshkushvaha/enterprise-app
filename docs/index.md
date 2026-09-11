@@ -97,6 +97,7 @@ Root `README.md` is the short project entry point; this file is the detailed cat
 | Meeting-provider go-live checklist (Google Meet/Zoom) | `architecture/meeting-provider-production-checklist.md` |
 | Apple Pay domain verification (Razorpay Standard Checkout) | `deployment/apple-pay-domain-verification.md` |
 | Configuration audit (`platform:audit-config`): webhook secrets, price coverage, currencies, time zones | `deployment/config-audit.md` |
+| Participant join domain (`meet.sirieducation.com`): setting, cross-host sign-in handoff, DNS/TLS/nginx | `deployment/meeting-join-domain.md` |
 | Real-money provider activation status (RazorpayX payout, Stripe collection) | `financial-provider-activation-handoff.md` |
 
 ## Integrations

@@ -1037,6 +1037,15 @@ final class BookingMeetingService implements BookingMeetingServiceInterface
 
     public function joinLinkFor(Booking $booking): string
     {
+        // A dedicated participant host (meet.sirieducation.com) when one is
+        // configured; the same gateway, same checks, different address.
+        // APP_URL is untouched, and the main-host link keeps working.
+        $base = trim((string) $this->settings->participant_join_base_url);
+
+        if ($base !== '') {
+            return rtrim($base, '/').'/join/'.$booking->getKey();
+        }
+
         return route('dashboard.meetings.join', $booking);
     }
 
