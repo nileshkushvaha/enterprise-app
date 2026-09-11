@@ -536,7 +536,7 @@ class LaunchMarketPaymentTest extends TestCase
         $gateways->razorpay_enabled = true;
         $gateways->razorpay_key_id = 'rzp_test_key_id';
         $gateways->razorpay_key_secret = Crypt::encryptString(self::KEY_SECRET);
-        $gateways->razorpay_webhook_secret = Crypt::encryptString(self::WEBHOOK_SECRET);
+        $gateways->razorpay_booking_webhook_secret = Crypt::encryptString(self::WEBHOOK_SECRET);
         $gateways->razorpay_international_enabled = $international;
         $gateways->razorpay_international_currencies = $currencies ?? RazorpayPaymentProvider::DEFAULT_INTERNATIONAL_CURRENCIES;
         $gateways->payment_collection_rollout_scope = PaymentCollectionRolloutScope::ActiveCountryRouting->value;

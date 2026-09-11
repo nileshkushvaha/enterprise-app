@@ -139,21 +139,10 @@ class PaymentGatewaySettings extends Settings
     public ?string $razorpay_key_secret;
 
     /**
-     * Legacy multi-line webhook secret store (`booking:`/`package:`/`wallet:`
-     * prefixed lines, or unprefixed lines valid for every endpoint).
-     * Superseded by the three purpose-specific fields below; still read
-     * as a fallback for one compatibility release. See
-     * PaymentWebhookSignatureService::decryptSecrets().
-     */
-    public ?string $razorpay_webhook_secret;
-
-    /**
-     * Razorpay issues (or accepts) a DISTINCT secret for every webhook
-     * endpoint registered on the account, and this platform registers
-     * three. One field per endpoint, encrypted, so the operator pastes
-     * each dashboard secret into the field named for that endpoint and
-     * readiness can be reported per endpoint rather than "some secret
-     * exists". Each may hold more than one line during rotation.
+     * Razorpay issues a distinct secret for every webhook endpoint
+     * registered on the account, and this platform registers three.
+     * One encrypted field per endpoint; each may hold one secret per
+     * line during rotation.
      */
     public ?string $razorpay_booking_webhook_secret;
 

@@ -88,7 +88,7 @@ class RazorpayCheckoutTest extends TestCase
         $gateways->razorpay_enabled = $enabled;
         $gateways->razorpay_key_id = 'rzp_test_key_id';
         $gateways->razorpay_key_secret = Crypt::encryptString(self::KEY_SECRET);
-        $gateways->razorpay_webhook_secret = Crypt::encryptString(self::WEBHOOK_SECRET);
+        $gateways->razorpay_booking_webhook_secret = Crypt::encryptString(self::WEBHOOK_SECRET);
         $gateways->save();
 
         app(BookingSettings::class)->payment_provider = 'razorpay';

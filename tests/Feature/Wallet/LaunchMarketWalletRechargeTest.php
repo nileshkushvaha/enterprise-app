@@ -412,7 +412,7 @@ final class LaunchMarketWalletRechargeTest extends TestCase
         $gateways->razorpay_enabled = true;
         $gateways->razorpay_key_id = 'rzp_test_key_id';
         $gateways->razorpay_key_secret = Crypt::encryptString(self::KEY_SECRET);
-        $gateways->razorpay_webhook_secret = Crypt::encryptString('test_webhook_secret');
+        $gateways->razorpay_wallet_webhook_secret = Crypt::encryptString('test_webhook_secret');
         $gateways->razorpay_international_enabled = $international;
         $gateways->razorpay_international_currencies = $currencies ?? RazorpayPaymentProvider::DEFAULT_INTERNATIONAL_CURRENCIES;
         $gateways->save();

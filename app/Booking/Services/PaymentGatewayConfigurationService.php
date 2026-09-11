@@ -8,6 +8,7 @@ use App\Booking\DTOs\PaymentGatewayReadiness;
 use App\Booking\Payments\FakePaymentProvider;
 use App\Services\Payment\PaymentWebhookSignatureService;
 use App\Services\Payment\WebhookSecretState;
+use App\Settings\FeatureSettings;
 use App\Settings\PaymentGatewaySettings;
 use Illuminate\Support\Carbon;
 
@@ -31,6 +32,7 @@ final class PaymentGatewayConfigurationService
     public function __construct(
         private readonly PaymentGatewaySettings $settings,
         private readonly PaymentProviderConfigValidator $validator,
+        private readonly FeatureSettings $features,
     ) {}
 
     public function checkFake(): PaymentGatewayReadiness
@@ -50,34 +52,59 @@ final class PaymentGatewayConfigurationService
         }
 
         if (blank($this->settings->razorpay_key_id) || blank($this->settings->razorpay_key_secret)) {
-            $issues[] = 'Razorpay key_id or key_secret is missing.';
+            $issues[] = 'Razorpay Key ID or Key Secret is missing.';
         } elseif (! $this->validator->isValidRazorpayKeyId($this->settings->razorpay_key_id)) {
-            return $this->persist('razorpay', 'invalid', ['Razorpay key_id does not match the expected rzp_(test|live)_... format.']);
+            return $this->persist('razorpay', 'invalid', ['Razorpay Key ID must start with rzp_test_ or rzp_live_.']);
         }
 
-        // Readiness is per ENDPOINT. Razorpay signs each registered
-        // webhook with its own secret, so "some secret exists" said
-        // nothing about whether the booking endpoint could verify a
-        // delivery — which is exactly how a captured payment sat behind
-        // six 401s. A missing endpoint secret is incomplete; a legacy
-        // fallback verifies but is flagged, never a clean ready.
-        $warnings = [];
-
-        foreach (self::webhookEndpoints('razorpay') as $purpose => $path) {
-            $state = PaymentWebhookSignatureService::secretState($this->settings, 'razorpay', $purpose);
-
-            if ($state === WebhookSecretState::Missing) {
-                $issues[] = sprintf('Razorpay %s webhook secret is missing — deliveries to %s are rejected with 401.', $purpose, $path);
-            } elseif ($state->isLegacy()) {
-                $warnings[] = sprintf('Razorpay %s webhook (%s) verifies through the legacy shared field (%s). Move its secret into the dedicated %s field.', $purpose, $path, $state->label(), PaymentWebhookSignatureService::dedicatedField('razorpay', $purpose));
+        // One secret per Razorpay webhook endpoint. An endpoint whose
+        // domain is switched off (wallet, packages) is not required, so a
+        // platform that only sells lessons is not held "incomplete" by a
+        // webhook it never receives.
+        foreach (self::requiredRazorpayWebhookPurposes($this->features) as $purpose) {
+            if (PaymentWebhookSignatureService::secretState($this->settings, 'razorpay', $purpose) === WebhookSecretState::Missing) {
+                $issues[] = sprintf('%s webhook secret is missing.', self::purposeLabel($purpose));
             }
         }
 
         if ($issues !== []) {
-            return $this->persist('razorpay', 'incomplete', [...$issues, ...$warnings]);
+            return $this->persist('razorpay', 'incomplete', $issues);
         }
 
-        return $this->persist('razorpay', 'ready', $warnings);
+        return $this->persist('razorpay', 'ready');
+    }
+
+    /**
+     * The Razorpay webhook endpoints that must be verifiable for the
+     * features currently enabled. Booking payments are always live;
+     * wallet recharges and package purchases follow their feature flags.
+     *
+     * @return list<string>
+     */
+    public static function requiredRazorpayWebhookPurposes(FeatureSettings $features): array
+    {
+        $purposes = [PaymentWebhookSignatureService::PURPOSE_BOOKING];
+
+        if ($features->country_academic_packages_enabled) {
+            $purposes[] = PaymentWebhookSignatureService::PURPOSE_PACKAGE;
+        }
+
+        if ($features->wallet_enabled) {
+            $purposes[] = PaymentWebhookSignatureService::PURPOSE_WALLET;
+        }
+
+        return $purposes;
+    }
+
+    /** Administrator-facing name of one webhook endpoint. */
+    public static function purposeLabel(string $purpose): string
+    {
+        return match ($purpose) {
+            PaymentWebhookSignatureService::PURPOSE_BOOKING => 'Booking payment',
+            PaymentWebhookSignatureService::PURPOSE_PACKAGE => 'Package purchase',
+            PaymentWebhookSignatureService::PURPOSE_WALLET => 'Wallet recharge',
+            default => ucfirst($purpose),
+        };
     }
 
     /**
@@ -118,7 +145,7 @@ final class PaymentGatewayConfigurationService
         }
 
         if (blank($this->settings->stripe_webhook_secret)) {
-            $issues[] = 'Stripe webhook_secret is missing — webhooks cannot be verified.';
+            $issues[] = 'Stripe webhook secret is missing.';
         }
 
         if ($issues !== []) {

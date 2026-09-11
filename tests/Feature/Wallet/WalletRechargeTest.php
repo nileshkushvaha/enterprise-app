@@ -129,7 +129,7 @@ class WalletRechargeTest extends TestCase
         $gateways->razorpay_enabled = true;
         $gateways->razorpay_key_id = 'rzp_test_key_id';
         $gateways->razorpay_key_secret = Crypt::encryptString('test_key_secret');
-        $gateways->razorpay_webhook_secret = Crypt::encryptString('test_webhook_secret');
+        $gateways->razorpay_wallet_webhook_secret = Crypt::encryptString('test_webhook_secret');
         $gateways->save();
 
         app(BookingSettings::class)->payment_provider = 'razorpay';

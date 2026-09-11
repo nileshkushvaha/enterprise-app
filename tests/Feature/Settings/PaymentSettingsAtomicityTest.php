@@ -225,11 +225,11 @@ class PaymentSettingsAtomicityTest extends TestCase
     public function test_webhook_secret_plaintext_never_appears_in_description_or_properties(): void
     {
         $gateways = app(PaymentGatewaySettings::class);
-        $gateways->razorpay_webhook_secret = Crypt::encryptString('whsec-synthetic-old');
+        $gateways->razorpay_booking_webhook_secret = Crypt::encryptString('whsec-synthetic-old');
         $gateways->save();
 
         Livewire::test(PaymentGatewayPage::class)
-            ->fillForm(['razorpay_webhook_secret' => 'whsec-synthetic-new'])
+            ->fillForm(['razorpay_booking_webhook_secret' => 'whsec-synthetic-new'])
             ->call('save')
             ->assertHasNoFormErrors();
 
@@ -237,7 +237,7 @@ class PaymentSettingsAtomicityTest extends TestCase
         $this->assertNotNull($activity);
 
         $changed = $activity->properties['changed'];
-        $this->assertSame('replaced', $changed['razorpay_webhook_secret']['action']);
+        $this->assertSame('replaced', $changed['razorpay_booking_webhook_secret']['action']);
 
         $serialized = (string) json_encode($activity->properties);
         $this->assertStringNotContainsString('whsec-synthetic-old', $serialized);
@@ -416,14 +416,14 @@ class PaymentSettingsAtomicityTest extends TestCase
         $gateways = app(PaymentGatewaySettings::class);
         $gateways->razorpay_key_id = 'rzp_test_before';
         $gateways->razorpay_key_secret = Crypt::encryptString('secret_before');
-        $gateways->razorpay_webhook_secret = Crypt::encryptString('whsec_before');
+        $gateways->razorpay_booking_webhook_secret = Crypt::encryptString('whsec_before');
         $gateways->save();
 
         Livewire::test(PaymentGatewayPage::class)
             ->fillForm([
                 'razorpay_key_id' => 'rzp_test_after',
                 'razorpay_key_secret' => 'secret_after',
-                'razorpay_webhook_secret' => 'whsec_after',
+                'razorpay_booking_webhook_secret' => 'whsec_after',
             ])
             ->call('save')
             ->assertHasNoFormErrors();
@@ -438,7 +438,7 @@ class PaymentSettingsAtomicityTest extends TestCase
         $changed = $activities->first()->properties['changed'];
         $this->assertSame('rzp_test_after', $changed['razorpay_key_id']['to']); // safe
         $this->assertSame('replaced', $changed['razorpay_key_secret']['action']); // sensitive
-        $this->assertSame('replaced', $changed['razorpay_webhook_secret']['action']); // sensitive
+        $this->assertSame('replaced', $changed['razorpay_booking_webhook_secret']['action']); // sensitive
     }
 
     // ── 17. Every payment mutation method uses the atomic audited path ──────

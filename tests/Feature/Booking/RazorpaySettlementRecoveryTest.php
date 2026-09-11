@@ -93,9 +93,7 @@ final class RazorpaySettlementRecoveryTest extends TestCase
         $gateways->razorpay_enabled = true;
         $gateways->razorpay_key_id = 'rzp_test_key_id';
         $gateways->razorpay_key_secret = Crypt::encryptString(self::KEY_SECRET);
-        // The production shape: a dedicated secret per endpoint, and no
-        // legacy shared line at all.
-        $gateways->razorpay_webhook_secret = null;
+        // The production shape: a dedicated secret per endpoint.
         $gateways->razorpay_booking_webhook_secret = Crypt::encryptString(self::BOOKING_WEBHOOK_SECRET);
         $gateways->razorpay_wallet_webhook_secret = Crypt::encryptString(self::WALLET_WEBHOOK_SECRET);
         $gateways->save();

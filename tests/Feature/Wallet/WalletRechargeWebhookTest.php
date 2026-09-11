@@ -65,7 +65,7 @@ class WalletRechargeWebhookTest extends TestCase
         $gateways->razorpay_enabled = true;
         $gateways->razorpay_key_id = 'rzp_test_key_id';
         $gateways->razorpay_key_secret = Crypt::encryptString(self::KEY_SECRET);
-        $gateways->razorpay_webhook_secret = Crypt::encryptString(PaymentWebhookSignatureService::PURPOSE_WALLET.':'.self::WEBHOOK_SECRET);
+        $gateways->razorpay_wallet_webhook_secret = Crypt::encryptString(self::WEBHOOK_SECRET);
         $gateways->stripe_enabled = true;
         $gateways->stripe_publishable_key = 'pk_test_wallet_recharge';
         $gateways->stripe_secret_key = Crypt::encryptString('sk_test_wallet_recharge_secret');

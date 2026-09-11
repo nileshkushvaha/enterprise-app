@@ -13,7 +13,7 @@ agnostic payment pipeline (`PaymentProviderInterface` →
 already-built admin module (`PaymentGatewaySettings`,
 `PaymentSettingsPage`, `PaymentWebhookController`) already has
 encrypted Razorpay credential fields (`razorpay_key_id`,
-`razorpay_key_secret`, `razorpay_webhook_secret`, `razorpay_enabled`,
+`razorpay_key_secret`, `razorpay_booking_webhook_secret` (plus the package and wallet endpoint secrets), `razorpay_enabled`,
 `razorpay_sandbox_mode`) with a full admin UI, but zero booking
 integration and zero data persistence (no `Payment` model, no table).
 
@@ -65,7 +65,7 @@ extended to cover the new method.
   `razorpay_enabled`, `razorpay_sandbox_mode`, `razorpay_key_id`,
   `razorpay_key_secret` (encrypted via `Crypt::encryptString` in
   `PaymentSettingsPage::saveEncryptedField()`, never prefilled back into
-  the form), `razorpay_webhook_secret` (same). Reused as-is — no new
+  the form), `razorpay_booking_webhook_secret` (same). Reused as-is — no new
   settings class for credentials.
 - `PaymentWebhookSignatureService::decryptSecret()` was `private`;
   changed to `public static` (one-line visibility change) so
@@ -99,7 +99,7 @@ existing int-minor-units discipline.
 
 Secrets: `razorpay_key_id` is not secret (Razorpay's own client-side
 SDK embeds it) and is exposed to the frontend via `checkoutPayload()`.
-`razorpay_key_secret` and `razorpay_webhook_secret` are decrypted only
+`razorpay_key_secret` and the endpoint webhook secrets are decrypted only
 inside `RazorpayPaymentProvider` at the moment of use, never logged,
 never serialized into an API resource, activity log, or Livewire
 property. `assertConfigured()` guards every gateway call: Razorpay must

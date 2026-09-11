@@ -460,7 +460,7 @@ class InternationalPaymentRoutingTest extends TestCase
             $s->razorpay_enabled = true;
             $s->razorpay_key_id = 'rzp_test_key_id';
             $s->razorpay_key_secret = Crypt::encryptString('rzp_secret');
-            $s->razorpay_webhook_secret = Crypt::encryptString('rzp_webhook');
+            $s->razorpay_booking_webhook_secret = Crypt::encryptString('rzp_webhook');
         });
 
         $bookings = app(BookingSettings::class);

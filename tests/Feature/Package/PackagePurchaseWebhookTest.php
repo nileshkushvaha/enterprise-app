@@ -67,7 +67,7 @@ class PackagePurchaseWebhookTest extends TestCase
         $gateways->razorpay_enabled = true;
         $gateways->razorpay_key_id = 'rzp_test_key_id';
         $gateways->razorpay_key_secret = Crypt::encryptString('secret');
-        $gateways->razorpay_webhook_secret = Crypt::encryptString(self::RAZORPAY_SECRET);
+        $gateways->razorpay_package_webhook_secret = Crypt::encryptString(self::RAZORPAY_SECRET);
         $gateways->stripe_enabled = true;
         $gateways->stripe_publishable_key = 'pk_test';
         $gateways->stripe_secret_key = Crypt::encryptString('sk_test');

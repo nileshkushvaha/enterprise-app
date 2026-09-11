@@ -151,7 +151,7 @@ Reports page. All follow the Schemas/Tables delegation pattern.
 
 Required on every deploy, in order:
 
-1. `php artisan migrate --force` — includes settings migrations.
+1. `php artisan migrate --force` and `php artisan migrate --path=database/settings --force` (settings migrations, see `docs/settings.md`).
 2. `php artisan db:seed --class=BookingTypeSeeder --force` — sync
    booking-type drivers to rows (idempotent).
 3. `php artisan db:seed --class=BookingPermissionSeeder --force` —

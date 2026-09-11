@@ -66,7 +66,7 @@ class CountryAwareProviderResolutionTest extends TestCase
         $gateways->razorpay_enabled = true;
         $gateways->razorpay_key_id = 'rzp_test_key_id';
         $gateways->razorpay_key_secret = Crypt::encryptString('secret');
-        $gateways->razorpay_webhook_secret = Crypt::encryptString('whsecret');
+        $gateways->razorpay_booking_webhook_secret = Crypt::encryptString('whsecret');
         $gateways->save();
     }
 

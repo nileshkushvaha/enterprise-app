@@ -134,26 +134,22 @@ gates.
       will reject anything else, including copy-paste placeholders.
 - [ ] **Three** webhook endpoints registered with Razorpay, each as
       its own webhook (Razorpay → Account & Settings → Webhooks), each
-      **Enabled**:
+      **Enabled**. Razorpay gives every webhook its own secret; paste
+      each into its field under **Admin → Settings → Payment Gateway
+      Settings → Razorpay → Webhook Secrets**:
 
-      | Endpoint | Admin field (Settings → Payments → Razorpay) |
+      | Endpoint | Field |
       |---|---|
-      | `POST {APP_URL}/api/webhooks/bookings/payments/razorpay` | **Booking Payment Webhook Secret** (`razorpay_booking_webhook_secret`) |
-      | `POST {APP_URL}/api/webhooks/packages/purchases/razorpay` | **Package Purchase Webhook Secret** (`razorpay_package_webhook_secret`) |
-      | `POST {APP_URL}/api/webhooks/wallets/recharges/razorpay` | **Wallet Recharge Webhook Secret** (`razorpay_wallet_webhook_secret`) |
+      | `POST {APP_URL}/api/webhooks/bookings/payments/razorpay` | Booking Payment Webhook Secret |
+      | `POST {APP_URL}/api/webhooks/packages/purchases/razorpay` | Package Purchase Webhook Secret |
+      | `POST {APP_URL}/api/webhooks/wallets/recharges/razorpay` | Wallet Recharge Webhook Secret |
 
-      Razorpay issues (or accepts) a **different secret for every
-      webhook**. Paste each one into the field named for its endpoint.
-      A single value pasted for all three is correct for at most one
-      of them: the other two answer 401 on every delivery (11 Sep 2026
-      — six booking deliveries rejected while the payment sat captured).
-      **Not** the generic `/api/webhooks/payments/generic/razorpay` —
-      that path only logs and never settles anything.
+      A secret pasted into the wrong field answers 401 on every
+      delivery to the endpoint it was meant for. **Not** the generic
+      `/api/webhooks/payments/generic/razorpay` — that path only logs.
 - [ ] Booking webhook events: `payment.captured` is required
       (settles). `order.paid` is also accepted and settles the same
-      way; `payment.failed` records a failure. Nothing else is read —
-      do not subscribe to extra events just because the dashboard
-      offers them.
+      way; `payment.failed` records a failure. Nothing else is read.
 - [ ] Deploy runs **both** migration commands — settings migrations
       live under `database/settings/` and are applied with the
       path-based command (see `docs/settings.md`):
@@ -163,18 +159,14 @@ gates.
       php artisan migrate --path=database/settings --force
       ```
 
-      `2026_09_11_100000_add_razorpay_purpose_webhook_secrets` creates
-      the three fields and copies any `booking:`/`package:`/`wallet:`
-      lines from the legacy field into them.
-- [ ] Admin → Settings → Payments → Razorpay: each of the three
-      secret fields reports **Configured** (not "Legacy fallback
-      active"). The deprecated shared textarea only appears while it
-      still holds a value; it is honoured as a fallback for one release
-      and then removed.
-- [ ] `php artisan platform:audit-config` shows *"credentials present
-      and a dedicated webhook secret configured for all three
-      endpoints"* — a legacy fallback is a warning, a missing endpoint
-      secret is a failure.
+      Two settings migrations apply here: `2026_09_11_100000` creates
+      the three endpoint fields and copies prefixed lines across;
+      `2026_09_11_100100` removes the old shared field.
+- [ ] Each of the three secret fields shows **Configured**. The
+      wallet and package fields are only required while those features
+      are enabled; the booking field always is.
+- [ ] `php artisan platform:audit-config` reports *"Razorpay:
+      credentials and webhook secrets are configured"*.
 - [ ] Healthy flow to expect on the canary payment: Checkout callback →
       `booking_checkout_verified` → `booking_payment_provider_verified`
       (`captured`) → `payment_attempt_paid` → `booking_payment_settled`

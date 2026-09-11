@@ -69,7 +69,7 @@ abstract class PaymentSettingsPage extends Page
 
     public function getSubheading(): string|Htmlable|null
     {
-        return 'Configure payment gateways, provider routing, payment rules, and advanced webhook/queue behaviour.';
+        return 'Choose which gateway collects payments and manage gateway credentials.';
     }
 
     public function getBreadcrumbs(): array
@@ -115,7 +115,6 @@ abstract class PaymentSettingsPage extends Page
             'razorpay_international_currencies' => $gateways->razorpay_international_currencies,
             'razorpay_key_id' => $gateways->razorpay_key_id,
             'razorpay_key_secret' => null,
-            'razorpay_webhook_secret' => null,
             'razorpay_booking_webhook_secret' => null,
             'razorpay_package_webhook_secret' => null,
             'razorpay_wallet_webhook_secret' => null,
@@ -198,7 +197,7 @@ abstract class PaymentSettingsPage extends Page
                             ])
                             ->action(fn (array $data) => $this->validateGatewayCredentials($data['gateway'])),
                         Action::make('test_connection')
-                            ->label('Check Connection Readiness')
+                            ->label('Check Credentials')
                             ->icon(Heroicon::OutlinedSignal)
                             ->color('info')
                             ->form([
@@ -220,15 +219,7 @@ abstract class PaymentSettingsPage extends Page
                                     ->required()
                                     ->native(false),
                             ])
-                            ->action(function (array $data): void {
-                                $field = "{$data['gateway']}_webhook_secret";
-                                $this->data[$field] = Str::random(48);
-                                Notification::make()
-                                    ->title('Webhook secret generated')
-                                    ->body('Save settings to persist the generated secret.')
-                                    ->success()
-                                    ->send();
-                            }),
+                            ->action(fn (array $data) => $this->generateWebhookSecret($data['gateway'])),
                         Action::make('copy_webhook_url')
                             ->label('Copy Webhook URL')
                             ->icon(Heroicon::OutlinedClipboardDocument)
@@ -246,14 +237,14 @@ abstract class PaymentSettingsPage extends Page
                             ->icon(Heroicon::OutlinedArrowPathRoundedSquare)
                             ->color('danger')
                             ->requiresConfirmation()
-                            ->modalDescription('This clears all stored encrypted credentials for every gateway.')
+                            ->modalDescription('Removes every stored API key and webhook secret for all gateways. Payments stop until new credentials are saved.')
                             ->action(fn () => $this->resetGatewayCredentials()),
                         Action::make('mark_production_reviewed')
                             ->label('Mark Production Checklist Reviewed')
                             ->icon(Heroicon::OutlinedClipboardDocumentCheck)
                             ->color('success')
                             ->requiresConfirmation()
-                            ->modalDescription('Confirms an administrator has completed the production readiness checklist for the currently enabled gateways before enabling them for real traffic.')
+                            ->modalDescription('Records that the production checklist was reviewed for the enabled gateways. It does not enable anything.')
                             ->action(fn () => $this->markProductionChecklistReviewed()),
                     ])->key('form-actions'),
                 ]),
@@ -321,29 +312,29 @@ abstract class PaymentSettingsPage extends Page
     protected function providerRoutingSection(): Section
     {
         return Section::make('Provider Routing')
-            ->description('Which gateway collects money. A gateway can be fully configured and still never be used unless it is selected here.')
+            ->description('Choose which gateway collects payments. A configured gateway is only used once it is selected here.')
             ->icon(Heroicon::OutlinedArrowsRightLeft)
             ->schema([
                 Grid::make(2)->schema([
                     Toggle::make('payments_enabled')
                         ->label('Payments Enabled')
-                        ->helperText('Platform-wide kill switch. Off blocks every new payment attempt.'),
+                        ->helperText('Turn off to block all new online payments.'),
                     Toggle::make('fake_enabled')
                         ->label('Allow Fake Provider')
-                        ->helperText('Simulated payments for local/testing only — refused outside those environments.'),
+                        ->helperText('Simulated payments for local and testing environments only.'),
                 ]),
                 Select::make('default_provider')
                     ->label('Active Payment Provider')
                     ->options($this->routableProviderOptions())
                     ->native(false)
-                    ->placeholder('Fall back to the booking default')
-                    ->helperText('Checked after per-country routing and before the booking default. Leave empty only if every country routes explicitly.'),
+                    ->placeholder('Use the booking default')
+                    ->helperText('Used when a country has no provider of its own.'),
                 Select::make('allowed_providers')
                     ->label('Allowed Providers')
                     ->options($this->routableProviderOptions())
                     ->multiple()
                     ->native(false)
-                    ->helperText('Optional allow-list. Empty means no platform-level restriction; a provider outside this list is refused even if routed.'),
+                    ->helperText('Restrict payments to selected providers. Leave empty to allow all configured providers.'),
             ]);
     }
 
@@ -372,7 +363,7 @@ abstract class PaymentSettingsPage extends Page
             ->badgeColor(fn (): string => $this->configStatusColor('stripe'))
             ->schema([
                 Section::make('Stripe')
-                    ->description('Stripe • Publishable / Secret keys')
+                    ->description('Card payments outside India.')
                     ->schema([
                         $this->gatewaySwitches('stripe_enabled', $this->keyDerivedMode('stripe')),
                         Grid::make(2)->schema([
@@ -382,13 +373,13 @@ abstract class PaymentSettingsPage extends Page
                                 ->password()
                                 ->revealable()
                                 ->maxLength(255)
-                                ->helperText('Stored encrypted. Leave blank to keep existing.'),
+                                ->helperText('Leave blank to keep the stored key.'),
                         ]),
                         Textarea::make('stripe_webhook_secret')
-                            ->label('Webhook Secret(s)')
-                            ->rows(3)
+                            ->label('Webhook Secret')
+                            ->rows(2)
                             ->autosize()
-                            ->helperText('Stored encrypted. Leave blank to keep existing. ONE SECRET PER LINE. Prefix a line to scope it to one endpoint: "booking:whsec_..." or "package:whsec_...". Two lines with the same prefix = credential rotation (both stay valid). An unprefixed line works for every endpoint (legacy behaviour).'),
+                            ->helperText('One secret per line. Prefix a line with booking:, package: or wallet: to limit it to that endpoint. Leave blank to keep the stored value.'),
                         $this->gatewayUrls('stripe'),
                     ]),
             ]);
@@ -402,6 +393,7 @@ abstract class PaymentSettingsPage extends Page
             ->badgeColor(fn (): string => $this->configStatusColor('razorpay'))
             ->schema([
                 Section::make('Razorpay')
+                    ->description('Primary gateway for India (INR).')
                     ->schema([
                         $this->gatewaySwitches('razorpay_enabled', $this->keyDerivedMode('razorpay')),
                         Grid::make(2)->schema([
@@ -411,20 +403,14 @@ abstract class PaymentSettingsPage extends Page
                                 ->password()
                                 ->revealable()
                                 ->maxLength(255)
-                                ->helperText('Stored encrypted. Leave blank to keep existing.'),
+                                ->helperText('Leave blank to keep the stored key.'),
                         ]),
-                        Section::make('Webhook secrets — one per Razorpay endpoint')
-                            ->description('Razorpay signs each registered webhook with its own secret. Paste each endpoint\'s secret (from Razorpay → Account & Settings → Webhooks) into the field named for that endpoint. Stored encrypted; leave a field blank to keep its existing value. During rotation, enter the old and new secret on two lines.')
+                        Section::make('Webhook Secrets')
+                            ->description('Razorpay gives each webhook its own secret. Paste the secret for each endpoint below.')
                             ->schema([
                                 $this->razorpayWebhookSecretInput(PaymentWebhookSignatureService::PURPOSE_BOOKING, 'Booking Payment Webhook Secret'),
                                 $this->razorpayWebhookSecretInput(PaymentWebhookSignatureService::PURPOSE_PACKAGE, 'Package Purchase Webhook Secret'),
                                 $this->razorpayWebhookSecretInput(PaymentWebhookSignatureService::PURPOSE_WALLET, 'Wallet Recharge Webhook Secret'),
-                                Textarea::make('razorpay_webhook_secret')
-                                    ->label('Legacy shared webhook secret (deprecated)')
-                                    ->rows(2)
-                                    ->autosize()
-                                    ->visible(fn (): bool => filled(app(PaymentGatewaySettings::class)->razorpay_webhook_secret))
-                                    ->helperText('Still honoured as a fallback for endpoints without a dedicated secret above, and retired next release. Move each endpoint\'s secret into its own field; then use "Reset gateway credentials" or leave this blank to keep it until removal.'),
                             ]),
                         $this->gatewayUrls('razorpay'),
                     ]),
@@ -450,22 +436,22 @@ abstract class PaymentSettingsPage extends Page
     protected function razorpayInternationalSection(): Section
     {
         return Section::make('International Collection')
-            ->description('Lets Razorpay collect in currencies other than INR. INR is domestic and always collectable — it can never be switched off here.')
+            ->description('Collect in currencies other than INR. INR is always available.')
             ->icon(Heroicon::OutlinedGlobeAlt)
             ->schema([
                 Toggle::make('razorpay_international_enabled')
                     ->label('International Payments Approved')
                     ->live()
-                    ->helperText('Turn on ONLY after confirming on the Razorpay Dashboard that International Payments is approved for this merchant account. Live credentials are not evidence of approval.'),
+                    ->helperText('Turn on only after Razorpay has approved International Payments for this account.'),
                 Select::make('razorpay_international_currencies')
                     ->label('Approved Currencies')
                     ->options($this->internationalCurrencyOptions())
                     ->multiple()
                     ->native(false)
                     ->live()
-                    ->helperText('The currencies this specific account is confirmed to collect. Razorpay\'s supported set is per-account — anything outside their standard list needs a support request first. A market whose currency is not listed here cannot check out.'),
+                    ->helperText('Currencies Razorpay has approved for this account. Students in a country whose currency is not listed cannot pay.'),
                 Placeholder::make('razorpay_international_coverage')
-                    ->label('Market Coverage')
+                    ->label('Country Coverage')
                     ->content(fn (): HtmlString => $this->internationalCoverageWarning()),
             ]);
     }
@@ -574,6 +560,7 @@ abstract class PaymentSettingsPage extends Page
             ->badge(fn (): string => $this->enabledBadge('paypal_enabled'))
             ->schema([
                 Section::make('PayPal')
+                    ->description('Not connected to checkout yet. Credentials are stored for a future integration.')
                     ->schema([
                         Toggle::make('paypal_enabled')->label('Enable Gateway')->live(),
                         Select::make('paypal_mode')
@@ -588,13 +575,13 @@ abstract class PaymentSettingsPage extends Page
                                 ->password()
                                 ->revealable()
                                 ->maxLength(255)
-                                ->helperText('Stored encrypted.'),
+                                ->helperText('Leave blank to keep the stored secret.'),
                         ]),
                         Textarea::make('paypal_webhook_secret')
-                            ->label('Webhook Secret(s)')
-                            ->rows(3)
+                            ->label('Webhook Secret')
+                            ->rows(2)
                             ->autosize()
-                            ->helperText('Stored encrypted. Leave blank to keep existing. ONE SECRET PER LINE. Prefix a line to scope it to one endpoint: "booking:whsec_..." or "package:whsec_...". Two lines with the same prefix = credential rotation (both stay valid). An unprefixed line works for every endpoint (legacy behaviour).'),
+                            ->helperText('Leave blank to keep the stored value.'),
                         $this->gatewayUrls('paypal'),
                     ]),
             ]);
@@ -607,7 +594,7 @@ abstract class PaymentSettingsPage extends Page
             ->badge(fn (): string => $this->enabledBadge('applepay_enabled'))
             ->schema([
                 Section::make('Apple Pay')
-                    ->description('Apple Pay requires a registered merchant identifier and a verified domain. Apple will not present the sheet on an unverified domain, so both must be set before enabling.')
+                    ->description('Not connected to checkout yet. Apple Pay needs a registered merchant identifier and a verified domain.')
                     ->schema([
                         $this->gatewaySwitches('applepay_enabled'),
                         Grid::make(2)->schema([
@@ -617,27 +604,27 @@ abstract class PaymentSettingsPage extends Page
                                 ->maxLength(255),
                             TextInput::make('applepay_merchant_domain')
                                 ->label('Verified Domain')
-                                ->placeholder('siri education.com')
+                                ->placeholder('sirieducation.com')
                                 ->maxLength(255)
-                                ->helperText('Must match the domain serving the payment page.'),
+                                ->helperText('The domain that serves the payment page.'),
                         ]),
                         Grid::make(2)->schema([
                             Textarea::make('applepay_merchant_certificate')
                                 ->label('Merchant Identity Certificate')
                                 ->rows(3)
                                 ->autosize()
-                                ->helperText('Stored encrypted. Leave blank to keep existing.'),
+                                ->helperText('Leave blank to keep the stored certificate.'),
                             Textarea::make('applepay_merchant_key')
                                 ->label('Merchant Private Key')
                                 ->rows(3)
                                 ->autosize()
-                                ->helperText('Stored encrypted. Leave blank to keep existing.'),
+                                ->helperText('Leave blank to keep the stored key.'),
                         ]),
                         Textarea::make('applepay_webhook_secret')
-                            ->label('Webhook Secret(s)')
-                            ->rows(3)
+                            ->label('Webhook Secret')
+                            ->rows(2)
                             ->autosize()
-                            ->helperText('Stored encrypted. Leave blank to keep existing. ONE SECRET PER LINE. Prefix a line to scope it to one endpoint: "booking:whsec_..." or "package:whsec_...". Two lines with the same prefix = credential rotation (both stay valid). An unprefixed line works for every endpoint (legacy behaviour).'),
+                            ->helperText('Leave blank to keep the stored value.'),
                         $this->gatewayUrls('applepay'),
                     ]),
             ]);
@@ -650,13 +637,14 @@ abstract class PaymentSettingsPage extends Page
             ->badge(fn (): string => $this->enabledBadge('manual_enabled'))
             ->schema([
                 Section::make('Manual Payment')
-                    ->description('Fallback manual payment instructions.')
+                    ->description('Instructions shown to students who pay outside the platform.')
                     ->schema([
                         Toggle::make('manual_enabled')->label('Enable Gateway'),
                         Textarea::make('manual_payment_instructions')
                             ->label('Payment Instructions')
                             ->rows(4)
-                            ->maxLength(2000),
+                            ->maxLength(2000)
+                            ->helperText('Shown to the student at checkout, for example bank transfer details.'),
                     ]),
             ]);
     }
@@ -697,12 +685,12 @@ abstract class PaymentSettingsPage extends Page
             };
 
             if (! $configured) {
-                return 'No key configured yet.';
+                return 'No key saved yet.';
             }
 
             return $live
-                ? 'LIVE — real cards are charged. Test cards will be rejected as invalid.'
-                : 'TEST — test cards work. No real money moves.';
+                ? 'Live — real cards are charged.'
+                : 'Test — no real money moves.';
         };
     }
 
@@ -727,8 +715,8 @@ abstract class PaymentSettingsPage extends Page
                 // log-and-audit endpoint, which never settles a booking
                 // — say so rather than letting it look interchangeable.
                 ->helperText(in_array($prefix, ['razorpay', 'stripe'], true)
-                    ? 'Register this exact URL with the provider. Settlement happens here and nowhere else — the browser callback never confirms a booking.'
-                    : 'This gateway has no settlement adapter: the endpoint records the event for audit only and will not confirm a booking.'),
+                    ? 'Register this URL in the provider dashboard for booking payments.'
+                    : 'Records events for audit only; this gateway cannot confirm a booking.'),
         ]);
     }
 
@@ -739,7 +727,7 @@ abstract class PaymentSettingsPage extends Page
     {
         return [
             Section::make('Payment Configuration')
-                ->description('Invoice, currency, tax and payment behaviour.')
+                ->description('Currency, tax and invoice defaults.')
                 ->schema([
                     Grid::make(3)->schema([
                         Select::make('currency')
@@ -805,7 +793,7 @@ abstract class PaymentSettingsPage extends Page
     {
         return [
             Section::make('Advanced')
-                ->description('Webhook processing, retries, queue and logging.')
+                ->description('Retries, queueing and logging for payment events.')
                 ->schema([
                     Grid::make(3)->schema([
                         TextInput::make('webhook_timeout')
@@ -919,7 +907,6 @@ abstract class PaymentSettingsPage extends Page
             $this->saveEncryptedField($settings, 'stripe_secret_key', $data['stripe_secret_key'] ?? null);
             $this->saveEncryptedField($settings, 'stripe_webhook_secret', $data['stripe_webhook_secret'] ?? null);
             $this->saveEncryptedField($settings, 'razorpay_key_secret', $data['razorpay_key_secret'] ?? null);
-            $this->saveEncryptedField($settings, 'razorpay_webhook_secret', $data['razorpay_webhook_secret'] ?? null);
             $this->saveRazorpayEndpointSecrets($settings, $data);
             $this->saveEncryptedField($settings, 'paypal_client_secret', $data['paypal_client_secret'] ?? null);
             $this->saveEncryptedField($settings, 'paypal_webhook_secret', $data['paypal_webhook_secret'] ?? null);
@@ -964,24 +951,47 @@ abstract class PaymentSettingsPage extends Page
     }
 
     /**
-     * One password input per Razorpay webhook endpoint. The helper text
-     * reports the endpoint path and how its secret is currently
-     * configured — never the secret itself.
+     * One input per Razorpay webhook endpoint. The helper text shows the
+     * endpoint path and whether a secret is stored — never the secret.
+     * Blank on save keeps the stored value.
      */
-    protected function razorpayWebhookSecretInput(string $purpose, string $label): Textarea
+    protected function razorpayWebhookSecretInput(string $purpose, string $label): TextInput
     {
         $field = PaymentWebhookSignatureService::dedicatedField('razorpay', $purpose);
         $path = PaymentGatewayConfigurationService::webhookEndpoints('razorpay')[$purpose];
 
-        return Textarea::make($field)
+        return TextInput::make($field)
             ->label($label)
-            ->rows(1)
-            ->autosize()
-            ->helperText(function () use ($purpose, $path): string {
-                $state = PaymentWebhookSignatureService::secretState(app(PaymentGatewaySettings::class), 'razorpay', $purpose);
+            ->password()
+            ->revealable()
+            ->maxLength(255)
+            ->helperText(fn (): string => sprintf(
+                '%s · %s',
+                $path,
+                PaymentWebhookSignatureService::secretState(app(PaymentGatewaySettings::class), 'razorpay', $purpose)->label(),
+            ));
+    }
 
-                return sprintf('%s — %s', $path, $state->label());
-            });
+    /**
+     * Fills a random webhook secret into the form for local testing.
+     * Production must use the value the provider dashboard shows. For
+     * Razorpay each endpoint has its own field, so each gets its own.
+     */
+    protected function generateWebhookSecret(string $gateway): void
+    {
+        $fields = PaymentWebhookSignatureService::usesDedicatedFields($gateway)
+            ? array_map(fn (string $purpose): string => PaymentWebhookSignatureService::dedicatedField($gateway, $purpose), PaymentWebhookSignatureService::PURPOSES)
+            : ["{$gateway}_webhook_secret"];
+
+        foreach ($fields as $field) {
+            $this->data[$field] = Str::random(48);
+        }
+
+        Notification::make()
+            ->title(count($fields) === 1 ? 'Webhook secret generated' : 'Webhook secrets generated')
+            ->body('For local testing only. Save to store it; in production paste the secret from the provider dashboard.')
+            ->success()
+            ->send();
     }
 
     /** @param  array<string, mixed>  $data */
@@ -1006,7 +1016,7 @@ abstract class PaymentSettingsPage extends Page
         $ok = $this->saveSettingsWithAudit(PaymentGatewaySettings::class, 'settings', function (PaymentGatewaySettings $settings): void {
             foreach ([
                 'stripe_secret_key', 'stripe_webhook_secret',
-                'razorpay_key_secret', 'razorpay_webhook_secret',
+                'razorpay_key_secret',
                 'razorpay_booking_webhook_secret', 'razorpay_package_webhook_secret', 'razorpay_wallet_webhook_secret',
                 'paypal_client_secret', 'paypal_webhook_secret',
                 'applepay_merchant_certificate', 'applepay_merchant_key', 'applepay_webhook_secret',
@@ -1082,7 +1092,7 @@ abstract class PaymentSettingsPage extends Page
 
         Notification::make()
             ->title('Required fields are filled in')
-            ->body(Str::title($gateway).' credentials are present. This does not confirm they are correct.')
+            ->body(Str::title($gateway).' credentials are present. They have not been checked with the provider.')
             ->success()
             ->send();
     }
@@ -1153,7 +1163,6 @@ abstract class PaymentSettingsPage extends Page
                 'razorpay' => (function () use ($settings, $data): void {
                     $settings->razorpay_key_id = $data['razorpay_key_id'] ?? null;
                     $this->saveEncryptedField($settings, 'razorpay_key_secret', $data['razorpay_key_secret'] ?? null);
-                    $this->saveEncryptedField($settings, 'razorpay_webhook_secret', $data['razorpay_webhook_secret'] ?? null);
                     $this->saveRazorpayEndpointSecrets($settings, $data);
                 })(),
                 'stripe' => (function () use ($settings, $data): void {
@@ -1173,7 +1182,7 @@ abstract class PaymentSettingsPage extends Page
         if (! ($this->data[$enabledField] ?? false)) {
             Notification::make()
                 ->title('Gateway not enabled')
-                ->body('Enable the selected gateway before testing connection.')
+                ->body('Enable the gateway first.')
                 ->warning()
                 ->send();
 
@@ -1183,8 +1192,8 @@ abstract class PaymentSettingsPage extends Page
         $this->validateGatewayCredentials($gateway);
 
         Notification::make()
-            ->title('Credentials checked (not a live test)')
-            ->body('This only confirms the credentials are present and correctly formatted — it does not contact the gateway. Credentials have been saved.')
+            ->title('Credentials checked')
+            ->body('Format and presence checked and saved. The provider was not contacted.')
             ->info()
             ->send();
     }

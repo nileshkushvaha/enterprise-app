@@ -17,7 +17,6 @@ use Filament\Schemas\Schema;
 use Filament\Support\Exceptions\Halt;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Contracts\Support\Htmlable;
-use Illuminate\Support\Str;
 
 class PaymentGatewayPage extends PaymentSettingsPage
 {
@@ -48,7 +47,7 @@ class PaymentGatewayPage extends PaymentSettingsPage
 
     public function getSubheading(): ?string
     {
-        return 'Configure and secure online payment gateway credentials.';
+        return 'Choose which gateway collects payments and manage gateway credentials.';
     }
 
     public function content(Schema $schema): Schema
@@ -98,16 +97,7 @@ class PaymentGatewayPage extends PaymentSettingsPage
                                     ->required()
                                     ->native(false),
                             ])
-                            ->action(function (array $data): void {
-                                $field = "{$data['gateway']}_webhook_secret";
-                                $this->data[$field] = Str::random(48);
-
-                                Notification::make()
-                                    ->title('Webhook secret generated')
-                                    ->body('Save settings to persist the generated secret.')
-                                    ->success()
-                                    ->send();
-                            }),
+                            ->action(fn (array $data) => $this->generateWebhookSecret($data['gateway'])),
                         Action::make('copy_webhook_url')
                             ->label('Copy Webhook URL')
                             ->icon(Heroicon::OutlinedClipboardDocument)
@@ -125,7 +115,7 @@ class PaymentGatewayPage extends PaymentSettingsPage
                             ->icon(Heroicon::OutlinedArrowPathRoundedSquare)
                             ->color('danger')
                             ->requiresConfirmation()
-                            ->modalDescription('This clears all stored encrypted credentials for every gateway.')
+                            ->modalDescription('Removes every stored API key and webhook secret for all gateways. Payments stop until new credentials are saved.')
                             ->action(fn () => $this->resetGatewayCredentials()),
                     ])->key('form-actions'),
                 ]),

@@ -9,26 +9,15 @@ use Spatie\LaravelSettings\Migrations\SettingsMigration;
 /**
  * Razorpay issues a distinct secret for every webhook endpoint, and
  * this platform registers three (booking payments, package purchases,
- * wallet recharges). Until now all three lived in ONE multi-line field
- * with a `booking:` / `package:` / `wallet:` prefix convention. That
- * worked cryptographically but an operator who pasted the single
- * secret they were shown, unprefixed, produced an install that looked
- * "ready" while two of the three endpoints were rejected with 401
- * (the 11 Sep 2026 booking-webhook incident).
+ * wallet recharges). This migration creates one field per endpoint and
+ * copies any `booking:` / `package:` / `wallet:` prefixed line from the
+ * old shared field into the field for its endpoint (several
+ * same-endpoint lines stay together — that is rotation). An unprefixed
+ * line cannot be attributed to an endpoint and is not copied.
  *
- * This migration is ADDITIVE:
- *
- *  - three purpose-specific fields are created;
- *  - legacy PREFIXED lines are copied into the field for their purpose
- *    (several same-purpose lines stay together — that is rotation);
- *  - UNPREFIXED legacy lines are left exactly where they are. They are
- *    still honoured as a fallback for one release and are reported as
- *    "legacy fallback", never as three configured endpoints — one
- *    shared value cannot be right for three independent endpoints, so
- *    copying it three times would manufacture a readiness that is
- *    not real.
- *
- * The legacy field itself is untouched, so rolling back loses nothing.
+ * The old field is removed by the following migration
+ * (2026_09_11_100100_remove_legacy_razorpay_webhook_secret), once the
+ * three dedicated fields exist.
  */
 return new class extends SettingsMigration
 {

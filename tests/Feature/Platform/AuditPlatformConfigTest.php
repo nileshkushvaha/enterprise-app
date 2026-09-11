@@ -74,7 +74,9 @@ class AuditPlatformConfigTest extends TestCase
         $gateways->razorpay_enabled = true;
         $gateways->razorpay_key_id = 'rzp_test_key';
         $gateways->razorpay_key_secret = Crypt::encryptString('secret');
-        $gateways->razorpay_webhook_secret = Crypt::encryptString('whsec_all');
+        $gateways->razorpay_booking_webhook_secret = Crypt::encryptString('whsec_booking');
+        $gateways->razorpay_package_webhook_secret = Crypt::encryptString('whsec_package');
+        $gateways->razorpay_wallet_webhook_secret = Crypt::encryptString('whsec_wallet');
         $gateways->razorpay_international_enabled = true;
         $gateways->razorpay_international_currencies = ['AUD'];
         $gateways->save();
@@ -136,27 +138,48 @@ class AuditPlatformConfigTest extends TestCase
         $this->assertNotEmpty(array_filter($warns, fn (string $m): bool => str_contains($m, 'is for 45 min') && str_contains($m, 'can never match')));
     }
 
-    public function test_a_missing_webhook_secret_on_an_enabled_provider_is_a_failure(): void
+    public function test_a_missing_booking_webhook_secret_on_an_enabled_provider_is_a_failure(): void
     {
         $gateways = app(PaymentGatewaySettings::class);
-        $gateways->razorpay_webhook_secret = null;
+        $gateways->razorpay_booking_webhook_secret = null;
         $gateways->save();
 
-        $fails = $this->messages(ConfigAuditFinding::FAIL);
+        $findings = app(PlatformConfigAuditor::class)->run()->where('severity', ConfigAuditFinding::FAIL);
 
-        $this->assertNotEmpty(array_filter($fails, fn (string $m): bool => str_contains($m, 'Razorpay is enabled but has NO webhook secret')));
+        $finding = $findings->first(fn (ConfigAuditFinding $f): bool => $f->message === 'Razorpay booking payment webhook secret is missing.');
+        $this->assertNotNull($finding);
+        $this->assertSame('Admin → Settings → Payment Gateway Settings → Razorpay → Webhook secrets.', $finding->fix);
     }
 
-    public function test_a_secret_scoped_to_another_endpoint_leaves_the_wallet_endpoint_unprotected(): void
+    /** The wallet endpoint is only required once the wallet feature is on. */
+    public function test_a_missing_wallet_webhook_secret_matters_only_when_the_wallet_is_enabled(): void
     {
         $gateways = app(PaymentGatewaySettings::class);
-        $gateways->razorpay_webhook_secret = Crypt::encryptString("booking:whsec_b\npackage:whsec_p");
+        $gateways->razorpay_wallet_webhook_secret = null;
         $gateways->save();
 
-        $fails = $this->messages(ConfigAuditFinding::FAIL);
+        $this->assertEmpty(array_filter($this->messages(ConfigAuditFinding::FAIL), fn (string $m): bool => str_contains($m, 'wallet recharge webhook secret')));
 
-        $this->assertNotEmpty(array_filter($fails, fn (string $m): bool => str_contains($m, 'wallet endpoint')));
-        $this->assertEmpty(array_filter($fails, fn (string $m): bool => str_contains($m, 'booking endpoint')));
+        $features = app(FeatureSettings::class);
+        $features->wallet_enabled = true;
+        $features->save();
+
+        $fails = $this->messages(ConfigAuditFinding::FAIL);
+        $this->assertNotEmpty(array_filter($fails, fn (string $m): bool => $m === 'Razorpay wallet recharge webhook secret is missing.'));
+        $this->assertEmpty(array_filter($fails, fn (string $m): bool => str_contains($m, 'booking payment webhook secret')));
+    }
+
+    public function test_payment_fix_instructions_use_the_payment_gateway_settings_path(): void
+    {
+        $fixes = app(PlatformConfigAuditor::class)->run()
+            ->filter(fn (ConfigAuditFinding $f): bool => $f->section === 'Payments')
+            ->pluck('fix')
+            ->filter()
+            ->all();
+
+        foreach ($fixes as $fix) {
+            $this->assertStringNotContainsString('Admin → Settings → Payments ', $fix.' ');
+        }
     }
 
     public function test_a_non_inr_country_without_international_razorpay_is_a_failure(): void

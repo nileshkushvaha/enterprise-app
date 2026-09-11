@@ -78,7 +78,7 @@ final class BookingCheckoutCompletionServiceTest extends TestCase
         $gateways->razorpay_enabled = true;
         $gateways->razorpay_key_id = 'rzp_test_key_id';
         $gateways->razorpay_key_secret = Crypt::encryptString(self::KEY_SECRET);
-        $gateways->razorpay_webhook_secret = Crypt::encryptString('webhook_secret');
+        $gateways->razorpay_booking_webhook_secret = Crypt::encryptString('webhook_secret');
         $gateways->save();
 
         $bookings = app(BookingSettings::class);

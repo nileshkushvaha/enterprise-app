@@ -52,14 +52,7 @@ final class PaymentWebhookSignatureService
             );
         }
 
-        // A gateway account can legitimately have MORE THAN ONE webhook
-        // endpoint, each issued its own secret — this platform registers
-        // separate Razorpay endpoints for booking payments and package
-        // purchases. Secrets are therefore scoped to the endpoint that
-        // received the delivery: a booking secret must NOT be able to
-        // authenticate a package webhook, or a leak of either one would
-        // silently become authority over both.
-        $secrets = self::decryptSecrets($settings, "{$gateway}_webhook_secret", $purpose);
+        $secrets = self::secretsFor($settings, $gateway, $purpose);
 
         if ($secrets === []) {
             // A blank secret used to fail OPEN ("safe
@@ -129,85 +122,63 @@ final class PaymentWebhookSignatureService
     }
 
     /**
-     * The webhook secrets that may authenticate a delivery to one
-     * endpoint purpose of a gateway.
+     * The secrets that may authenticate a delivery to one endpoint of a
+     * gateway.
      *
-     * Resolution order (first non-empty tier wins, later tiers are NOT
-     * merged in):
+     * Razorpay issues a distinct secret per registered webhook, so each
+     * of its three endpoints has its own settings field
+     * (`razorpay_booking_webhook_secret`, `razorpay_package_webhook_secret`,
+     * `razorpay_wallet_webhook_secret`) and ONLY that field is consulted:
+     * a booking secret can never authenticate a package or wallet
+     * delivery, and vice versa. A field may hold one secret per line so
+     * the old and new value are both live during rotation.
      *
-     *   1. the endpoint's dedicated field, e.g. razorpay_booking_webhook_secret
-     *      (one secret per line; two lines = credential rotation);
-     *   2. legacy lines in `{gateway}_webhook_secret` prefixed for this
-     *      purpose, e.g. `booking:whsec_...`;
-     *   3. UNPREFIXED legacy lines — kept only so an install that never
-     *      moved off the single shared secret keeps verifying. Reported
-     *      as WebhookSecretState::LegacyUnscoped, never as "configured".
+     * Gateways with a single `{gateway}_webhook_secret` field (Stripe)
+     * keep the one-secret-per-line store where a line may be prefixed
+     * with the endpoint it belongs to (`wallet:whsec_...`); an
+     * unprefixed line applies to every endpoint of that gateway.
      *
-     * Because tiers do not merge, a secret configured for the booking
-     * endpoint can never authenticate the package or wallet endpoint
-     * once any purpose-specific configuration exists, and a shared
-     * unprefixed secret stops being consulted for an endpoint the
-     * moment that endpoint has a secret of its own.
+     * A null purpose returns every secret of the gateway and is only for
+     * callers with no endpoint identity (the generic log-only webhook).
      *
-     * A null purpose ("any endpoint") returns every secret of every tier
-     * and should only be used by callers with no endpoint identity of
-     * their own (the generic log-only webhook).
-     *
-     * @param  string  $field  the LEGACY field name, `{gateway}_webhook_secret`
-     * @param  string|null  $purpose  self::PURPOSE_*, or null to accept every scope
      * @return list<string>
      */
-    public static function decryptSecrets(PaymentGatewaySettings $settings, string $field, ?string $purpose = null): array
+    public static function secretsFor(PaymentGatewaySettings $settings, string $gateway, ?string $purpose = null): array
     {
-        $gateway = Str::before($field, '_webhook_secret');
-        $legacy = self::legacyLines($settings, $field);
+        if (self::usesDedicatedFields($gateway)) {
+            $purposes = $purpose === null ? self::PURPOSES : [$purpose];
+            $secrets = [];
 
-        if ($purpose === null) {
-            $dedicated = [];
-
-            foreach (self::PURPOSES as $candidate) {
-                $dedicated = [...$dedicated, ...self::dedicatedLines($settings, $gateway, $candidate)];
+            foreach ($purposes as $candidate) {
+                $secrets = [...$secrets, ...self::dedicatedLines($settings, $gateway, $candidate)];
             }
 
-            return collect([...$dedicated, ...array_column($legacy, 'secret')])->unique()->values()->all();
+            return collect($secrets)->unique()->values()->all();
         }
 
-        $own = self::dedicatedLines($settings, $gateway, $purpose);
-
-        if ($own !== []) {
-            return $own;
-        }
-
-        $scoped = collect($legacy)->where('scope', $purpose)->pluck('secret')->unique()->values()->all();
-
-        if ($scoped !== []) {
-            return $scoped;
-        }
-
-        return collect($legacy)->whereNull('scope')->pluck('secret')->unique()->values()->all();
+        return collect(self::lines(self::decryptSecret($settings, "{$gateway}_webhook_secret")))
+            ->filter(fn (array $entry): bool => $purpose === null || $entry['scope'] === null || $entry['scope'] === $purpose)
+            ->pluck('secret')
+            ->unique()
+            ->values()
+            ->all();
     }
 
-    /** How the secret for one endpoint purpose is configured — for operators, never the value. */
+    /** Whether the endpoint's secret is present — for operators, never the value. */
     public static function secretState(PaymentGatewaySettings $settings, string $gateway, string $purpose): WebhookSecretState
     {
-        if (self::dedicatedLines($settings, $gateway, $purpose) !== []) {
-            return WebhookSecretState::Configured;
-        }
-
-        $legacy = collect(self::legacyLines($settings, "{$gateway}_webhook_secret"));
-
-        if ($legacy->where('scope', $purpose)->isNotEmpty()) {
-            return WebhookSecretState::LegacyScoped;
-        }
-
-        if ($legacy->whereNull('scope')->isNotEmpty()) {
-            return WebhookSecretState::LegacyUnscoped;
-        }
-
-        return WebhookSecretState::Missing;
+        return self::secretsFor($settings, $gateway, $purpose) === []
+            ? WebhookSecretState::Missing
+            : WebhookSecretState::Configured;
     }
 
-    /** The dedicated settings field for one endpoint purpose, e.g. `razorpay_booking_webhook_secret`. */
+    /** Gateways whose endpoints each own a settings field. */
+    public static function usesDedicatedFields(string $gateway): bool
+    {
+        return $gateway === 'razorpay';
+    }
+
+    /** The dedicated settings field for one endpoint, e.g. `razorpay_booking_webhook_secret`. */
     public static function dedicatedField(string $gateway, string $purpose): string
     {
         return "{$gateway}_{$purpose}_webhook_secret";
@@ -216,13 +187,7 @@ final class PaymentWebhookSignatureService
     /** @return list<string> */
     private static function dedicatedLines(PaymentGatewaySettings $settings, string $gateway, string $purpose): array
     {
-        $field = self::dedicatedField($gateway, $purpose);
-
-        if (! property_exists($settings, $field)) {
-            return [];
-        }
-
-        return collect(self::lines(self::decryptSecret($settings, $field)))
+        return collect(self::lines(self::decryptSecret($settings, self::dedicatedField($gateway, $purpose))))
             ->pluck('secret')
             ->unique()
             ->values()
@@ -230,19 +195,9 @@ final class PaymentWebhookSignatureService
     }
 
     /**
-     * The legacy field parsed into scoped entries.
-     *
-     * @return list<array{scope: ?string, secret: string}>
-     */
-    public static function legacyLines(PaymentGatewaySettings $settings, string $field): array
-    {
-        return self::lines(self::decryptSecret($settings, $field));
-    }
-
-    /**
      * Splits a multi-line secret value. A line may name the endpoint it
-     * belongs to (`booking:whsec_aaa`); only a RECOGNISED prefix scopes
-     * a line — anything else is part of the secret itself, so a secret
+     * belongs to (`wallet:whsec_aaa`); only a RECOGNISED prefix scopes a
+     * line — anything else is part of the secret itself, so a secret
      * that happens to contain a colon is never truncated.
      *
      * @return list<array{scope: ?string, secret: string}>

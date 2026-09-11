@@ -45,7 +45,7 @@ final class WalletRechargeConcurrencyTest extends ConcurrencyTestCase
         $gateways->razorpay_enabled = true;
         $gateways->razorpay_key_id = 'rzp_test_concurrency';
         $gateways->razorpay_key_secret = Crypt::encryptString(self::KEY_SECRET);
-        $gateways->razorpay_webhook_secret = Crypt::encryptString(self::WEBHOOK_SECRET);
+        $gateways->razorpay_wallet_webhook_secret = Crypt::encryptString(self::WEBHOOK_SECRET);
         $gateways->save();
 
         app(BookingSettings::class)->payment_provider = 'razorpay';

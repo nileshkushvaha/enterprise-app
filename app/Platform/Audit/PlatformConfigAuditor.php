@@ -70,12 +70,14 @@ final class PlatformConfigAuditor
         $section = 'Payments';
         $out = [];
 
+        $page = 'Admin → Settings → Payment Gateway Settings';
+
         if (! $this->gateways->payments_enabled) {
-            $out[] = ConfigAuditFinding::warn($section, 'Payments are disabled platform-wide.', 'Admin → Settings → Payments → Enable payments.');
+            $out[] = ConfigAuditFinding::warn($section, 'Payments are disabled platform-wide.', "{$page} → Provider Routing.");
         }
 
         if ($this->gateways->fake_enabled && app()->environment('production')) {
-            $out[] = ConfigAuditFinding::fail($section, 'The FAKE payment provider is enabled in production.', 'Admin → Settings → Payments → disable the fake provider.');
+            $out[] = ConfigAuditFinding::fail($section, 'The fake payment provider is enabled in production.', "{$page} → Provider Routing.");
         }
 
         foreach (['razorpay' => 'Razorpay', 'stripe' => 'Stripe'] as $key => $label) {
@@ -89,54 +91,36 @@ final class PlatformConfigAuditor
                 ? ['razorpay_key_id' => false, 'razorpay_key_secret' => true]
                 : ['stripe_publishable_key' => false, 'stripe_secret_key' => true];
 
+            $complete = true;
+
             foreach ($credentialFields as $field => $encrypted) {
                 $value = $encrypted
                     ? PaymentWebhookSignatureService::decryptSecret($this->gateways, $field)
                     : $this->gateways->{$field};
 
                 if (blank($value)) {
-                    $out[] = ConfigAuditFinding::fail($section, "{$label} is enabled but {$field} is empty.", 'Admin → Settings → Payments.');
+                    $complete = false;
+                    $out[] = ConfigAuditFinding::fail($section, "{$label} is enabled but {$field} is empty.", "{$page} → {$label}.");
                 }
             }
 
-            $webhookField = $key.'_webhook_secret';
-            $anyScope = PaymentWebhookSignatureService::decryptSecrets($this->gateways, $webhookField);
-
-            if ($anyScope === []) {
-                $out[] = ConfigAuditFinding::fail(
-                    $section,
-                    "{$label} is enabled but has NO webhook secret — every webhook delivery is rejected with 401, so payments only settle via the reconciliation sweep.",
-                    "Register each webhook in the {$label} dashboard and paste its secret into Admin → Settings → Payments, in the field named for that endpoint.",
-                );
-
-                continue;
-            }
-
-            // Per endpoint, per state. Missing is a hard failure (401 on
-            // every delivery). A legacy fallback still verifies, but a
-            // shared unprefixed secret can be correct for at most one
-            // of the three endpoints, so it is a warning until each
-            // endpoint has its own field populated.
-            $allDedicated = true;
-
-            foreach (PaymentGatewayConfigurationService::webhookEndpoints($key) as $purpose => $path) {
-                $state = PaymentWebhookSignatureService::secretState($this->gateways, $key, $purpose);
-                $field = PaymentWebhookSignatureService::dedicatedField($key, $purpose);
-
-                if ($state === WebhookSecretState::Missing) {
-                    $allDedicated = false;
-                    $out[] = ConfigAuditFinding::fail($section, "{$label}: no webhook secret is valid for the {$purpose} endpoint ({$path}) — its deliveries are rejected with 401.", "Paste that endpoint's secret from the {$label} dashboard into {$field}.");
-                } elseif ($state === WebhookSecretState::LegacyUnscoped) {
-                    $allDedicated = false;
-                    $out[] = ConfigAuditFinding::warn($section, "{$label}: the {$purpose} endpoint ({$path}) relies on the legacy SHARED secret. Each {$label} endpoint has its own secret, so this is correct for at most one endpoint.", "Paste the {$purpose} endpoint's own secret into {$field}.");
-                } elseif ($state === WebhookSecretState::LegacyScoped) {
-                    $allDedicated = false;
-                    $out[] = ConfigAuditFinding::warn($section, "{$label}: the {$purpose} endpoint ({$path}) verifies through a legacy `{$purpose}:` line; that field is retired next release.", "Move the secret into {$field}.");
+            if ($key === 'razorpay') {
+                // One secret per Razorpay endpoint; only endpoints whose
+                // feature is enabled are required. Missing means every
+                // delivery to that endpoint is rejected with 401.
+                foreach (PaymentGatewayConfigurationService::requiredRazorpayWebhookPurposes($this->features) as $purpose) {
+                    if (PaymentWebhookSignatureService::secretState($this->gateways, $key, $purpose) === WebhookSecretState::Missing) {
+                        $complete = false;
+                        $out[] = ConfigAuditFinding::fail($section, sprintf('Razorpay %s webhook secret is missing.', strtolower(PaymentGatewayConfigurationService::purposeLabel($purpose))), "{$page} → Razorpay → Webhook secrets.");
+                    }
                 }
+            } elseif (PaymentWebhookSignatureService::secretsFor($this->gateways, $key) === []) {
+                $complete = false;
+                $out[] = ConfigAuditFinding::fail($section, 'Stripe webhook secret is missing.', "{$page} → Stripe.");
             }
 
-            if ($allDedicated) {
-                $out[] = ConfigAuditFinding::ok($section, "{$label}: credentials present and a dedicated webhook secret configured for all three endpoints.");
+            if ($complete) {
+                $out[] = ConfigAuditFinding::ok($section, "{$label}: credentials and webhook secrets are configured.");
             }
         }
 
@@ -176,7 +160,7 @@ final class PlatformConfigAuditor
             if (($this->gateways->razorpay_enabled ?? false) && ! ($this->gateways->stripe_enabled ?? false)
                 && strtoupper($currency->code) !== 'INR'
                 && (! ($this->gateways->razorpay_international_enabled ?? false) || ! $international->contains(strtoupper($currency->code)))) {
-                $out[] = ConfigAuditFinding::fail($section, "{$country->name} bills in {$currency->code}, but Razorpay is the only provider and international payments are not enabled for {$currency->code}.", 'Admin → Settings → Payments → Razorpay → enable International Payments and add the currency, or enable Stripe.');
+                $out[] = ConfigAuditFinding::fail($section, "{$country->name} bills in {$currency->code}, but Razorpay is the only provider and international payments are not enabled for {$currency->code}.", 'Admin → Settings → Payment Gateway Settings → Razorpay → International Collection, or enable Stripe.');
             }
         }
 
